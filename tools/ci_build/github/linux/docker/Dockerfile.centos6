@@ -1,4 +1,46 @@
-FROM mcr.microsoft.com/dotnet-buildtools/prereqs:centos-6-20200521180341-88012b6
+FROM centos:6
+
+RUN yum install -y \
+        centos-release-SCL \
+        scl-utils-build \
+        epel-release \
+        wget \
+    && \
+    rpm --import http://linuxsoft.cern.ch/cern/slc6X/x86_64/RPM-GPG-KEY-cern && \
+    wget -O /etc/yum.repos.d/slc6-devtoolset.repo http://linuxsoft.cern.ch/cern/devtoolset/slc6-devtoolset.repo && \
+        yum install -y \
+        "perl(Time::HiRes)" \
+        autoconf \
+        devtoolset-2-toolchain \
+        doxygen \
+        expat-devel \
+        gcc \
+        gcc-c++ \
+        gdb \
+        gettext-devel \
+        krb5-devel \
+        libedit-devel \
+        libidn-devel \
+        libmetalink-devel \
+        libnghttp2-devel \
+        libssh2-devel \
+        libunwind-devel \
+        libuuid-devel \
+        lttng-ust-devel \
+        lzma \
+        ncurses-devel \
+        numactl-devel \
+        openssl-devel \
+        perl-devel \
+        python-argparse \
+        python27 \
+        readline-devel \
+        sudo \
+        swig \
+        xz \
+        zlib-devel \
+    && \
+    yum clean all
 
 ADD scripts /tmp/scripts
 RUN cd /tmp/scripts && /tmp/scripts/install_centos.sh
