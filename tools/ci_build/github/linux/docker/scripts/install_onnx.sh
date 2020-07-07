@@ -24,7 +24,7 @@ else
    PYTHON_EXE="/usr/bin/python${PYTHON_VER}"
 fi
 
-${PYTHON_EXE} -m pip install protobuf typing==3.6.4
+${PYTHON_EXE} -m pip install protobuf
 
 version2tag=(5af210ca8a1c73aa6bae8754c9346ec54d0a756e-onnx123
              bae6333e149a59a3faa9c4d9c44974373dcf5256-onnx130
