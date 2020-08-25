@@ -113,7 +113,7 @@ IMPLEMENT_GRADIENT_BUILDER(GetErfGradient) {
 IMPLEMENT_GRADIENT_BUILDER(GetMatMulGradient) {
   std::vector<NodeDef> result;
 
-  ArgDef A = I(0), B = I(1), Y = O(0);
+  ArgDef A = I(0), B = I(1), Y = O(0), dY = GO(0), dA = GI(0), dB = GI(1);
   std::vector<Dimension> A_shape, B_shape, Y_shape;
   const bool A_has_shape = GetShape(A, A_shape).IsOK();
   const bool B_has_shape = GetShape(B, B_shape).IsOK();
@@ -127,31 +127,25 @@ IMPLEMENT_GRADIENT_BUILDER(GetMatMulGradient) {
         // Flatten A to 2D [M, K]
         NodeDef(OpDef{"Flatten", kOnnxDomain, 11}, {A}, {IA("A_flatten")}, {MakeAttribute("axis", int64_t(-1))}),
         // Flatten dY to 2D [M, N]
-        NodeDef(OpDef{"Flatten", kOnnxDomain, 11}, {GO(0)}, {IA("dY_flatten")}, {MakeAttribute("axis", int64_t(-1))}),
+        NodeDef(OpDef{"Flatten", kOnnxDomain, 11}, {dY}, {IA("dY_flatten")}, {MakeAttribute("axis", int64_t(-1))}),
         // dB = A' * dY
-        NodeDef(OpDef{"Gemm", kOnnxDomain, 11}, {IA("A_flatten"), IA("dY_flatten")}, {GI(1)}, {transpose_A})};
+        NodeDef(OpDef{"Gemm", kOnnxDomain, 11}, {IA("A_flatten"), IA("dY_flatten")}, {dB}, {transpose_A})};
   };
 
   if (A_has_shape && B_has_shape && Y_has_shape) {
     if (A_shape.size() == 2 && B_shape.size() == 2) {
-      // is GI(0) required
+      // is dA required
       if (IsGradientRequiredForSrcNodeInput(0)) {
         // dA = dY * B'
         result.push_back(
-            NodeDef(OpDef{"Gemm", kOnnxDomain, 11},
-                    {GO(0), B},
-                    {GI(0)},
-                    {transpose_B}));
+            NodeDef(OpDef{"Gemm", kOnnxDomain, 11}, {dY, B}, {dA}, {transpose_B}));
       }
 
-      // is GI(1) required
+      // is dB required
       if (IsGradientRequiredForSrcNodeInput(1)) {
         // dB = A' * dY
         result.push_back(
-            NodeDef(OpDef{"Gemm", kOnnxDomain, 11},
-                    {A, GO(0)},
-                    {GI(1)},
-                    {transpose_A}));
+            NodeDef(OpDef{"Gemm", kOnnxDomain, 11}, {A, dY}, {dB}, {transpose_A}));
       }
     } else if (A_shape.size() > 2 || B_shape.size() > 2) {
       if (IsGradientRequiredForSrcNodeInput(0)) {
@@ -174,17 +168,12 @@ IMPLEMENT_GRADIENT_BUILDER(GetMatMulGradient) {
         ComputeBroadcastBackwardAxes(A_shape, output_shape, &A_axes, nullptr);
 
         result.push_back(
-            NodeDef("Transpose",
-                    {B},
-                    {IA("B_t")},
-                    {MakeAttribute("perm", B_perm)}));
+            NodeDef("Transpose", {B}, {IA("B_t")}, {MakeAttribute("perm", B_perm)}));
 
-        ArgDef matmul_out = A_axes.size() > 0 ? IA("PreReduceGrad0") : GI(0);
+        ArgDef matmul_out = A_axes.size() > 0 ? IA("PreReduceGrad0") : dA;
 
         result.push_back(
-            NodeDef("MatMul",
-                    {GO(0), IA("B_t")},
-                    {matmul_out}));
+            NodeDef("MatMul", {dY, IA("B_t")}, {matmul_out}));
 
         if (A_axes.size() > 0) {
           result.push_back(
@@ -195,14 +184,10 @@ IMPLEMENT_GRADIENT_BUILDER(GetMatMulGradient) {
                        {"axes", MakeAttribute("axes", A_axes)}}));
 
           result.push_back(
-              NodeDef("Shape",
-                      {A},
-                      {IA("A_shape")}));
+              NodeDef("Shape", {A}, {IA("A_shape")}));
 
           result.push_back(
-              NodeDef("Reshape",
-                      {IA("ReduceGrad0"), IA("A_shape")},
-                      {GI(0)}));
+              NodeDef("Reshape", {IA("ReduceGrad0"), IA("A_shape")}, {dA}));
         }
       }
       if (IsGradientRequiredForSrcNodeInput(1)) {
@@ -227,17 +212,12 @@ IMPLEMENT_GRADIENT_BUILDER(GetMatMulGradient) {
           ComputeBroadcastBackwardAxes(B_shape, output_shape, &B_axes, nullptr);
 
           result.push_back(
-              NodeDef("Transpose",
-                      {A},
-                      {IA("A_t")},
-                      {MakeAttribute("perm", A_perm)}));
+              NodeDef("Transpose", {A}, {IA("A_t")}, {MakeAttribute("perm", A_perm)}));
 
-          ArgDef matmul_out = B_axes.size() > 0 ? IA("PreReduceGrad1") : GI(1);
+          ArgDef matmul_out = B_axes.size() > 0 ? IA("PreReduceGrad1") : dB;
 
           result.push_back(
-              NodeDef("MatMul",
-                      {IA("A_t"), GO(0)},
-                      {matmul_out}));
+              NodeDef("MatMul", {IA("A_t"), dY}, {matmul_out}));
 
           if (B_axes.size() > 0) {
             result.push_back(
@@ -247,13 +227,9 @@ IMPLEMENT_GRADIENT_BUILDER(GetMatMulGradient) {
                         {{"keepdims", MakeAttribute("keepdims", int64_t(0))},
                          {"axes", MakeAttribute("axes", B_axes)}}));
             result.push_back(
-                NodeDef("Shape",
-                        {B},
-                        {IA("B_shape")}));
+                NodeDef("Shape", {B}, {IA("B_shape")}));
             result.push_back(
-                NodeDef("Reshape",
-                        {IA("ReduceGrad1"), IA("B_shape")},
-                        {GI(1)}));
+                NodeDef("Reshape", {IA("ReduceGrad1"), IA("B_shape")}, {dB}));
           }
         }
       }
@@ -268,14 +244,14 @@ IMPLEMENT_GRADIENT_BUILDER(GetMatMulGradient) {
       ArgDef pre_reduce_grad_0 = IA("PreReduceGrad0");
       result.push_back(
           NodeDef(OpDef{"TransposeScaleMatMul", kMSDomain, 1},
-                  {GO(0), B},
+                  {dY, B},
                   {pre_reduce_grad_0},
                   {transpose_B}));
 
       a_axes = IA("ReduceAxes_" + A.name + "_for_" + A.name);
       ia_shape = IA("Shape_" + pre_reduce_grad_0.name);
       ComputeBroadcastBackwardAxesDynamic(A, pre_reduce_grad_0, a_shape, ia_shape, &a_axes, nullptr, result);
-      HandleBroadcastingDynamic(pre_reduce_grad_0, A, a_shape, GI(0), a_axes, result);
+      HandleBroadcastingDynamic(pre_reduce_grad_0, A, a_shape, dA, a_axes, result);
     }
     if (IsGradientRequiredForSrcNodeInput(1)) {
       if (B_has_shape && B_shape.size() == 2) {
@@ -286,14 +262,14 @@ IMPLEMENT_GRADIENT_BUILDER(GetMatMulGradient) {
         ArgDef pre_reduce_grad_1 = IA("PreReduceGrad1");
         result.push_back(
             NodeDef(OpDef{"TransposeScaleMatMul", kMSDomain, 1},
-                    {A, GO(0)},
+                    {A, dY},
                     {pre_reduce_grad_1},
                     {transpose_A}));
 
         b_axes = IA("ReduceAxes_" + B.name + "_for_" + B.name);
         ia_shape = IA("Shape_" + pre_reduce_grad_1.name);
         ComputeBroadcastBackwardAxesDynamic(pre_reduce_grad_1, B, ia_shape, b_shape, nullptr, &b_axes, result);
-        HandleBroadcastingDynamic(pre_reduce_grad_1, B, b_shape, GI(1), b_axes, result);
+        HandleBroadcastingDynamic(pre_reduce_grad_1, B, b_shape, dB, b_axes, result);
       }
     }
   }
@@ -311,17 +287,12 @@ IMPLEMENT_GRADIENT_BUILDER(GetGemmGradient) {
 
   ArgDef A = I(0), B = I(1), C = I(2), dY = GO(0),
          dA = GI(0), dB = GI(1), dC = GI(2);
-  AttributeProto transpose_first_input = MakeAttribute("transA", int64_t(1));
-  AttributeProto transpose_second_input = MakeAttribute("transB", int64_t(1));
-
-  NodeDef zero_contant_node = ZeroConstantNode();
-  ArgDef ZERO = zero_contant_node.output_args[0];
+  AttributeProto transpose_A = MakeAttribute("transA", int64_t(1));
+  AttributeProto transpose_B = MakeAttribute("transB", int64_t(1));
 
   std::vector<NodeDef> result;
-  result.push_back(zero_contant_node);
 
   std::vector<AttributeProto> shared_attributes;
-  shared_attributes.push_back(MakeAttribute("beta", float(0)));
   if (has_alpha && alpha != 1.0f) {
     ORT_ENFORCE(alpha != 0.0f);
     AttributeProto alpha_attr = MakeAttribute("alpha", alpha);
@@ -334,28 +305,28 @@ IMPLEMENT_GRADIENT_BUILDER(GetGemmGradient) {
       // dA = alpha * B' * dY', dB = alpha *  dY' * A'
       if (IsGradientRequiredForSrcNodeInput(0)) {
         std::vector<AttributeProto> attrs(shared_attributes);
-        attrs.push_back(transpose_first_input);
-        attrs.push_back(transpose_second_input);
-        result.push_back(NodeDef("Gemm", {B, dY, ZERO}, {dA}, attrs));
+        attrs.push_back(transpose_A);
+        attrs.push_back(transpose_B);
+        result.push_back(NodeDef(OpDef{"Gemm", kOnnxDomain, 11}, {B, dY}, {dA}, attrs));
       }
 
       if (IsGradientRequiredForSrcNodeInput(1)) {
         std::vector<AttributeProto> attrs(shared_attributes);
-        attrs.push_back(transpose_first_input);
-        attrs.push_back(transpose_second_input);
-        result.push_back(NodeDef("Gemm", {dY, A, ZERO}, {dB}, attrs));
+        attrs.push_back(transpose_A);
+        attrs.push_back(transpose_B);
+        result.push_back(NodeDef(OpDef{"Gemm", kOnnxDomain, 11}, {dY, A}, {dB}, attrs));
       }
     } else {
       // Y = alpha * A' * B
       // dA = alpha * B * dY', dB = alpha * A * dY
       if (IsGradientRequiredForSrcNodeInput(0)) {
         std::vector<AttributeProto> attrs(shared_attributes);
-        attrs.push_back(transpose_second_input);
-        result.push_back(NodeDef("Gemm", {B, dY, ZERO}, {dA}, attrs));
+        attrs.push_back(transpose_B);
+        result.push_back(NodeDef(OpDef{"Gemm", kOnnxDomain, 11}, {B, dY}, {dA}, attrs));
       }
 
       if (IsGradientRequiredForSrcNodeInput(1)) {
-        result.push_back(NodeDef("Gemm", {A, dY, ZERO}, {dB}, shared_attributes));
+        result.push_back(NodeDef(OpDef{"Gemm", kOnnxDomain, 11}, {A, dY}, {dB}, shared_attributes));
       }
     }
   } else {
@@ -363,27 +334,27 @@ IMPLEMENT_GRADIENT_BUILDER(GetGemmGradient) {
       // Y = alpha * A * B'
       // dA = alpha * dY * B, dB = alpha * dY' * A
       if (IsGradientRequiredForSrcNodeInput(0)) {
-        result.push_back(NodeDef("Gemm", {dY, B, ZERO}, {dA}, shared_attributes));
+        result.push_back(NodeDef(OpDef{"Gemm", kOnnxDomain, 11}, {dY, B}, {dA}, shared_attributes));
       }
 
       if (IsGradientRequiredForSrcNodeInput(1)) {
         std::vector<AttributeProto> attrs(shared_attributes);
-        attrs.push_back(transpose_first_input);
-        result.push_back(NodeDef("Gemm", {dY, A, ZERO}, {dB}, attrs));
+        attrs.push_back(transpose_A);
+        result.push_back(NodeDef(OpDef{"Gemm", kOnnxDomain, 11}, {dY, A}, {dB}, attrs));
       }
     } else {
       // Y = alpha * A * B
-      // dA = alpha * dY * B', dB = alpha * A' * dY
+      // dA = alpha * dY * B', dB = alpha * A' * dY`
       if (IsGradientRequiredForSrcNodeInput(0)) {
         std::vector<AttributeProto> attrs(shared_attributes);
-        attrs.push_back(transpose_second_input);
-        result.push_back(NodeDef("Gemm", {dY, B, ZERO}, {dA}, attrs));
+        attrs.push_back(transpose_B);
+        result.push_back(NodeDef(OpDef{"Gemm", kOnnxDomain, 11}, {dY, B}, {dA}, attrs));
       }
 
       if (IsGradientRequiredForSrcNodeInput(1)) {
         std::vector<AttributeProto> attrs(shared_attributes);
-        attrs.push_back(transpose_first_input);
-        result.push_back(NodeDef("Gemm", {A, dY, ZERO}, {dB}, attrs));
+        attrs.push_back(transpose_A);
+        result.push_back(NodeDef(OpDef{"Gemm", kOnnxDomain, 11}, {A, dY}, {dB}, attrs));
       }
     }
   }
