@@ -331,7 +331,7 @@ TEST(GradientCheckerTest, MatMulGrad) {
   float max_error;
   const float error_tolerance = 1e-1f;
   GradientChecker<float, float, float> gradient_checker;
-  OpDef op_def{"MatMul"};
+  OpDef op_def{"MatMul", kOnnxDomain, 11};
   const std::vector<ONNX_NAMESPACE::AttributeProto> attributes = {};
 
   // 2D x 2D
@@ -396,7 +396,7 @@ TEST(GradientCheckerTest, SinGrad) {
 }
 
 TEST(GradientCheckerTest, LogGrad) {
-  TensorShape shape({2,5,6});
+  TensorShape shape({2, 5, 6});
 
   std::function<float(float)> transformer = [](float x) { return std::fabs(x) + 1e-1f; };
   TensorInfo x_info{shape, true, &transformer};
@@ -421,8 +421,14 @@ TEST(GradientCheckerTest, GemmGrad) {
   float max_error;
   const float error_tolerance = 2e-2f;
   GradientChecker<float, float, float> gradient_checker;
-  OpDef op_def{"Gemm"};
+  OpDef op_def{"Gemm", kOnnxDomain, 11};
   const std::vector<ONNX_NAMESPACE::AttributeProto> attributes = {};
+
+  // Non-Single Batch without Bias
+  {
+    gradient_checker.ComputeGradientError(op_def, {{2, 4}, {4, 3}}, {{2, 3}}, &max_error, attributes, true, true);
+    EXPECT_IS_TINIER_THAN(max_error, error_tolerance);
+  }
 
   // Single Batch with Scalar Bias
   {
@@ -684,9 +690,9 @@ TEST(GradientCheckerTest, ConvGrad) {
 }
 
 static void TestConcatOpGrad(const std::string& op_type,
-                      const std::string& domain = kOnnxDomain,
-                      int opset_version = 9,
-                      bool check_not_have_shape_inferencing = false) {
+                             const std::string& domain = kOnnxDomain,
+                             int opset_version = 9,
+                             bool check_not_have_shape_inferencing = false) {
   float max_error;
   GradientChecker<float, float, float> gradient_checker;
   const bool extra_input = op_type == "ConcatTraining";
@@ -699,9 +705,9 @@ static void TestConcatOpGrad(const std::string& op_type,
     std::vector<TensorInfo> output = {y_shape};
     if (extra_input) output.push_back(TensorInfo({3}, false, nullptr, DataTypeImpl::GetTensorType<int64_t>()));
     gradient_checker.ComputeGradientError(op_def, {x_shape, x_shape, x_shape},
-                                                                        output, &max_error,
-                                                                        {MakeAttribute("axis", int64_t(0))}, true,
-                                                                        check_not_have_shape_inferencing);
+                                          output, &max_error,
+                                          {MakeAttribute("axis", int64_t(0))}, true,
+                                          check_not_have_shape_inferencing);
     EXPECT_IS_TINY(max_error);
   }
 
@@ -713,7 +719,7 @@ static void TestConcatOpGrad(const std::string& op_type,
     if (extra_input) output.push_back(TensorInfo({3}, false, nullptr, DataTypeImpl::GetTensorType<int64_t>()));
     gradient_checker.ComputeGradientError(op_def, {x_shape, x_shape, x_shape},
                                           output, &max_error,
-                                          {MakeAttribute("axis", int64_t(1))}, true, 
+                                          {MakeAttribute("axis", int64_t(1))}, true,
                                           check_not_have_shape_inferencing);
     EXPECT_IS_TINY(max_error);
   }
@@ -726,7 +732,7 @@ static void TestConcatOpGrad(const std::string& op_type,
     if (extra_input) output.push_back(TensorInfo({3}, false, nullptr, DataTypeImpl::GetTensorType<int64_t>()));
     gradient_checker.ComputeGradientError(op_def, {x_shape, x_shape, x_shape},
                                           output, &max_error,
-                                          {MakeAttribute("axis", int64_t(2))}, true, 
+                                          {MakeAttribute("axis", int64_t(2))}, true,
                                           check_not_have_shape_inferencing);
     EXPECT_IS_TINY(max_error);
   }
@@ -740,7 +746,7 @@ static void TestConcatOpGrad(const std::string& op_type,
     if (extra_input) output.push_back(TensorInfo({2}, false, nullptr, DataTypeImpl::GetTensorType<int64_t>()));
     gradient_checker.ComputeGradientError(op_def, {x1_shape, x2_shape},
                                           output, &max_error,
-                                          {MakeAttribute("axis", int64_t(1))}, true, 
+                                          {MakeAttribute("axis", int64_t(1))}, true,
                                           check_not_have_shape_inferencing);
     EXPECT_IS_TINY(max_error);
   }
@@ -754,7 +760,7 @@ static void TestConcatOpGrad(const std::string& op_type,
     if (extra_input) output.push_back(TensorInfo({2}, false, nullptr, DataTypeImpl::GetTensorType<int64_t>()));
     gradient_checker.ComputeGradientError(op_def, {x1_shape, x2_shape},
                                           output, &max_error,
-                                          {MakeAttribute("axis", int64_t(-1))}, true, 
+                                          {MakeAttribute("axis", int64_t(-1))}, true,
                                           check_not_have_shape_inferencing);
     EXPECT_IS_TINY(max_error);
   }
@@ -1166,7 +1172,7 @@ void GradientCheckerSoftmaxGradHelper(bool is_log_softmax) {
   float max_error;
   GradientChecker<float, float, float> gradient_checker;
 
-  const std::string op = is_log_softmax? "LogSoftmax" : "Softmax";
+  const std::string op = is_log_softmax ? "LogSoftmax" : "Softmax";
   OpDef op_def{op};
 
   // default_axis
