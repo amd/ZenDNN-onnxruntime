@@ -7,6 +7,7 @@
 #include "core/optimizer/bias_gelu_fusion.h"
 #include "core/optimizer/cast_elimination.h"
 #include "core/optimizer/computation_reduction.h"
+#include "core/optimizer/concat_slice_elimination.h"
 #include "core/optimizer/constant_folding.h"
 #include "core/optimizer/conv_activation_fusion.h"
 #include "core/optimizer/conv_add_fusion.h"
@@ -49,9 +50,10 @@ namespace transformer_utils {
 
 std::vector<std::unique_ptr<GraphTransformer>> GeneratePreTrainingTransformers(
     TransformerLevel level,
-    const std::unordered_set<std::string>& weights_to_train,
+    std::unordered_set<std::string>& weights_to_train,
     const TrainingSession::TrainingConfiguration::GraphTransformerConfiguration& config,
     const IExecutionProvider& execution_provider,
+    std::unordered_map<std::string, std::string>& updated_weight_names,
     const std::vector<std::string>& transformers_and_rules_to_enable) {
   std::vector<std::unique_ptr<GraphTransformer>> transformers;
   std::unique_ptr<RuleBasedGraphTransformer> rule_transformer = nullptr;
@@ -81,6 +83,7 @@ std::vector<std::unique_ptr<GraphTransformer>> GeneratePreTrainingTransformers(
 
       transformers.emplace_back(onnxruntime::make_unique<GeluFusion>(compatible_eps));
       transformers.emplace_back(onnxruntime::make_unique<LayerNormFusion>(compatible_eps));
+      transformers.emplace_back(onnxruntime::make_unique<LayerNormT5Fusion>(compatible_eps));
       transformers.emplace_back(onnxruntime::make_unique<FastGeluFusion>(compatible_eps));
 
 #ifdef USE_CUDA
@@ -92,15 +95,15 @@ std::vector<std::unique_ptr<GraphTransformer>> GeneratePreTrainingTransformers(
       if (config.enable_gelu_approximation) {
         transformers.emplace_back(onnxruntime::make_unique<GeluApproximation>(compatible_eps));
       }
-
-      transformers.emplace_back(onnxruntime::make_unique<ConstantFolding>(execution_provider, compatible_eps, weights_to_train));
+      transformers.emplace_back(onnxruntime::make_unique<ConstantFolding>(execution_provider, weights_to_train, compatible_eps));
       transformers.emplace_back(onnxruntime::make_unique<ReshapeFusion>(compatible_eps));
+      transformers.emplace_back(onnxruntime::make_unique<ConcatSliceElimination>(compatible_eps));
       auto horizontal_parallel_size = training::DistributedRunContext::GroupSize(training::WorkerGroupType::HorizontalParallel);
       if (horizontal_parallel_size > 1) {
         LOGS_DEFAULT(WARNING) << horizontal_parallel_size << "-way horizontal model parallel is enabled";
         transformers.emplace_back(onnxruntime::make_unique<MegatronTransformer>(
             training::DistributedRunContext::RankInGroup(training::WorkerGroupType::HorizontalParallel),
-            horizontal_parallel_size, compatible_eps));
+            horizontal_parallel_size, updated_weight_names, weights_to_train, compatible_eps));
       }
       transformers.emplace_back(onnxruntime::make_unique<ComputationReductionTransformer>(compatible_eps));
     } break;

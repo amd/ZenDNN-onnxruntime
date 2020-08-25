@@ -18,6 +18,7 @@
 #include "core/optimizer/bias_gelu_fusion.h"
 #include "core/optimizer/computation_reduction.h"
 #include "core/optimizer/cast_elimination.h"
+#include "core/optimizer/concat_slice_elimination.h"
 #include "core/optimizer/constant_folding.h"
 #include "core/optimizer/conv_activation_fusion.h"
 #include "core/optimizer/conv_add_fusion.h"
@@ -142,7 +143,8 @@ TEST_F(GraphTransformationTests, ConstantFolding) {
   std::unique_ptr<CPUExecutionProvider> e =
       onnxruntime::make_unique<CPUExecutionProvider>(CPUExecutionProviderInfo());
   onnxruntime::GraphTransformerManager graph_transformation_mgr{5};
-  graph_transformation_mgr.Register(onnxruntime::make_unique<ConstantFolding>(*e.get()), TransformerLevel::Level1);
+  std::unordered_set<std::string> excluded_initializers = {};
+  graph_transformation_mgr.Register(onnxruntime::make_unique<ConstantFolding>(*e.get(), excluded_initializers), TransformerLevel::Level1);
 
   ASSERT_STATUS_OK(graph_transformation_mgr.ApplyTransformers(graph, TransformerLevel::Level1, *logger_));
 
@@ -160,7 +162,8 @@ TEST_F(GraphTransformationTests, ConstantFoldingNodesOnDifferentEP) {
   std::unique_ptr<CPUExecutionProvider> e =
       onnxruntime::make_unique<CPUExecutionProvider>(CPUExecutionProviderInfo());
   onnxruntime::GraphTransformerManager graph_transformation_mgr{5};
-  graph_transformation_mgr.Register(onnxruntime::make_unique<ConstantFolding>(*e.get()), TransformerLevel::Level1);
+  std::unordered_set<std::string> excluded_initializers = {};
+  graph_transformation_mgr.Register(onnxruntime::make_unique<ConstantFolding>(*e.get(), excluded_initializers), TransformerLevel::Level1);
 
   // assign all nodes to CUDA. the constant folding should override this to perform the constant folding on cpu
   for (auto& node : graph.Nodes()) {
@@ -241,7 +244,8 @@ TEST_F(GraphTransformationTests, ConstantFoldingSubgraph) {
   std::unique_ptr<CPUExecutionProvider> e =
       onnxruntime::make_unique<CPUExecutionProvider>(CPUExecutionProviderInfo());
   onnxruntime::GraphTransformerManager graph_transformation_mgr{5};
-  graph_transformation_mgr.Register(onnxruntime::make_unique<ConstantFolding>(*e.get()), TransformerLevel::Level1);
+  std::unordered_set<std::string> excluded_initializers = {};
+  graph_transformation_mgr.Register(onnxruntime::make_unique<ConstantFolding>(*e.get(), excluded_initializers), TransformerLevel::Level1);
 
   ASSERT_STATUS_OK(graph_transformation_mgr.ApplyTransformers(graph, TransformerLevel::Level1, *logger_));
 
@@ -266,7 +270,8 @@ TEST_F(GraphTransformationTests, ConstantFoldingWithShapeToInitializer) {
   onnxruntime::GraphTransformerManager graph_transformation_mgr{5};
   std::unique_ptr<CPUExecutionProvider> e =
       onnxruntime::make_unique<CPUExecutionProvider>(CPUExecutionProviderInfo());
-  graph_transformation_mgr.Register(onnxruntime::make_unique<ConstantFolding>(*e.get(), compatible_eps, excluded_initializers), TransformerLevel::Level1);
+
+  graph_transformation_mgr.Register(onnxruntime::make_unique<ConstantFolding>(*e.get(), excluded_initializers, compatible_eps), TransformerLevel::Level1);
 
   ASSERT_TRUE(graph_transformation_mgr.ApplyTransformers(graph, TransformerLevel::Level1, *logger_).IsOK());
 
@@ -1594,6 +1599,24 @@ TEST_F(GraphTransformationTests, ReshapeFusionDistilBertTest) {
   }
 }
 
+// Test Reshape Fusion with 2 constant initializers for Concat inputs.
+TEST_F(GraphTransformationTests, ConcatSliceEliminationTest) {
+  auto model_uri = MODEL_FOLDER "concat_slice_basic_test.onnx";
+  std::shared_ptr<Model> p_model;
+  ASSERT_STATUS_OK(Model::Load(model_uri, p_model, nullptr, *logger_));
+  Graph& graph = p_model->MainGraph();
+
+  onnxruntime::GraphTransformerManager graph_transformation_mgr{5};
+  graph_transformation_mgr.Register(onnxruntime::make_unique<ConcatSliceElimination>(), TransformerLevel::Level1);
+  auto ret = graph_transformation_mgr.ApplyTransformers(graph, TransformerLevel::Level1, *logger_);
+  ASSERT_TRUE(ret.IsOK());
+
+  Model::Save(*p_model, "concat_slice_transformed.onnx");
+  std::map<std::string, int> op_to_count = CountOpsInGraph(graph);
+  ASSERT_TRUE(op_to_count["Concat"] == 0);
+  ASSERT_TRUE(op_to_count["Slice"] == 0);
+}
+
 TEST_F(GraphTransformationTests, ExpandElimination) {
   auto model_uri = MODEL_FOLDER "expand_elimination.onnx";
   std::shared_ptr<Model> model;
@@ -2352,6 +2375,39 @@ TEST_F(GraphTransformationTests, LayerNormWithSubDupFusionTest) {
       EXPECT_EQ(scale_shape->dim_size(), 1) << "LayerNormalization scale should be 1D. Got: " << scale_shape->dim_size();
       EXPECT_EQ(bias_shape->dim_size(), 1) << "LayerNormalization bias should be 1D. Got: " << bias_shape->dim_size();
       EXPECT_EQ(scale_shape->dim(0).dim_value(), bias_shape->dim(0).dim_value());
+    } else {
+      EXPECT_TRUE(false) << "Unexpected node " << node.Name();
+    }
+  }
+}
+
+TEST_F(GraphTransformationTests, T5LayerNormFusionTest) {
+  auto model_uri = MODEL_FOLDER "fusion/layer_norm_t5.onnx";
+  std::shared_ptr<Model> p_model;
+  ASSERT_STATUS_OK(Model::Load(model_uri, p_model, nullptr, *logger_));
+  Graph& graph = p_model->MainGraph();
+
+  onnxruntime::GraphTransformerManager graph_transformation_mgr{5};
+  graph_transformation_mgr.Register(onnxruntime::make_unique<LayerNormT5Fusion>(), TransformerLevel::Level2);
+  auto ret = graph_transformation_mgr.ApplyTransformers(graph, TransformerLevel::Level2, *logger_);
+  ASSERT_TRUE(ret.IsOK());
+
+  Model::Save(*p_model, "t5_fused.onnx");
+  std::map<std::string, int> op_to_count = CountOpsInGraph(graph);
+  ASSERT_TRUE(op_to_count["Div"] == 0);
+  ASSERT_TRUE(op_to_count["Add"] == 0);
+  ASSERT_TRUE(op_to_count["ReduceMean"] == 0);
+  ASSERT_TRUE(op_to_count["Pow"] == 0);
+  ASSERT_TRUE(op_to_count["Sqrt"] == 0);
+  ASSERT_TRUE(op_to_count["T5LayerNormalization"] == 1);
+
+  for (const Node& node : graph.Nodes()) {
+    if (node.OpType() == "T5LayerNormalization") {
+      // LayerNormalization should have two inputs.
+      EXPECT_EQ(node.InputDefs().size(), 2u) << "LayerNormalization number of inputs does not equal to 2. Got:" << node.InputDefs().size();
+      // LayerNormalization input "scale" and "bias" should have the same dimension.
+      const TensorShapeProto* scale_shape = node.InputDefs()[1]->Shape();
+      EXPECT_EQ(scale_shape->dim_size(), 1) << "LayerNormalization scale should be 1D. Got: " << scale_shape->dim_size();
     } else {
       EXPECT_TRUE(false) << "Unexpected node " << node.Name();
     }
