@@ -285,8 +285,7 @@ IMPLEMENT_GRADIENT_BUILDER(GetGemmGradient) {
   bool transA = static_cast<bool>(attributes.at("transA").i());
   bool transB = static_cast<bool>(attributes.at("transB").i());
 
-  ArgDef A = I(0), B = I(1), C = I(2), dY = GO(0),
-         dA = GI(0), dB = GI(1), dC = GI(2);
+  ArgDef A = I(0), B = I(1), dY = GO(0), dA = GI(0), dB = GI(1);
   AttributeProto transpose_A = MakeAttribute("transA", int64_t(1));
   AttributeProto transpose_B = MakeAttribute("transB", int64_t(1));
 
@@ -360,6 +359,8 @@ IMPLEMENT_GRADIENT_BUILDER(GetGemmGradient) {
   }
 
   if (IsGradientRequiredForSrcNodeInput(2)) {
+    ArgDef C = I(2), dC = GI(2);
+
     // Y = beta * C
     // dC = beta * dY
     bool has_beta = attributes.at("beta").has_f();
