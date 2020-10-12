@@ -25,6 +25,7 @@ from concurrent.futures import ProcessPoolExecutor
 import onnxruntime as ort
 from onnxruntime.training import amp, optim, orttrainer
 from onnxruntime.training.optim import _LRScheduler, PolyWarmupLRScheduler
+from onnxruntime.training.checkpoint import experimental_save_checkpoint
 
 # need to override torch.onnx.symbolic_opset12.nll_loss to handle ignore_index == -100 cases.
 # the fix for ignore_index == -100 cases is already in pytorch master.
@@ -416,6 +417,7 @@ def do_pretrain(args):
                         print("Step:{} Average Loss = {}".format(global_step, average_loss / (args.log_freq * args.gradient_accumulation_steps)))
 
                     if global_step >= args.max_steps:
+                        experimental_save_checkpoint(model, args.output_dir)
                         final_loss = average_loss / (args.log_freq * args.gradient_accumulation_steps)
                         return final_loss
 
@@ -430,7 +432,7 @@ def do_pretrain(args):
 
 class ORTBertPretrainTest(unittest.TestCase):
     def setUp(self):
-        self.output_dir = '/bert_data/hf_data/test_out/bert_pretrain_results'
+        self.output_dir = './'
         self.bert_model = 'bert-base-uncased'
         self.local_rank = -1
         self.world_rank = -1
@@ -466,7 +468,7 @@ class ORTBertPretrainTest(unittest.TestCase):
         logger.info("self.gradient_accumulation_steps = %d", self.gradient_accumulation_steps)
 
         # only to run on  optimization step because we only want to make sure there is no throughput regression
-        self.max_steps = 5
+        self.max_steps = 50
         args = PretrainArguments(
             output_dir=self.output_dir,
             bert_model=self.bert_model,

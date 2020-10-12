@@ -23,14 +23,14 @@ def experimental_state_dict(ort_trainer, include_optimizer_state=True):
     for name in session_state:
         torch_state[name] = torch.from_numpy(session_state[name])
 
-    # extract untrained weights and buffer
-    for n in ort_trainer._onnx_model.graph.initializer:
-        if n.name not in torch_state:
-            torch_state[n.name] = torch.from_numpy(np.array(onnx.numpy_helper.to_array(n)))
+    # # extract untrained weights and buffer
+    # for n in ort_trainer._onnx_model.graph.initializer:
+    #     if n.name not in torch_state:
+    #         torch_state[n.name] = torch.from_numpy(np.array(onnx.numpy_helper.to_array(n)))
 
-    # Need to remove redundant (optimizer) initializers to map back to original torch state names
-    if not include_optimizer_state and ort_trainer._torch_state_dict_keys:
-        return {key: torch_state[key] for key in ort_trainer._torch_state_dict_keys if key in torch_state}
+    # # Need to remove redundant (optimizer) initializers to map back to original torch state names
+    # if not include_optimizer_state and ort_trainer._torch_state_dict_keys:
+    #     return {key: torch_state[key] for key in ort_trainer._torch_state_dict_keys if key in torch_state}
     return torch_state
 
 
