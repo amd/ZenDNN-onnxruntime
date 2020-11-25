@@ -12,3 +12,4 @@ jobs:
     AgentPool : 'Win-CPU-2019'
     DoEsrp: 'true'
     DoCompliance: 'true'
+    UploadDox: 'true'

@@ -20,6 +20,7 @@ parameters:
   BuildConfigurations: ['RelWithDebInfo'] # Options: Debug, RelWithDebInfo
   RunTests : 'true'
   EnableLto: true
+  UploadDox: 'false' # Generate and upload C# and C/C++ Doxygen generated html
   # Controls whether unreleased onnx opsets are allowed. Default is set to 1
   AllowReleasedOpsetOnly: '0'
 jobs:
@@ -87,6 +88,36 @@ jobs:
        python -m pip install -q pyopenssl setuptools wheel numpy
       workingDirectory: '$(Build.BinariesDirectory)'
       displayName: 'Install python modules'
+
+    - ${{ if eq(parameters['UploadDox'], 'true') }}:
+      - script: |
+          set ORT_DOXY_SRC=$(Build.SourcesDirectory)
+          set ORT_DOXY_OUT=$(Build.BinariesDirectory)\$(BuildConfig)\$(BuildConfig)
+          mkdir %ORT_DOXY_SRC% 
+          mkdir %ORT_DOXY_OUT%
+          "C:\Program Files\doxygen\bin\doxygen.exe" $(Build.SourcesDirectory)\tools\ci_build\github\Doxyfile_csharp.cfg
+          "C:\Program Files\doxygen\bin\doxygen.exe" $(Build.SourcesDirectory)\tools\ci_build\github\Doxyfile_cpp.cfg
+          
+          workingDirectory: '$(Build.SourcesDirectory)'
+          displayName: 'API Documentation Check and generate'
+
+      - task: AzureFileCopy@4
+        displayName: 'Upload C# API documentation'
+        inputs:
+          SourcePath: '$(Build.BinariesDirectory)\$(BuildConfig)\$(BuildConfig)\csharp_dox\html\*'
+          Destination: 'AzureBlob'
+          storage: 'stageortapidocs'
+          ContainerName: 'stageortapidocs'
+          BlobPrefix: '$web/csharp'
+          
+      - task: AzureFileCopy@4
+        displayName: 'Upload CPP API documentation'
+        inputs:
+          SourcePath: '$(Build.BinariesDirectory)\$(BuildConfig)\$(BuildConfig)\cpp_dox\html\*'
+          Destination: 'AzureBlob'
+          storage: 'stageortapidocs'
+          ContainerName: 'stageortapidocs'
+          BlobPrefix: '$web/cpp'    
 
     - powershell: |
        $Env:USE_MSVC_STATIC_RUNTIME=1

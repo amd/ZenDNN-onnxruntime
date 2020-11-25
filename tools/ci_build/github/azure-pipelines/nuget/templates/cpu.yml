@@ -2,6 +2,7 @@ parameters:
   DoEsrp: 'false'
   PackageName: 'Microsoft.ML.OnnxRuntime'
   DoCompliance: 'false'
+  UploadDox: 'false' # Generate and upload C# and C/C++ Doxygen generated html
 
 jobs:
 - template: ../../templates/win-ci-2019.yml
@@ -17,6 +18,7 @@ jobs:
     DoNugetPack : 'true'
     DoCompliance: ${{ parameters.DoCompliance }}
     DoEsrp: ${{ parameters.DoEsrp }}
+    UploadDox: ${{ parameters.UploadDox }}
     NuPackScript: |
      msbuild $(Build.SourcesDirectory)\csharp\OnnxRuntime.CSharp.proj /p:Configuration=RelWithDebInfo /t:CreatePackage
      copy $(Build.SourcesDirectory)\csharp\src\Microsoft.ML.OnnxRuntime\bin\RelWithDebInfo\*.nupkg $(Build.ArtifactStagingDirectory)
