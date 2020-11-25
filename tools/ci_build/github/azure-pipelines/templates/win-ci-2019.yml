@@ -101,7 +101,7 @@ jobs:
         workingDirectory: '$(Build.SourcesDirectory)'
         displayName: 'API Documentation Check and generate'
 
-      - task: AzureFileCopy@4
+      - task: AzureFileCopy@3
         displayName: 'Upload C# API documentation'
         inputs:
           SourcePath: '$(Build.BinariesDirectory)\$(BuildConfig)\$(BuildConfig)\csharp_dox\html\*'
@@ -110,7 +110,7 @@ jobs:
           ContainerName: 'stageortapidocs'
           BlobPrefix: '$web/csharp'
           
-      - task: AzureFileCopy@4
+      - task: AzureFileCopy@3
         displayName: 'Upload CPP API documentation'
         inputs:
           SourcePath: '$(Build.BinariesDirectory)\$(BuildConfig)\$(BuildConfig)\cpp_dox\html\*'
