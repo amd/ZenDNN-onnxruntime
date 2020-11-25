@@ -104,6 +104,7 @@ jobs:
       - task: AzureFileCopy@3
         displayName: 'Upload C# API documentation'
         inputs:
+          azureSubscription: 'AIInfraBuildOnnxRuntimeOSS'
           SourcePath: '$(Build.BinariesDirectory)\$(BuildConfig)\$(BuildConfig)\csharp_dox\html\*'
           Destination: 'AzureBlob'
           storage: 'stageortapidocs'
@@ -113,6 +114,7 @@ jobs:
       - task: AzureFileCopy@3
         displayName: 'Upload CPP API documentation'
         inputs:
+          azureSubscription: 'AIInfraBuildOnnxRuntimeOSS'
           SourcePath: '$(Build.BinariesDirectory)\$(BuildConfig)\$(BuildConfig)\cpp_dox\html\*'
           Destination: 'AzureBlob'
           storage: 'stageortapidocs'
