@@ -98,8 +98,8 @@ jobs:
           "C:\Program Files\doxygen\bin\doxygen.exe" $(Build.SourcesDirectory)\tools\ci_build\github\Doxyfile_csharp.cfg
           "C:\Program Files\doxygen\bin\doxygen.exe" $(Build.SourcesDirectory)\tools\ci_build\github\Doxyfile_cpp.cfg
           
-          workingDirectory: '$(Build.SourcesDirectory)'
-          displayName: 'API Documentation Check and generate'
+        workingDirectory: '$(Build.SourcesDirectory)'
+        displayName: 'API Documentation Check and generate'
 
       - task: AzureFileCopy@4
         displayName: 'Upload C# API documentation'
