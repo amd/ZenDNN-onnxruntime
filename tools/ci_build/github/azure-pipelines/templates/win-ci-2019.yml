@@ -108,8 +108,8 @@ jobs:
           SourcePath: '$(Build.BinariesDirectory)\$(BuildConfig)\$(BuildConfig)\csharp_dox\html\*'
           Destination: 'AzureBlob'
           storage: 'stageortapidocs'
-          ContainerName: 'stageortapidocs'
-          BlobPrefix: '$web/csharp'
+          ContainerName: '$web'
+          BlobPrefix: 'csharp'
           
       - task: AzureFileCopy@3
         displayName: 'Upload CPP API documentation'
@@ -118,8 +118,8 @@ jobs:
           SourcePath: '$(Build.BinariesDirectory)\$(BuildConfig)\$(BuildConfig)\cpp_dox\html\*'
           Destination: 'AzureBlob'
           storage: 'stageortapidocs'
-          ContainerName: 'stageortapidocs'
-          BlobPrefix: '$web/cpp'    
+          ContainerName: '$web'
+          BlobPrefix: 'cpp'    
 
     - powershell: |
        $Env:USE_MSVC_STATIC_RUNTIME=1
