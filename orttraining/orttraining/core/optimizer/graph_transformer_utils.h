@@ -21,7 +21,8 @@ std::vector<std::unique_ptr<GraphTransformer>> GeneratePreTrainingTransformers(
     const TrainingSession::TrainingConfiguration::GraphTransformerConfiguration& config,
     const IExecutionProvider& execution_provider,  // required for constant folding
     std::unordered_map<std::string, std::string>& updated_weight_names,
-    std::unordered_map<std::string, TrainingSession::PartitionInfo>& weight_partition_info,
+    std::unordered_map<std::string, TrainingSession::PartitionInfo>& weight_partition_info,    
+    TrainingSession::OptimizerState& initial_optimizer_states,
     const std::vector<std::string>& rules_and_transformers_to_enable = {});
 
 /** Generates all predefined (both rule-based and non-rule-based) transformers for this level.

@@ -3,6 +3,7 @@
 
 #include "core/optimizer/initializer.h"
 #include "orttraining/core/framework/distributed_run_context.h"
+#include "orttraining/core/graph/optimizer_builder.h"
 #include "orttraining/core/optimizer/megatron_transformer.h"
 #include "core/graph/graph_utils.h"
 #include "core/optimizer/utils.h"
@@ -113,6 +114,25 @@ static uint32_t HashName(const std::string& name) {
   return hash;
 }
 
+template <class T>
+void MegatronTransformer::PartitionBufferByColumn(const T* input,
+                                                  const int64_t row_count,
+                                                  const int64_t column_count,
+                                                  const int64_t column_stride,
+                                                  const int stride,
+                                                  std::vector<T>& result) const {
+  int64_t column_stride_partition = column_stride / horizontal_parallel_size_;
+
+  const int64_t stride_partition_column_offset = horizontal_parallel_rank_ * column_stride_partition;
+  for (auto row_index = 0; row_index < row_count; row_index++) {
+    auto row_offset = row_index * column_count;
+    for (auto stride_index = 0; stride_index < stride; stride_index++) {
+      auto column_offset = row_offset + stride_index * column_stride + stride_partition_column_offset;
+      std::copy(input + column_offset, input + column_offset + column_stride_partition, std::back_inserter(result));
+    }
+  }
+}
+
 bool MegatronTransformer::PartitionWeightByColumn(const Graph& graph, const NodeArg& input_arg,
                                                   ONNX_NAMESPACE::TensorProto& initializer_partition,
                                                   int stride) const {
@@ -159,30 +179,84 @@ bool MegatronTransformer::PartitionWeightByColumn(const Graph& graph, const Node
 
   int64_t column_partition = column_count / horizontal_parallel_size_;
   int64_t column_stride = column_count / stride;
-  int64_t column_stride_partition = column_stride / horizontal_parallel_size_;
 
+  std::vector<int64_t> new_shape;
   if (rank == 2) {
     initializer_partition.add_dims(row_count);
+    new_shape.push_back(row_count);
   }
 
   initializer_partition.add_dims(column_partition);
+  new_shape.push_back(column_partition);
   const int64_t element_count = row_count * column_partition;
 
   std::vector<float> result;
   result.reserve(element_count);
 
-  const int64_t stride_partition_column_offset = horizontal_parallel_rank_ * column_stride_partition;
-  for (auto row_index = 0; row_index < row_count; row_index++) {
-    auto row_offset = row_index * column_count;
-    for (auto stride_index = 0; stride_index < stride; stride_index++) {
-      auto column_offset = row_offset + stride_index * column_stride + stride_partition_column_offset;
-      std::copy(a_weight + column_offset, a_weight + column_offset + column_stride_partition, std::back_inserter(result));
+  PartitionBufferByColumn(a_weight, row_count, column_count, column_stride, stride, result);
+  initializer_partition.set_raw_data(result.data(), element_count * sizeof(float));
+
+  std::cout << "PartitionWeightByColumn: " << original_name << "\n";
+  const auto optim_state_it = initial_optimizer_states_.find(original_name);
+  if (optim_state_it != initial_optimizer_states_.end()) {
+    std::cout << "Partitioning col wise optim state \n";
+    auto& initial_states = optim_state_it->second;
+    for (const auto& moments_prefix : training::MOMENTS_PREFIXES) {
+      const auto initial_state_it = initial_states.find(moments_prefix);
+      if (initial_state_it != initial_states.end()) {
+        auto* init_tensor = initial_state_it->second.GetMutable<Tensor>();
+
+        OrtValue partitioned;
+        auto element_type = init_tensor->DataType();
+        TensorShape shape(new_shape);
+        const OrtMemoryInfo& info = init_tensor->Location();
+        std::unique_ptr<Tensor> p_tensor;
+        std::cout << "Partitioning moment:" << moments_prefix << ":" << shape << "\n";
+
+        if (utils::IsPrimitiveDataType<float>(element_type)) {
+          float* data_buffer = init_tensor->MutableData<float>();
+
+          std::vector<float> result;
+          result.reserve(element_count);
+          PartitionBufferByColumn(data_buffer, row_count, column_count, column_stride, stride, result);
+          // memcpy(data_buffer, result.data(), sizeof(float) * element_count);
+
+          auto alloc = execution_provider_.GetAllocator(0, OrtMemTypeDefault);
+          p_tensor = onnxruntime::make_unique<Tensor>(element_type,
+                                                      shape,
+                                                      alloc);
+          float* out_buffer = p_tensor->MutableData<float>();
+          memcpy(out_buffer, result.data(), sizeof(float) * element_count);                                   
+          partitioned.Init(p_tensor.release(),
+                         DataTypeImpl::GetType<Tensor>(),
+                         DataTypeImpl::GetType<Tensor>()->GetDeleteFunc());
+          initial_states[moments_prefix] = std::move(partitioned);
+        } else if (utils::IsPrimitiveDataType<MLFloat16>(element_type)) {
+          MLFloat16* data_buffer = init_tensor->MutableData<MLFloat16>();
+          std::vector<MLFloat16> result;
+          result.reserve(element_count);
+          PartitionBufferByColumn(data_buffer, row_count, column_count, column_stride, stride, result);
+
+          p_tensor = onnxruntime::make_unique<Tensor>(element_type,
+                                                      shape,
+                                                      result.data(),
+                                                      info);
+          partitioned.Init(p_tensor.release(),
+                         DataTypeImpl::GetType<Tensor>(),
+                         DataTypeImpl::GetType<Tensor>()->GetDeleteFunc());
+          initial_states[moments_prefix] = std::move(partitioned);
+        } else {
+          ORT_THROW("Unsupported type: ", element_type, "for initial optimizer moments.");
+        }
+      }
     }
   }
 
-  initializer_partition.set_raw_data(result.data(), element_count * sizeof(float));
   weight_partition_info_[original_name].megatron_row_partition = 0;
   weight_partition_info_[original_name].view_name = new_initializer_name;
+  weight_partition_info_[original_name].weight_partitioned = true;
+  std::cout<< "M: original:"<< original_name << "adding view name: " << new_initializer_name << "\n";
+
   return true;
 }
 
@@ -230,9 +304,12 @@ bool MegatronTransformer::PartitionWeightByRow(const Graph& graph, const NodeArg
 
   int64_t row_partition = row_count / horizontal_parallel_size_;
 
+  std::vector<int64_t> new_shape;
   initializer_partition.add_dims(row_partition);
+  new_shape.push_back(row_partition);
   if (rank == 2) {
     initializer_partition.add_dims(column_count);
+    new_shape.push_back(column_count);
   }
   const int64_t element_count = row_partition * column_count;
 
@@ -242,8 +319,53 @@ bool MegatronTransformer::PartitionWeightByRow(const Graph& graph, const NodeArg
   const int64_t row_index_offset = horizontal_parallel_rank_ * row_partition;
   memcpy(result.data(), a_weight + row_index_offset * column_count, sizeof(float) * element_count);
   initializer_partition.set_raw_data(result.data(), element_count * sizeof(float));
+
+  std::cout << "PartitionWeightByRow: " << original_name << "\n";
+  const auto optim_state_it = initial_optimizer_states_.find(original_name);
+  if (optim_state_it != initial_optimizer_states_.end()) {
+    std::cout << "Partitioning row wise optim state \n";
+    auto& initial_states = optim_state_it->second;
+    for (const auto& moments_prefix : training::MOMENTS_PREFIXES) {
+      const auto initial_state_it = initial_states.find(moments_prefix);
+      if (initial_state_it != initial_states.end()) {
+        auto* init_tensor = initial_state_it->second.GetMutable<Tensor>();
+
+        OrtValue partitioned;
+        auto element_type = init_tensor->DataType();
+        TensorShape shape(new_shape);
+        const OrtMemoryInfo& info = init_tensor->Location();
+        std::unique_ptr<Tensor> p_tensor;
+        std::cout << "Partitioning moment:" << moments_prefix << ":" << shape << "\n";
+
+        if (utils::IsPrimitiveDataType<float>(element_type)) {
+          float* data_buffer = init_tensor->MutableData<float>();
+
+          p_tensor = onnxruntime::make_unique<Tensor>(element_type,
+                                                      shape,
+                                                      data_buffer + row_index_offset * column_count,
+                                                      info);
+        } else if (utils::IsPrimitiveDataType<MLFloat16>(element_type)) {
+          MLFloat16* data_buffer = init_tensor->MutableData<MLFloat16>();
+
+          p_tensor = onnxruntime::make_unique<Tensor>(element_type,
+                                                      shape,
+                                                      data_buffer + row_index_offset * column_count,
+                                                      info);
+
+        } else {
+          ORT_THROW("Unsupported type: ", element_type, "for initial optimizer moments.");
+        }
+        partitioned.Init(p_tensor.release(),
+                         DataTypeImpl::GetType<Tensor>(),
+                         DataTypeImpl::GetType<Tensor>()->GetDeleteFunc());
+        initial_states[moments_prefix] = std::move(partitioned);
+      }
+    }
+  }
+
   weight_partition_info_[original_name].megatron_row_partition = 1;
   weight_partition_info_[original_name].view_name = new_initializer_name;
+  weight_partition_info_[original_name].weight_partitioned = true;
   return true;
 }
 

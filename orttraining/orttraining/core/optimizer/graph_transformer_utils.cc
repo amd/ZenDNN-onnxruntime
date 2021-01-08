@@ -57,6 +57,7 @@ std::vector<std::unique_ptr<GraphTransformer>> GeneratePreTrainingTransformers(
     const IExecutionProvider& execution_provider,
     std::unordered_map<std::string, std::string>& updated_weight_names,
     std::unordered_map<std::string, TrainingSession::PartitionInfo>& weight_partition_info,
+    TrainingSession::OptimizerState& initial_optimizer_states,
     const std::vector<std::string>& transformers_and_rules_to_enable) {
   std::vector<std::unique_ptr<GraphTransformer>> transformers;
   std::unique_ptr<RuleBasedGraphTransformer> rule_transformer = nullptr;
@@ -103,7 +104,7 @@ std::vector<std::unique_ptr<GraphTransformer>> GeneratePreTrainingTransformers(
         LOGS_DEFAULT(WARNING) << horizontal_parallel_size << "-way horizontal model parallel is enabled";
         transformers.emplace_back(onnxruntime::make_unique<MegatronTransformer>(
             training::DistributedRunContext::RankInGroup(training::WorkerGroupType::HorizontalParallel),
-            horizontal_parallel_size, updated_weight_names, weights_to_train, weight_partition_info, compatible_eps));
+            horizontal_parallel_size, updated_weight_names, weights_to_train, weight_partition_info, initial_optimizer_states, execution_provider, compatible_eps));
       }
       transformers.emplace_back(onnxruntime::make_unique<ComputationReductionTransformer>(compatible_eps));
 
