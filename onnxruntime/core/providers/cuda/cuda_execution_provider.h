@@ -167,7 +167,7 @@ class CUDAExecutionProvider : public IExecutionProvider {
     AllocatorPtr allocator_;
   };
 
-  using PerThreadContextMap = std::unordered_map<const CUDAExecutionProvider*, std::weak_ptr<PerThreadContext>>;
+  using PerThreadContextMap = std::unordered_map<OrtDevice::DeviceId, std::weak_ptr<PerThreadContext>>;
   // thread local PerThreadContext cache
 
   struct ContextCacheHolder {
@@ -203,7 +203,7 @@ class CUDAExecutionProvider : public IExecutionProvider {
   // Synchronization is required to update the contained structures.
   // On the other hand, access to an individual PerThreadContext is assumed to be from a single thread at a time,
   // so synchronization is not required for that.
-  mutable PerThreadContextState context_state_;
+  static PerThreadContextState context_state_;
 
   PerThreadContext& GetPerThreadContext() const;
   void ReleasePerThreadContext() const;

@@ -17,6 +17,8 @@
 #include "orttraining/training_ops/cuda/cuda_training_kernels.h"
 #endif
 
+#include <thread>
+
 using namespace onnxruntime::common;
 
 namespace onnxruntime {
@@ -57,6 +59,8 @@ ONNX_OPERATOR_KERNEL_EX(
     Memcpy);
 
 }  // namespace cuda
+
+CUDAExecutionProvider::PerThreadContextState CUDAExecutionProvider::context_state_;
 
 AllocatorPtr CUDAExecutionProvider::CreateCudaAllocator(OrtDevice::DeviceId device_id, size_t gpu_mem_limit, ArenaExtendStrategy arena_extend_strategy,
                                                         CUDAExecutionProviderExternalAllocatorInfo external_allocator_info, OrtArenaCfg* default_memory_arena_cfg) {
@@ -170,7 +174,7 @@ CUDAExecutionProvider::~CUDAExecutionProvider() {
     for (const auto& cache_weak : context_state_.caches_to_update_on_destruction) {
       const auto cache = cache_weak.lock();
       if (!cache) continue;
-      ORT_IGNORE_RETURN_VALUE(cache->erase(this));
+      ORT_IGNORE_RETURN_VALUE(cache->erase(info_.device_id));
     }
   }
 
@@ -181,9 +185,10 @@ CUDAExecutionProvider::~CUDAExecutionProvider() {
 
 CUDAExecutionProvider::PerThreadContext& CUDAExecutionProvider::GetPerThreadContext() const {
   const auto& per_thread_context_cache = PerThreadContextCache();
+  OrtDevice::DeviceId device_id = info_.device_id;
 
   // try to use cached context
-  auto cached_context_it = per_thread_context_cache->find(this);
+  auto cached_context_it = per_thread_context_cache->find(device_id);
   if (cached_context_it != per_thread_context_cache->end()) {
     auto cached_context = cached_context_it->second.lock();
     ORT_ENFORCE(cached_context);
@@ -199,9 +204,12 @@ CUDAExecutionProvider::PerThreadContext& CUDAExecutionProvider::GetPerThreadCont
     if (context_state_.retired_context_pool.empty()) {
       context = std::make_shared<PerThreadContext>(info_.device_id, static_cast<cudaStream_t>(GetComputeStream()), info_.gpu_mem_limit,
                                                    info_.arena_extend_strategy, info_.external_allocator_info, info_.default_memory_arena_cfg);
+
+      // std::cout << "Creating a new PerThreadContext deviceId: " << device_id << " Address: " << this << " thread_id: " << std::this_thread::get_id() << "\n";
     } else {
       context = context_state_.retired_context_pool.back();
       context_state_.retired_context_pool.pop_back();
+      // std::cout << "Reusing a PerThreadContext deviceId: " << device_id << " Address: " << this << " thread_id: " << std::this_thread::get_id() << "\n";
     }
 
     // insert into active_contexts, should not already be present
@@ -212,15 +220,16 @@ CUDAExecutionProvider::PerThreadContext& CUDAExecutionProvider::GetPerThreadCont
     ORT_IGNORE_RETURN_VALUE(context_state_.caches_to_update_on_destruction.insert(per_thread_context_cache));
   }
 
-  per_thread_context_cache->insert(std::make_pair(this, context));
+  per_thread_context_cache->insert(std::make_pair(device_id, context));
 
   return *context;
 }
 
 void CUDAExecutionProvider::ReleasePerThreadContext() const {
   const auto& per_thread_context_cache = PerThreadContextCache();
+  // std::cout << "CUDAExecutionProvider::ReleasePerThreadContext(): per_thread_context_cache address " << &per_thread_context_cache << "\n";
 
-  auto cached_context_it = per_thread_context_cache->find(this);
+  auto cached_context_it = per_thread_context_cache->find(info_.device_id);
   ORT_ENFORCE(cached_context_it != per_thread_context_cache->end());
   auto cached_context = cached_context_it->second.lock();
   ORT_ENFORCE(cached_context);
@@ -230,6 +239,8 @@ void CUDAExecutionProvider::ReleasePerThreadContext() const {
     context_state_.active_contexts.erase(cached_context);
     context_state_.retired_context_pool.push_back(cached_context);
   }
+
+  // std::cout << "Erasing PerThreadContext deviceId: " << info_.device_id << " Address: " << this << " thread_id: " << std::this_thread::get_id() << "\n";
 
   per_thread_context_cache->erase(cached_context_it);
 }
@@ -1925,7 +1936,7 @@ static Status RegisterCudaKernels(KernelRegistry& kernel_registry) {
     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCudaExecutionProvider, kOnnxDomain, 14, float, BatchNormalization)>,
     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCudaExecutionProvider, kOnnxDomain, 14, double, BatchNormalization)>,
     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCudaExecutionProvider, kOnnxDomain, 14, MLFloat16, BatchNormalization)>,
-    #if defined(CUDA_VERSION) && CUDA_VERSION >= 11000
+#if defined(CUDA_VERSION) && CUDA_VERSION >= 11000
     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCudaExecutionProvider, kOnnxDomain, 14, BFloat16, Add)>,
     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCudaExecutionProvider, kOnnxDomain, 14, BFloat16, Sub)>,
     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCudaExecutionProvider, kOnnxDomain, 14, BFloat16, Mul)>,
