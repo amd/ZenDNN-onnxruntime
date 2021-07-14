@@ -254,6 +254,10 @@ Status GradientGraphBuilder::Build(const std::unordered_set<std::string>* p_init
     }
   }
 
+  int op_set_version = graph_->DomainToVersionMap().find(kOnnxDomain) != graph_->DomainToVersionMap().end()
+                           ? graph_->DomainToVersionMap().at(kOnnxDomain)
+                           : -1;
+
   // so far, visited are the minimum node in between
   // visited_node_args are the node_args involved
   for (auto node : visited) {
@@ -270,10 +274,11 @@ Status GradientGraphBuilder::Build(const std::unordered_set<std::string>* p_init
       }
     }
 
-    GradientDef node_defs = GetGradientForOp(gradient_graph_config_, graph_, node, output_args_need_grad, input_args_need_grad, logger_);
+    GradientDef node_defs = GradientBuilderRegistry::GetInstance().GetGradientForOp(
+        gradient_graph_config_, graph_, node, op_set_version, output_args_need_grad, input_args_need_grad, logger_);
     if (node_defs.empty()) {
-      LOGS(logger_, WARNING) << "GetGradientForOp() did not create any nodes for node "
-                             << node->Name() << " of type " << node->OpType() << ".";
+      LOGS(logger_, WARNING) << "GetGradientForOp() did not create any nodes for node " << node->Name() << " of type "
+                             << node->OpType() << ".";
     }
 
     // updates arg name if gradient accumulation is needed
