@@ -27,7 +27,7 @@ stages:
 - stage: Extract_commit
   jobs:
   - job: Extract_commit
-    pool: 'Win-CPU-2019'
+    pool: 'onnxruntime-win-cpu-2022'
     timeoutInMinutes: 30
     workspace:
       clean: all

@@ -6,7 +6,7 @@ parameters:
 
 jobs:
 - job: 'build'
-  pool: 'Win-CPU-2019'
+  pool: 'onnxruntime-win-cpu-2022'
   strategy:
     matrix:
       x64_release:
