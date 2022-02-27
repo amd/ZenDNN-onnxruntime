@@ -99,7 +99,7 @@ if(WIN32 AND NODEJS_BINDING_ARCH STREQUAL "arm64")
         COMMAND ${NPM_CLI} ci
         COMMAND ${CMAKE_COMMAND} -E remove_directory ${JS_NODE_ROOT}/build/
         COMMAND ${CMAKE_COMMAND} -E make_directory ${JS_NODE_ROOT}/build/
-        COMMAND cd ${JS_NODE_ROOT} && ${CMAKE_COMMAND} ${JS_NODE_ROOT} --no-warn-unused-cli -G"Visual Studio 16 2019" -A"ARM64" -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="${JS_NODE_ROOT}/build/" -DCMAKE_JS_INC="${nodejs_win_arm64_headers_SOURCE_DIR}/include/node" -DCMAKE_JS_SRC="${JS_NODE_ROOT}/node_modules/cmake-js/lib/cpp/win_delay_load_hook.cc" -DNODE_RUNTIME="node" -DNODE_RUNTIMEVERSION="16.2.0" -DNODE_ARCH="arm64" -DCMAKE_JS_LIB="${nodejs_win_arm64_node_lib_SOURCE_DIR}/node.lib" -Dnapi_build_version="3" -DCMAKE_BUILD_TYPE="RelWithDebInfo" -DONNXRUNTIME_BUILD_DIR="${CMAKE_CURRENT_BINARY_DIR}" -DCMAKE_SHARED_LINKER_FLAGS="/DELAYLOAD:NODE.EXE" -B ./build
+        COMMAND cd ${JS_NODE_ROOT} && ${CMAKE_COMMAND} ${JS_NODE_ROOT} --no-warn-unused-cli -G"Visual Studio 17 2022" -A"ARM64" -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="${JS_NODE_ROOT}/build/" -DCMAKE_JS_INC="${nodejs_win_arm64_headers_SOURCE_DIR}/include/node" -DCMAKE_JS_SRC="${JS_NODE_ROOT}/node_modules/cmake-js/lib/cpp/win_delay_load_hook.cc" -DNODE_RUNTIME="node" -DNODE_RUNTIMEVERSION="16.2.0" -DNODE_ARCH="arm64" -DCMAKE_JS_LIB="${nodejs_win_arm64_node_lib_SOURCE_DIR}/node.lib" -Dnapi_build_version="3" -DCMAKE_BUILD_TYPE="RelWithDebInfo" -DONNXRUNTIME_BUILD_DIR="${CMAKE_CURRENT_BINARY_DIR}" -DCMAKE_SHARED_LINKER_FLAGS="/DELAYLOAD:NODE.EXE" -B ./build
         COMMAND ${CMAKE_COMMAND} --build ${JS_NODE_ROOT}/build/ --config RelWithDebInfo
         WORKING_DIRECTORY ${JS_NODE_ROOT}
         COMMENT "Using custom script to build OnnxRuntime Node.js binding")
