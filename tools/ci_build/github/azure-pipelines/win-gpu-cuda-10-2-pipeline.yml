@@ -1,6 +1,6 @@
 jobs:
 - job: 'build'
-  pool: 'onnxruntime-gpu-winbuild'
+  pool: 'aiinfra-win-gpu-2022'
   strategy:
     maxParallel: 2
     matrix:

@@ -299,7 +299,7 @@ jobs:
 - job: Jar_Packaging
   workspace:
     clean: all
-  pool: 'Win-CPU-2021'
+  pool: 'aiinfra-win-cpu-2022'
   dependsOn:
   - Linux_C_API_Packaging_CPU_x64
   - MacOS_C_API_Packaging_CPU_x64
@@ -365,7 +365,7 @@ jobs:
 - job: NuGet_Packaging_CPU
   workspace:
     clean: all
-  pool: 'Win-CPU-2021'
+  pool: 'aiinfra-win-cpu-2022'
   variables:
     OrtPackageId: ${{ parameters.OrtNugetPackageId }}
     breakCodesignValidationInjection: ${{ parameters.DoEsrp }}
@@ -566,7 +566,7 @@ jobs:
 - job: Nodejs_Packaging_CPU
   workspace:
     clean: all
-  pool: 'Win-CPU-2021'
+  pool: 'aiinfra-win-cpu-2022'
   variables:
     ${{ if eq(parameters.IsReleaseBuild, true) }}:
       NpmPackagingMode: 'release'
@@ -800,7 +800,7 @@ jobs:
 
 - template: ../nuget/templates/test_win.yml
   parameters:
-    AgentPool : 'Win-CPU-2021'
+    AgentPool : 'aiinfra-win-cpu-2022'
     Skipx86Tests : false
     NugetPackageName : 'Microsoft.ML.OnnxRuntime'
     ArtifactSuffix: 'CPU'
@@ -818,7 +818,7 @@ jobs:
 
 - template: ../nodejs/templates/test_win.yml
   parameters:
-    AgentPool : 'Win-CPU-2021'
+    AgentPool : 'aiinfra-win-cpu-2022'
     JobSuffix : 'Win_CPU_x64'
 
 - template: ../nodejs/templates/test_linux.yml
@@ -836,7 +836,7 @@ jobs:
   variables:
   - name: GDN_CODESIGN_TARGETDIRECTORY
     value: '$(Build.BinariesDirectory)/nuget-artifact/final-package'
-  pool: 'Win-CPU-2021'
+  pool: 'aiinfra-win-cpu-2022'
   condition: and (succeeded(), and (${{ parameters.PublishingNuget }}, eq(variables['Build.SourceBranch'], 'refs/heads/master')))
   dependsOn:
   - NuGet_Test_Win_CPU
@@ -935,7 +935,7 @@ jobs:
 - job: Final_Jar_Testing_Windows
   workspace:
     clean: all
-  pool: 'Win-CPU-2021'
+  pool: 'aiinfra-win-cpu-2022'
   timeoutInMinutes: 60
   variables:
   - name: runCodesignValidationInjection

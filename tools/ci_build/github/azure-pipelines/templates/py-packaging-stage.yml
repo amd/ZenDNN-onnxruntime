@@ -587,7 +587,7 @@ stages:
 
   - ${{ if eq(parameters.enable_windows_cpu, true) }}:
     - job: Windows_py_Wheels
-      pool: 'Win-CPU-2021'
+      pool: 'aiinfra-win-cpu-2022'
       strategy:
         matrix:
           Python37_x64:
@@ -783,7 +783,7 @@ stages:
     - job: Windows_py_GPU_Wheels
       workspace:
         clean: all
-      pool: 'onnxruntime-gpu-winbuild'
+      pool: 'aiinfra-win-gpu-2022'
       timeoutInMinutes:  300
       variables:
         CUDA_VERSION: '11.4'

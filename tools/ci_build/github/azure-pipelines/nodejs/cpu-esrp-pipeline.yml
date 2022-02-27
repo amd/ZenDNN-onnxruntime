@@ -19,7 +19,7 @@ jobs:
   timeoutInMinutes: 160
   workspace:
     clean: all
-  pool: 'Win-CPU-2021'
+  pool: 'aiinfra-win-cpu-2022'
   variables:
     BuildConfig: 'RelWithDebInfo'
     BuildCommand: '--build_dir $(Build.BinariesDirectory) --skip_submodule_sync --build_nodejs --enable_onnx_tests --enable_wcos --use_telemetry --cmake_generator "Visual Studio 17 2022" --enable_lto'

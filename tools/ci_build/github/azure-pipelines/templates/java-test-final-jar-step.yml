@@ -1,5 +1,5 @@
 parameters:
-  WindowsPool: 'Win-CPU-2021'
+  WindowsPool: 'aiinfra-win-cpu-2022'
   LinuxPool: 'Linux-CPU'
   version: ''
   RunMacOs: 'false'

@@ -13,5 +13,5 @@ variables:
 jobs: 
 - template: templates/gpu.yml
   parameters:
-    AgentPool : 'onnxruntime-gpu-winbuild'
+    AgentPool : 'aiinfra-win-gpu-2022'
     DoEsrp: 'true'

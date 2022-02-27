@@ -117,7 +117,7 @@ jobs:
 - job: Jar_Packaging_GPU
   workspace:
     clean: all
-  pool: 'Win-CPU-2021'
+  pool: 'aiinfra-win-cpu-2022'
   dependsOn:
   - Linux_C_API_Packaging_GPU_x64
   - Linux_C_API_Packaging_GPU_TensorRT_x64
@@ -182,7 +182,7 @@ jobs:
 - job: Final_Jar_Testing_Windows_GPU
   workspace:
     clean: all
-  pool: 'onnxruntime-gpu-winbuild'
+  pool: 'aiinfra-win-gpu-2022'
   timeoutInMinutes: 60
   variables:
   - name: runCodesignValidationInjection
@@ -317,7 +317,7 @@ jobs:
 - job: Windows_Packaging_combined_GPU
   workspace:
     clean: all
-  pool: 'Win-CPU-2021'
+  pool: 'aiinfra-win-cpu-2022'
   dependsOn:
   - Windows_Packaging_gpu
   - Windows_Packaging_tensorrt
@@ -380,7 +380,7 @@ jobs:
 - job: NuGet_Packaging_GPU
   workspace:
     clean: all
-  pool: 'Win-CPU-2021'
+  pool: 'aiinfra-win-cpu-2022'
   variables:
     breakCodesignValidationInjection: ${{ parameters.DoEsrp }}
   dependsOn:
