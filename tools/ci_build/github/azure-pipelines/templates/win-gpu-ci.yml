@@ -58,7 +58,7 @@ jobs:
     DocUpdateNeeded: ${{ parameters.DocUpdateNeeded }}    
   workspace:
     clean: all
-  pool: 'Win-GPU-2019'
+  pool: 'onnxruntime-win-gpu-2022'
   timeoutInMinutes:  300  
   steps:
   - task: UsePythonVersion@0
