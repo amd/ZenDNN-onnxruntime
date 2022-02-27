@@ -49,7 +49,7 @@ namespace SchemaInferenceOverrider
                 abiContext->Close();
             }
         });
-
+#ifndef NDEBUG
         if (isLatest)
         {
             // Assert that this is the latest schema version for the operator, since a new version might need
@@ -59,6 +59,7 @@ namespace SchemaInferenceOverrider
                 !onnx::OpSchemaRegistry::Schema(name, maxVersion) ||
                 onnx::OpSchemaRegistry::Schema(name, maxVersion) == onnx::OpSchemaRegistry::Schema(name, version));
         }
+#endif
     }
 
 #pragma push_macro("OVERRIDE_SCHEMA")
