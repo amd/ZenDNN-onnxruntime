@@ -32,9 +32,9 @@ bool TraverseFormalParametersWithTypeProto(const Node& node,
                                            TraverseFn traverse_fn) {
   const ONNX_NAMESPACE::OpSchema& op_schema = *node.Op();
 
-  // was the param name matched in either inputs, outputs or type constraints. 
+  // was the param name matched in either inputs, outputs or type constraints.
   // this validates the name was valid and that the type involved will be returned if available.
-  // if the name is invalid we do not return a type, and any applicable type constraint can not be applied 
+  // if the name is invalid we do not return a type, and any applicable type constraint can not be applied
   // in VerifyKernelDef.
   bool matched = false;
 
@@ -187,7 +187,9 @@ bool KernelRegistry::VerifyKernelDef(const Node& node,
   // so kernel_def Since(6) will become invalid now.
   // After ONNX add "until version" on the schema object, we will update this place
   bool valid_version = kernel_start_version == node_since_version  // the idea case this branch should be kernel_start_version >= node_version && kernel_start_version <= until_version
-                       || (kernel_start_version < node_since_version && kernel_end_version != INT_MAX && kernel_end_version >= node_since_version);
+                       || (kernel_start_version < node_since_version &&
+                           kernel_end_version != INT_MAX &&
+                           kernel_end_version >= node_since_version);
   if (!valid_version) {
     std::ostringstream ostr;
     ostr << "Op with name (" << node.Name() << ")"

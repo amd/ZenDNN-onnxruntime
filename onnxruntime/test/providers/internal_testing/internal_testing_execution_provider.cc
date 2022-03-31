@@ -17,19 +17,23 @@
 
 #include <queue>
 
-namespace onnxruntime {
+// TEST
+#include "core/framework/op_kernel.h"
+#include "core/framework/kernel_registry.h"
+#include "internal_testing_ep_static_kernels.h"  // for BuildKernelCreateInfo declaration
 
+namespace onnxruntime {
+namespace internal_testing_ep {
+
+// unique name used in allocator
 constexpr const char* INTERNAL_TESTING_EP = "InternalTestingEP";
 
 InternalTestingExecutionProvider::InternalTestingExecutionProvider(const std::unordered_set<std::string>& ops,
                                                                    const std::unordered_set<std::string>& stop_ops,
-                                                                   bool debug_output,
                                                                    DataLayout preferred_layout)
     : IExecutionProvider{utils::kInternalTestingExecutionProvider, true},
-      ep_name_{INTERNAL_TESTING_EP},
       ops_{ops},
       stop_ops_{stop_ops},
-      debug_output_{debug_output},
       preferred_layout_{preferred_layout} {
   //
   // TODO: Allocation planner calls GetAllocator for the individual EP. It would be better if it goes through
@@ -71,6 +75,51 @@ InternalTestingExecutionProvider::GetCapability(const onnxruntime::GraphViewer& 
     return {};
   }
 
+  std::vector<std::unique_ptr<ComputeCapability>> static_capabilities;
+
+  if (enable_static_kernels_) {
+    std::unordered_set<const Node*> nodes_with_static_kernels;
+    auto registry = GetKernelRegistry();
+
+    // handle any supported nodes we have a static kernel for
+    for (const Node* node : supported_nodes) {
+      // Graph::Resolve isn't called after layout transform (so that works in the minimal build). Due to that
+      // a node we asked for that just had the layout changed to NHWC will have a nullptr for Op() so we can't
+      // do a kernel registry lookup here.
+      // Alternative would be to call Graph::SetOpSchemaFromRegistryForNode but we can't do that from here as the
+      // Graph is immutable for an EP. That will happen in the next Graph::Resolve, which will happen prior to the
+      // end of graph partitioning if this isn't a minimal build.
+      //
+      // TODO: How will this work in a minimal build? We won't have the schema to do a lookup so have to
+      // a) figure out if we could take the original node; and b) provide the hash for the replacement node somehow.
+      // Maybe simpler if we can assume the EP must be enabled when creating the ORT format model. Maybe not as
+      // we would have to capture the hash for the NHWC kernel but not alter the graph by inserting that and adding
+      // transposes.
+      // We could do things via compiling nodes and calling the kernel via the function pointer in the compiled node,
+      // however that still doesn't solve how we'd match the original node using the kernel registration+schema.
+      // Maybe it's better on balance to require the EP to do manual matching and to compile so there are no hashes
+      // or schemas involved, however that's a huge implementation overhead just to make it work in a minimal build.
+      bool is_our_nhwc_node = false; /*node->Op() == nullptr &&
+                              node->GetExecutionProviderType() == Type() &&
+                              node->Domain() == kMSInternalNHWCDomain;*/
+      if (is_our_nhwc_node ||
+          KernelRegistry::HasImplementationOf(*registry, *node, Type())) {
+        // we have a static kernel. save so we can filter supported_nodes (can't do while iterating) and create
+        // ComputeCapability for single node
+        nodes_with_static_kernels.insert(node);
+
+        std::unique_ptr<IndexedSubGraph> sub_graph = std::make_unique<IndexedSubGraph>();
+        sub_graph->nodes.push_back(node->Index());
+        static_capabilities.push_back(std::make_unique<ComputeCapability>(std::move(sub_graph)));
+      }
+    }
+
+    // we have static kernels so remove from supported_nodes so we don't attempt to also compile
+    for (const Node* node : nodes_with_static_kernels) {
+      supported_nodes.erase(node);
+    }
+  }
+
   // NOTE: GetCapability is called for all subgraphs from the bottom up, for one execution provider at a time.
   //       i.e. each execution provider will see the entire model individually.
   // If your execution provider may selectively handle a control flow node (Scan/Loop/If) if it can process all nodes
@@ -95,8 +144,17 @@ InternalTestingExecutionProvider::GetCapability(const onnxruntime::GraphViewer& 
     return ep_name_ + "_" + std::to_string(model_hash) + "_" + std::to_string(metadef_id);
   };
 
-  return utils::CreateSupportedPartitions(graph_viewer, supported_nodes, stop_ops_,
-                                          generate_metadef_name, ep_name_, onnxruntime::utils::kInternalTestingExecutionProvider, debug_output_);
+  auto compile_capabilities = utils::CreateSupportedPartitions(graph_viewer, supported_nodes, stop_ops_,
+                                                               generate_metadef_name, ep_name_,
+                                                               onnxruntime::utils::kInternalTestingExecutionProvider,
+                                                               debug_output_);
+
+  if (!static_capabilities.empty()) {
+    std::move(std::begin(static_capabilities), std::end(static_capabilities),
+              std::back_inserter(compile_capabilities));
+  }
+
+  return compile_capabilities;
 }
 
 common::Status InternalTestingExecutionProvider::Compile(const std::vector<FusedNodeAndGraph>& fused_nodes,
@@ -115,7 +173,8 @@ common::Status InternalTestingExecutionProvider::Compile(const std::vector<Fused
           return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL,
                                  "Found a layout sensitive op which is still in NCHW format. Node: ",
                                  unfused_node.OpType(), " ", unfused_node.Name(),
-                                 " The preferrd layout for this EP is NHWC. This is a possible bug in layout transformer.");
+                                 " The preferred layout for this EP is NHWC. "
+                                 "This is a possible bug in layout transformer.");
         }
       }
     }
@@ -168,4 +227,51 @@ common::Status InternalTestingExecutionProvider::Compile(const std::vector<Fused
 
   return Status::OK();
 }
+
+template <>
+KernelCreateInfo BuildKernelCreateInfo<void>() {
+  KernelCreateInfo info;
+  return info;
+}
+
+// the 'utils::' breaks the kernel registration macros
+constexpr const char* internal_testing_ep = utils::kInternalTestingExecutionProvider;
+
+// NCHW stubs
+class ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(internal_testing_ep, kOnnxDomain, 1, 10, Conv);
+class ONNX_OPERATOR_KERNEL_CLASS_NAME(internal_testing_ep, kOnnxDomain, 11, Conv);
+
+// NHWC 'real' kernels
+class ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(internal_testing_ep, kMSInternalNHWCDomain, 1, 10, Conv);
+class ONNX_OPERATOR_KERNEL_CLASS_NAME(internal_testing_ep, kMSInternalNHWCDomain, 11, Conv);
+
+std::unique_ptr<KernelRegistry> RegisterKernels() {
+  auto kernel_registry = std::make_unique<onnxruntime::KernelRegistry>();
+
+  static const BuildKernelCreateInfoFn function_table[] = {
+      BuildKernelCreateInfo<void>,  // default entry to avoid the list become empty after ops-reducing
+      // orig NCHW ops with dummy kernel
+      BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(internal_testing_ep, kOnnxDomain, 1, 10, Conv)>,
+      BuildKernelCreateInfo<ONNX_OPERATOR_KERNEL_CLASS_NAME(internal_testing_ep, kOnnxDomain, 11, Conv)>,
+      // 'real' NHWC kernels
+      BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(internal_testing_ep, kMSInternalNHWCDomain, 1, 10, Conv)>,
+      BuildKernelCreateInfo<ONNX_OPERATOR_KERNEL_CLASS_NAME(internal_testing_ep, kMSInternalNHWCDomain, 11, Conv)>,
+  };
+
+  for (auto& function_table_entry : function_table) {
+    KernelCreateInfo info = function_table_entry();
+    if (info.kernel_def != nullptr) {  // filter disabled entries where type is void
+      ORT_THROW_IF_ERROR(kernel_registry->Register(std::move(info)));
+    }
+  }
+
+  return kernel_registry;
+}
+
+std::shared_ptr<KernelRegistry> InternalTestingExecutionProvider::GetKernelRegistry() const {
+  static std::shared_ptr<KernelRegistry> registry = RegisterKernels();
+  return registry;
+}
+
+}  // namespace internal_testing_ep
 }  // namespace onnxruntime

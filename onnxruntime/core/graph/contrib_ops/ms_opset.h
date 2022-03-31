@@ -7,14 +7,14 @@
 
 namespace onnxruntime {
 namespace contrib {
-//NHWC ops
+// NHWC ops
 class ONNX_OPERATOR_SET_SCHEMA_CLASS_NAME(Microsoft, 1, NhwcMaxPool);
 class ONNX_OPERATOR_SET_SCHEMA_CLASS_NAME(Microsoft, 1, QLinearGlobalAveragePool);
 class ONNX_OPERATOR_SET_SCHEMA_CLASS_NAME(Microsoft, 1, QLinearAveragePool);
 class ONNX_OPERATOR_SET_SCHEMA_CLASS_NAME(Microsoft, 1, QLinearConv);
 class ONNX_OPERATOR_SET_SCHEMA_CLASS_NAME(Microsoft, 1, NhwcConv);
 
-//Quantization ops
+// Quantization ops
 class ONNX_OPERATOR_SET_SCHEMA_CLASS_NAME(Microsoft, 1, DequantizeLinear);
 class ONNX_OPERATOR_SET_SCHEMA_CLASS_NAME(Microsoft, 1, DynamicQuantizeLSTM);
 class ONNX_OPERATOR_SET_SCHEMA_CLASS_NAME(Microsoft, 1, DynamicQuantizeMatMul);
@@ -32,7 +32,7 @@ class ONNX_OPERATOR_SET_SCHEMA_CLASS_NAME(Microsoft, 1, QLinearSigmoid);
 class ONNX_OPERATOR_SET_SCHEMA_CLASS_NAME(Microsoft, 1, QuantizeLinear);
 class ONNX_OPERATOR_SET_SCHEMA_CLASS_NAME(Microsoft, 1, ReduceSumInteger);
 
-//Others
+// Others
 class ONNX_OPERATOR_SET_SCHEMA_CLASS_NAME(Microsoft, 1, Attention);
 class ONNX_OPERATOR_SET_SCHEMA_CLASS_NAME(Microsoft, 1, BeamSearch);
 class ONNX_OPERATOR_SET_SCHEMA_CLASS_NAME(Microsoft, 1, BiasDropout);
@@ -142,5 +142,24 @@ class OpSet_Microsoft_ver1 {
     fn(GetOpSchema<ONNX_OPERATOR_SET_SCHEMA_CLASS_NAME(Microsoft, 1, WordConvEmbedding)>());
   }
 };
+
+template <typename F>
+void RegisterNHWCSchema(F&& f, const ::ONNX_NAMESPACE::OpSchema& schema) {
+  f(std::move(::ONNX_NAMESPACE::OpSchema(schema)
+                  .TypeAndShapeInferenceFunction([](InferenceContext&) { /*ignore*/ })
+                  .SetDomain(onnxruntime::kMSInternalNHWCDomain)));
+}
+
+#define REGISTER_NHWC_SCHEMA(X, Y) \
+  { RegisterNHWCSchema(fn, ::ONNX_NAMESPACE::GetOpSchema<::ONNX_NAMESPACE::ONNX_OPERATOR_SET_SCHEMA_CLASS_NAME(Onnx, X, Y)>()); }
+
+class OpSet_Internal_NHWC_ver1 {
+ public:
+  static void ForEachSchema(std::function<void(ONNX_NAMESPACE::OpSchema&&)> fn) {
+    REGISTER_NHWC_SCHEMA(1, Conv);
+    REGISTER_NHWC_SCHEMA(11, Conv);
+  }
+};
+
 }  // namespace contrib
 }  // namespace onnxruntime

@@ -26,7 +26,6 @@
 #include "core/platform/env.h"
 #include "core/util/thread_utils.h"
 
-
 #ifdef ONNXRUNTIME_ENABLE_INSTRUMENT
 #include "core/platform/tracing.h"
 #endif
@@ -233,6 +232,7 @@ Status Environment::Initialize(std::unique_ptr<logging::LoggingManager> logging_
 #ifndef ORT_MINIMAL_BUILD
       RegisterOpSetSchema<contrib::OpSet_Microsoft_ver1>();
       RegisterOpSetSchema<contrib::OpSet_ONNX_Deprecated>();
+      RegisterOpSetSchema<contrib::OpSet_Internal_NHWC_ver1>();
 #endif
       contrib::RegisterContribSchemas();
 #endif
