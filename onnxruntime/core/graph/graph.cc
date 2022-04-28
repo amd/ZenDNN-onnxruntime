@@ -2927,7 +2927,7 @@ Status Graph::InjectExternalInitializedTensors(const InlinedHashMap<std::string,
   }
   return Status::OK();
 }
-#endif // DISABLE_EXTERNAL_INITIALIZERS
+#endif  // DISABLE_EXTERNAL_INITIALIZERS
 
 #endif  // !defined(ORT_MINIMAL_BUILD)
 
@@ -3432,8 +3432,14 @@ void Graph::ToGraphProtoInternal(ONNX_NAMESPACE::GraphProto& graph_proto) const 
     *(graph_proto.mutable_output()->Add()) = output_arg->ToProto();
   }
 
-  for (const auto* value_info : value_info_) {
-    *(graph_proto.mutable_value_info()->Add()) = value_info->ToProto();
+  // TEMPORARY HACK - output all type/shape info instead of just the original set.
+  // for (const auto* value_info : value_info_) {
+  //  *(graph_proto.mutable_value_info()->Add()) = value_info->ToProto();
+  // }
+  for (const auto& name_to_node_arg : node_args_) {
+    if (name_to_node_arg.second) {
+      *(graph_proto.mutable_value_info()->Add()) = name_to_node_arg.second->ToProto();
+    }
   }
 
   // add the NodeArg info for outer scope NodeArgs so we capture the type information

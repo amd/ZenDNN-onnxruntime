@@ -143,6 +143,7 @@ static Status GetCapabilityForEP(Graph& graph, KernelRegistryManager& kernel_reg
     // Therefore, we re-run GetCapability so that these new nodes can be processed by this EP.
     if (modified) {
       const NodeIndex end_node = graph.MaxNodeIndex();
+
       capabilities.clear();
       GraphViewer graph_viewer(graph);
       capabilities = current_ep.GetCapability(graph_viewer,

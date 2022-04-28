@@ -58,7 +58,7 @@ DataLayout InternalTestingExecutionProvider::GetPreferredLayout() const {
 std::vector<std::unique_ptr<ComputeCapability>>
 InternalTestingExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph_viewer,
                                                 const std::vector<const KernelRegistry*>& /*registries*/) const {
-  // find all supported nodes
+  // find nodes that have ops in our supported list
   std::unordered_set<const Node*> supported_nodes;
 
   const auto& topo_nodes = graph_viewer.GetNodesInTopologicalOrder();
@@ -83,29 +83,61 @@ InternalTestingExecutionProvider::GetCapability(const onnxruntime::GraphViewer& 
 
     // handle any supported nodes we have a static kernel for
     for (const Node* node : supported_nodes) {
-      // Graph::Resolve isn't called after layout transform (so that works in the minimal build). Due to that
-      // a node we asked for that just had the layout changed to NHWC will have a nullptr for Op() so we can't
-      // do a kernel registry lookup here.
-      // Alternative would be to call Graph::SetOpSchemaFromRegistryForNode but we can't do that from here as the
-      // Graph is immutable for an EP. That will happen in the next Graph::Resolve, which will happen prior to the
-      // end of graph partitioning if this isn't a minimal build.
-      //
-      // TODO: How will this work in a minimal build? We won't have the schema to do a lookup so have to
-      // a) figure out if we could take the original node; and b) provide the hash for the replacement node somehow.
-      // Maybe simpler if we can assume the EP must be enabled when creating the ORT format model. Maybe not as
-      // we would have to capture the hash for the NHWC kernel but not alter the graph by inserting that and adding
-      // transposes.
-      // We could do things via compiling nodes and calling the kernel via the function pointer in the compiled node,
-      // however that still doesn't solve how we'd match the original node using the kernel registration+schema.
-      // Maybe it's better on balance to require the EP to do manual matching and to compile so there are no hashes
-      // or schemas involved, however that's a huge implementation overhead just to make it work in a minimal build.
-      bool is_our_nhwc_node = false; /*node->Op() == nullptr &&
-                              node->GetExecutionProviderType() == Type() &&
-                              node->Domain() == kMSInternalNHWCDomain;*/
-      if (is_our_nhwc_node ||
-          KernelRegistry::HasImplementationOf(*registry, *node, Type())) {
-        // we have a static kernel. save so we can filter supported_nodes (can't do while iterating) and create
-        // ComputeCapability for single node
+      bool request_node = false;
+      if (node->GetExecutionProviderType() == "") {
+        // unassigned node. check if we have a kernel registration for it.
+        if (KernelRegistry::HasImplementationOf(*registry, *node, Type())) {
+          // we have a kernel registration for the operator, and any type constraints that have been satisfied.
+          // if there are additional constraints such as checking values of attributes etc. those should
+          // be checked here.
+          request_node = true;
+        }
+      } else if (node->GetExecutionProviderType() == Type()) {
+        if (node->Op() == nullptr) {
+          // node is assigned to us but the operator has no schema.
+          //
+          // it must have come from the NHWC transform if it is a layout sensitive op because...
+          //
+          // Graph::Resolve is not called after layout transform so that layout transform works in the minimal build.
+          //     Side note: Layout transform maintains edges and update shapes, so the graph should still be valid
+          //                and the node should have valid type/shape info.
+          //
+          // Due to that a node we asked for that just had the layout changed to NHWC will have a nullptr for Op().
+          //
+          // We can't do a kernel registry lookup here as that requires the schema returned by Op().
+          //     Side note: Whilst we _could_ update GraphPartitioner's GetCapabilityForEP implementation to call
+          //                Graph::SetOpSchemaFromRegistryForNode to set Op() if a schema for the NHWC op existed,
+          //                we can only do that in a full build, so it's not a general purpose solution.
+          //
+          // However, we shouldn't need to do the kernel registry lookup:
+          //   The sequence of calls is
+          //      GetCapability ->
+          //      layout transform for layout sensitive ops in that set of nodes ->
+          //      GetCapability
+          //
+          //   Any node that does NOT have an Op() that is assigned to us can only be seen in the second call to
+          //   GetCapability, and should only be a layout sensitive op.
+          //
+          // So provided we only returned layout sensitive nodes in the first call to GetCapability for which we have
+          // an NHWC kernel, we can infer that we support the replacement node.
+          //
+          // IMPORTANT NOTE: We will have a hard requirement on the new approach to enable kernel matching at runtime
+          //                 in a minimal build.
+          ORT_ENFORCE(node->Domain() == kMSInternalNHWCDomain,
+                      "Node is assigned to us but is not the NHWC version of a node we originally asked for.");
+        } else {
+          // node we selected in the first call to GetCapability. no need to check if we have a kernel again.
+        }
+
+        request_node = true;
+      } else {
+        // node belongs to another EP
+        continue;
+      }
+
+      if (request_node) {
+        // create a ComputeCapability for the individual node. The kernel lookup will happen during SessionState
+        // finalization.
         nodes_with_static_kernels.insert(node);
 
         std::unique_ptr<IndexedSubGraph> sub_graph = std::make_unique<IndexedSubGraph>();

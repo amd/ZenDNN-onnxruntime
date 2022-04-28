@@ -186,10 +186,55 @@ TEST(InternalTestingEP, TestMixOfStaticAndCompiledKernels) {
   std::vector<OrtValue> fetches;
 
   auto status = session.Run(feeds, output_names, &fetches);
-  // Non-zero status code returned while running Conv node. Name:'Conv' Status Message: Internal testing EP kernels are not expected to be executed.
+  // Error message should come from the Conv implementation with the statically registered kernel
   ASSERT_THAT(status.ErrorMessage(),
               ::testing::HasSubstr("Non-zero status code returned while running Conv node. Name:'Conv' "
                                    "Status Message: Internal testing EP kernels are not expected to be executed."));
+}
+
+TEST(InternalTestingEP, TestNhwcConversionOfStaticKernels) {
+  const ORTCHAR_T* ort_model_path = ORT_MODEL_FOLDER "TEMP/example_model.onnx";
+
+  SessionOptions so;
+  so.optimized_model_filepath = ORT_MODEL_FOLDER "TEMP/example_model.test_output.onnx";
+  InferenceSessionWrapper session(so, GetEnvironment());
+
+  const std::unordered_set<std::string> supported_ops{"Conv" /*, "Clip"*/};
+  auto ep = std::make_unique<InternalTestingExecutionProvider>(supported_ops,
+                                                               std::unordered_set<std::string>{},
+                                                               DataLayout::NHWC);
+  ep->EnableStaticKernels();
+  ASSERT_STATUS_OK(session.RegisterExecutionProvider(std::move(ep)));
+
+  ASSERT_STATUS_OK(session.Load(ort_model_path));
+  ASSERT_STATUS_OK(session.Initialize());
+
+  const auto& graph = session.GetGraph();
+
+  // all Conv nodes should have been converted to NHWC versions and
+  for (const auto& node : graph.Nodes()) {
+    if (node.OpType() == "Conv") {
+      ASSERT_EQ(node.Domain(), kMSInternalNHWCDomain);
+    }
+  }
+
+  TensorShape input_shape_x{1, 128, 128, 3};
+  std::vector<float> input_x(input_shape_x.Size(), 1.f);
+  OrtValue ml_value_x;
+  CreateMLValue<float>(input_shape_x.GetDims(), input_x.data(), OrtMemoryInfo(), &ml_value_x);
+
+  NameMLValMap feeds;
+  feeds.insert(std::make_pair("model_input", ml_value_x));
+
+  // prepare outputs
+  std::vector<std::string> output_names;
+  output_names.push_back("sequential");
+  std::vector<OrtValue> fetches;
+
+  auto status = session.Run(feeds, output_names, &fetches);
+  ASSERT_THAT(status.ErrorMessage(),
+              ::testing::HasSubstr("Non-zero status code returned while running Conv node. Name:'Conv' "
+                                   "Status Message: TODO: add NHWC implementation here."));
 }
 
 #endif  // !defined(ORT_MINIMAL_BUILD)
