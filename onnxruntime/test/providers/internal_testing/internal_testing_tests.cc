@@ -17,6 +17,10 @@
 #include "gtest/gtest.h"
 #include "gmock/gmock.h"
 
+#ifdef USE_XNNPACK
+#include "core/providers/xnnpack/xnnpack_execution_provider.h"
+#endif
+
 using namespace ONNX_NAMESPACE;
 using namespace onnxruntime::logging;
 
@@ -236,6 +240,50 @@ TEST(InternalTestingEP, TestNhwcConversionOfStaticKernels) {
               ::testing::HasSubstr("Non-zero status code returned while running Conv node. Name:'Conv' "
                                    "Status Message: TODO: add NHWC implementation here."));
 }
+
+// TEMPORARY hack to run via the Xnnpack EP stub
+#ifdef USE_XNNPACK
+TEST(XnnpackEP, TestNhwcConversionOfStaticKernels) {
+  const ORTCHAR_T* ort_model_path = ORT_MODEL_FOLDER "TEMP/example_model.onnx";
+
+  SessionOptions so;
+  so.optimized_model_filepath = ORT_MODEL_FOLDER "TEMP/example_model.test_output.onnx";
+  InferenceSessionWrapper session(so, GetEnvironment());
+
+  auto ep = std::make_unique<XnnpackExecutionProvider>(XnnpackExecutionProviderInfo{});
+  ASSERT_STATUS_OK(session.RegisterExecutionProvider(std::move(ep)));
+
+  ASSERT_STATUS_OK(session.Load(ort_model_path));
+  ASSERT_STATUS_OK(session.Initialize());
+
+  const auto& graph = session.GetGraph();
+
+  // all Conv nodes should have been converted to NHWC versions and
+  for (const auto& node : graph.Nodes()) {
+    if (node.OpType() == "Conv") {
+      ASSERT_EQ(node.Domain(), kMSInternalNHWCDomain);
+    }
+  }
+
+  TensorShape input_shape_x{1, 128, 128, 3};
+  std::vector<float> input_x(input_shape_x.Size(), 1.f);
+  OrtValue ml_value_x;
+  CreateMLValue<float>(input_shape_x.GetDims(), input_x.data(), OrtMemoryInfo(), &ml_value_x);
+
+  NameMLValMap feeds;
+  feeds.insert(std::make_pair("model_input", ml_value_x));
+
+  // prepare outputs
+  std::vector<std::string> output_names;
+  output_names.push_back("sequential");
+  std::vector<OrtValue> fetches;
+
+  auto status = session.Run(feeds, output_names, &fetches);
+  ASSERT_THAT(status.ErrorMessage(),
+              ::testing::HasSubstr("Non-zero status code returned while running Conv node. Name:'Conv' "
+                                   "Status Message: TODO: add NHWC implementation here."));
+}
+#endif
 
 #endif  // !defined(ORT_MINIMAL_BUILD)
 #endif  // !defined(DISABLE_SPARSE_TENSORS)
