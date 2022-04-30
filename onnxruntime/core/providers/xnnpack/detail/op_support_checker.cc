@@ -58,8 +58,20 @@ bool ConvChecker(const Node& node, bool matched_kernel, const GraphViewer& graph
       break;
     }
 
-    // weight must be constant
-    if (!graph.IsConstantInitializer(weight_arg.Name(), true)) {
+    // weight must be constant and also rank 4
+    const auto* weight = graph.GetConstantInitializer(weight_arg.Name(), true);
+    if (weight == nullptr || weight->dims_size() != 4) {
+      break;
+    }
+
+    ProtoHelperNodeContext nc(node);
+    OpNodeProtoHelper info(&nc);
+
+    // based on the PR the 'group' value needs to be 1 or C.
+    // the second dim of weight is C/group, so if that == 1, group == C
+    int64_t group = 0;
+    info.GetAttrOrDefault<int64_t>("group", &group, 1);
+    if (group != 1 && weight->dims(1) != 1) {
       break;
     }
 
@@ -67,8 +79,6 @@ bool ConvChecker(const Node& node, bool matched_kernel, const GraphViewer& graph
     if (graph_utils::GetNodeAttribute(node, "pads") == nullptr) {
       AutoPadType auto_pad = AutoPadType::NOTSET;
 
-      ProtoHelperNodeContext nc(node);
-      OpNodeProtoHelper info(&nc);
       std::string auto_pad_str;
       if (info.GetAttr<std::string>("auto_pad", &auto_pad_str).IsOK()) {
         // auto_pad was set

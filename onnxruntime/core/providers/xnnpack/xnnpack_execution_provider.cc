@@ -9,6 +9,8 @@
 #include "core/framework/kernel_registry.h"
 #include "core/framework/session_options.h"
 
+#include <xnnpack.h>
+
 namespace onnxruntime {
 
 namespace xnnpack {
@@ -56,7 +58,13 @@ using namespace xnnpack;
 XnnpackExecutionProvider::XnnpackExecutionProvider(const XnnpackExecutionProviderInfo& info)
     : IExecutionProvider{kXnnpackExecutionProvider, true},
       session_options_{info.session_options} {
-  //
+  // TODO: Could/should we provide our default CPU allocator to this call in an adapter?
+  // If so, probably need to move it out of the ctor
+  xnn_status st = xnn_initialize(nullptr);
+  if (st != xnn_status_success) {
+    ORT_THROW("XNNPACK initialization failed with status ", st);
+  }
+
   // TODO: Allocation planner calls GetAllocator for the individual EP. It would be better if it goes through
   // the session state to get the allocator so it's per-device (or for the allocation planner to try the EP first
   // and fall back to using session state next by passing in a functor it can use to call SessionState::GetAllocator).
@@ -168,6 +176,8 @@ std::shared_ptr<KernelRegistry> XnnpackExecutionProvider::GetKernelRegistry() co
   return registry;
 }
 
-XnnpackExecutionProvider::~XnnpackExecutionProvider() {}
+XnnpackExecutionProvider::~XnnpackExecutionProvider() {
+  xnn_deinitialize();
+}
 
 }  // namespace onnxruntime
