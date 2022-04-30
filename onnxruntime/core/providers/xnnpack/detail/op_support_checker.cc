@@ -92,9 +92,9 @@ bool ConvChecker(const Node& node, bool matched_kernel, const GraphViewer& graph
   return supported;
 }
 
-bool ClipChecker(const Node& node, bool matched_kernel,
-                 const GraphViewer& graph,
-                 const std::unordered_set<const Node*>& supported_nodes) {
+bool ClipReluChecker(const Node& node, bool matched_kernel,
+                     const GraphViewer& graph,
+                     const std::unordered_set<const Node*>& supported_nodes) {
   assert(!matched_kernel);  // we don't have a Clip kernel - temporary sanity check
 
   bool supported = false;
@@ -115,19 +115,22 @@ bool ClipChecker(const Node& node, bool matched_kernel,
       break;
     }
 
-    const auto& input_args = node.InputDefs();
-    const auto num_inputs = input_args.size();
-    if (num_inputs >= 2) {
-      // check 'min' is constant
-      if (!graph.IsConstantInitializer(input_args[1]->Name(), true)) {
-        break;
+    // if Clip check the min/max are constant.
+    if (node.OpType() == "Clip") {
+      const auto& input_args = node.InputDefs();
+      const auto num_inputs = input_args.size();
+      if (num_inputs >= 2) {
+        // check 'min' is constant
+        if (!graph.IsConstantInitializer(input_args[1]->Name(), true)) {
+          break;
+        }
       }
-    }
 
-    if (num_inputs == 3) {
-      // check 'max' is constant
-      if (!graph.IsConstantInitializer(input_args[2]->Name(), true)) {
-        break;
+      if (num_inputs == 3) {
+        // check 'max' is constant
+        if (!graph.IsConstantInitializer(input_args[2]->Name(), true)) {
+          break;
+        }
       }
     }
 
@@ -142,7 +145,8 @@ bool ClipChecker(const Node& node, bool matched_kernel,
 bool NodeSupportChecker::IsNodeSupported(const Node& node, bool matched_kernel) {
   static std::unordered_map<std::string, CheckerFn> checkers{
       {"Conv", ConvChecker},
-      {"Clip", ClipChecker},  // testing fusion of Conv+Activation
+      {"Clip", ClipReluChecker},  // testing fusion of Conv+Activation with min/max
+      {"Relu", ClipReluChecker},  // testing fusion of Conv+Activation
   };
 
   const auto entry = checkers.find(node.OpType());
