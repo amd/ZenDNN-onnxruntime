@@ -3,9 +3,11 @@
 
 #include "xnnpack_execution_provider.h"
 #include "detail/utils.h"
+#include "detail/op_support_checker.h"
 
 #include "core/framework/compute_capability.h"
 #include "core/framework/kernel_registry.h"
+#include "core/framework/session_options.h"
 
 namespace onnxruntime {
 
@@ -49,8 +51,11 @@ std::unique_ptr<KernelRegistry> RegisterKernels() {
 
 }  // namespace xnnpack
 
-XnnpackExecutionProvider::XnnpackExecutionProvider(const XnnpackExecutionProviderInfo& /*info*/)
-    : IExecutionProvider{kXnnpackExecutionProvider, true} {
+using namespace xnnpack;
+
+XnnpackExecutionProvider::XnnpackExecutionProvider(const XnnpackExecutionProviderInfo& info)
+    : IExecutionProvider{kXnnpackExecutionProvider, true},
+      session_options_{info.session_options} {
   //
   // TODO: Allocation planner calls GetAllocator for the individual EP. It would be better if it goes through
   // the session state to get the allocator so it's per-device (or for the allocation planner to try the EP first
@@ -73,6 +78,14 @@ std::vector<std::unique_ptr<ComputeCapability>> XnnpackExecutionProvider::GetCap
   std::vector<std::unique_ptr<ComputeCapability>> capabilities;
 
   std::shared_ptr<KernelRegistry> registry = GetKernelRegistry();
+  std::unordered_set<const Node*> supported_nodes;
+  NodeSupportChecker checker{graph, supported_nodes};
+
+  // L2 optimizations include fusing Conv+Activation, which we may do with Conv+Clip.
+  // check that the session options are available, and if so whether L2 optimizations are enabled.
+  // If they're not available we can't assume the fusion will occur, so we can't take the activation node.
+  bool l2_optimizations_enabled = session_options_ &&
+                                  session_options_->graph_optimization_level >= TransformerLevel::Level2;
 
   // handle any nodes we have a static kernel for.
   const auto& nodes = graph.Nodes();
@@ -87,7 +100,12 @@ std::vector<std::unique_ptr<ComputeCapability>> XnnpackExecutionProvider::GetCap
         // we have a kernel registration for the operator, and any type constraints that have been satisfied.
         // if there are additional constraints such as checking values of attributes etc. those should
         // be checked here.
-        request_node = true;
+        request_node = checker.IsNodeSupported(node, /*matched_kernel*/ true);
+      } else {
+        // see if it's an activation we can fuse with a node we support
+        if (l2_optimizations_enabled) {
+          request_node = checker.IsNodeSupported(node, /*matched_kernel*/ false);
+        }
       }
     } else if (node.GetExecutionProviderType() == Type()) {
       if (node.Op() == nullptr) {
@@ -96,10 +114,9 @@ std::vector<std::unique_ptr<ComputeCapability>> XnnpackExecutionProvider::GetCap
         // it must have come from the NHWC transform if it is a layout sensitive op because...
         //
         // Graph::Resolve is not called after layout transform so that layout transform works in the minimal build.
+        // Due to that a node we asked for that just had the layout changed to NHWC will have a nullptr for Op().
         //     Side note: Layout transform maintains edges and update shapes, so the graph should still be valid
         //                and the node should have valid type/shape info.
-        //
-        // Due to that a node we asked for that just had the layout changed to NHWC will have a nullptr for Op().
         //
         // We can't do a kernel registry lookup here as that requires the schema returned by Op().
         //     Side note: Whilst we _could_ update GraphPartitioner's GetCapabilityForEP implementation to call

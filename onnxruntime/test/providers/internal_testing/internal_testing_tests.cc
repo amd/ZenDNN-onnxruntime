@@ -250,7 +250,7 @@ TEST(XnnpackEP, TestNhwcConversionOfStaticKernels) {
   so.optimized_model_filepath = ORT_MODEL_FOLDER "TEMP/example_model.test_output.onnx";
   InferenceSessionWrapper session(so, GetEnvironment());
 
-  auto ep = std::make_unique<XnnpackExecutionProvider>(XnnpackExecutionProviderInfo{});
+  auto ep = std::make_unique<XnnpackExecutionProvider>(XnnpackExecutionProviderInfo{&so});
   ASSERT_STATUS_OK(session.RegisterExecutionProvider(std::move(ep)));
 
   ASSERT_STATUS_OK(session.Load(ort_model_path));

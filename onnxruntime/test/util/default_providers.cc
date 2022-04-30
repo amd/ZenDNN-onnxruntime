@@ -193,7 +193,9 @@ std::unique_ptr<IExecutionProvider> DefaultCoreMLExecutionProvider() {
 
 std::unique_ptr<IExecutionProvider> DefaultXnnpackExecutionProvider() {
 #ifdef USE_XNNPACK
-  return CreateExecutionProviderFactory_Xnnpack()->CreateProvider();
+  // we don't have a SessionOptions instance we can provide, so testing via this EP instance will not select activation
+  // nodes that could be fused, as without SessionOptions there's no way to check if L2 optimizations are enabled.
+  return CreateExecutionProviderFactory_Xnnpack(/*SessionOptions*/ nullptr)->CreateProvider();
 #else
   return nullptr;
 #endif

@@ -10,15 +10,17 @@
 #include "core/providers/providers.h"
 
 namespace onnxruntime {
+struct SessionOptions;
 
 // Information needed to construct Xnnpack execution providers. Stub for future use.
 struct XnnpackExecutionProviderInfo {
+  const SessionOptions* session_options{nullptr};
   bool create_arena{true};
 
-  explicit XnnpackExecutionProviderInfo(bool use_arena)
-      : create_arena(use_arena) {}
+  explicit XnnpackExecutionProviderInfo(const SessionOptions* so = nullptr, bool use_arena = true)
+      : session_options{so}, create_arena{use_arena} {}
 
-  XnnpackExecutionProviderInfo() = default;
+  XnnpackExecutionProviderInfo() = delete;
 };
 
 class XnnpackExecutionProvider : public IExecutionProvider {
@@ -33,6 +35,9 @@ class XnnpackExecutionProvider : public IExecutionProvider {
   std::shared_ptr<KernelRegistry> GetKernelRegistry() const override;
 
   DataLayout GetPreferredLayout() const override { return DataLayout::NHWC; }
+
+ private:
+  const SessionOptions* session_options_{nullptr};
 };
 
 }  // namespace onnxruntime

@@ -11,7 +11,7 @@ namespace xnnpack {
 
 class Conv : public OpKernel {
  public:
-  Conv(const OpKernelInfo& info) : OpKernel(info) {}
+  Conv(const OpKernelInfo& info);
 
   Status Compute(OpKernelContext* /*context*/) const override;
 
@@ -22,6 +22,7 @@ class Conv : public OpKernel {
 
  private:
   std::unique_ptr<Tensor> packed_w_;
+  std::optional<std::pair<float, float>> clip_min_max_;
 };
 
 }  // namespace xnnpack

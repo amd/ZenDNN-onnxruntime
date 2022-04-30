@@ -9,6 +9,20 @@
 namespace onnxruntime {
 namespace xnnpack {
 
+Conv::Conv(const OpKernelInfo& info) : OpKernel(info) {
+  std::string activation;
+  if (info.GetAttr<std::string>("activation", &activation).IsOK()) {
+    std::vector<float> activation_params;
+
+    if (info.GetAttrs<float>("activation_params", activation_params).IsOK()) {
+      if (activation_params.size() == 2) {
+        clip_min_max_ = {activation_params[0],
+                         activation_params[1]};
+      }
+    }
+  }
+}
+
 // use PrePack to handle the weight layout change as that's not a simple NCHW -> NHWC transpose
 Status Conv::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr alloc,
                      /*out*/ bool& is_packed,
