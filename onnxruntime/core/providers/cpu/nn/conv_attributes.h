@@ -155,13 +155,14 @@ struct ConvAttributes {
 
     for (size_t dim = 0; dim < rank; ++dim) {
       int64_t output_dim_size = 0;
+      // ComputePadAndOutputShape call may update pads, but that's not relevant here so pass in a mutable copy
+      int64_t pad_head = pads_p[dim], pad_tail = pads_p[rank + dim];
       ORT_RETURN_IF_ERROR(ComputePadAndOutputShape(input_shape[dim],
                                                    strides_p[dim],
                                                    kernel_shape[dim],
                                                    dilations_p[dim],
                                                    auto_pad,
-                                                   pads_p.at(dim),
-                                                   pads_p.at(input_shape.NumDimensions() + dim),
+                                                   pad_head, pad_tail,
                                                    output_dim_size,
                                                    force_symmetric_auto_padding));
       if (output_dim_size <= 0) {

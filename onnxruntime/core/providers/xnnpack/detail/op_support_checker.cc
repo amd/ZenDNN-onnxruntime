@@ -58,10 +58,27 @@ bool ConvChecker(const Node& node, bool matched_kernel, const GraphViewer& graph
       break;
     }
 
+    // for simplicity require C, H, W to be known. this allows creation of the xnnpack kernel in the Conv ctor.
+    // otherwise we would have to delay it to the first call to Compute.
+    // C/H/W should be known upfront anyway so this isn't expected to fail
+    if (!x_shape->dim(1).has_dim_value() ||
+        !x_shape->dim(2).has_dim_value() ||
+        !x_shape->dim(3).has_dim_value()) {
+      break;
+    }
+
     // weight must be constant and also rank 4
     const auto* weight = graph.GetConstantInitializer(weight_arg.Name(), true);
     if (weight == nullptr || weight->dims_size() != 4) {
       break;
+    }
+
+    // if there's a bias input it must be constant
+    if (input_defs.size() == 3) {
+      const auto& bias_arg = *input_defs[2];
+      if (bias_arg.Exists() && !graph.IsConstantInitializer(bias_arg.Name(), true)) {
+        break;
+      }
     }
 
     ProtoHelperNodeContext nc(node);
