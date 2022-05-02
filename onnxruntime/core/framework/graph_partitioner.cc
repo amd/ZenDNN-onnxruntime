@@ -407,8 +407,37 @@ static Status PartitionOnnxFormatModelImpl(Graph& graph, bool export_dll, FuncMa
       for (size_t j = 0, end = nodes_to_compile.size(); j < end; j++) {
         auto* node = nodes_to_compile[j];
         const auto& cur_capability = *capabilities_to_compile[j];
-        viewers.push_back(std::make_unique<GraphViewer>(graph, *cur_capability.sub_graph));
-        nodes_and_viewers.push_back(IExecutionProvider::FusedNodeAndGraph{*node, *viewers.back()});
+        if (cur_capability.sub_graph->HasStaticKernel()) {
+          // BeginFuseSubGraph does this
+          // create a new node with info from ComputeCapability
+          // const auto& def = *cur_capability.sub_graph->GetMetaDef();
+          // std::vector<NodeArg*> inputs;
+          // std::vector<NodeArg*> outputs;
+          // inputs.reserve(def.inputs.size());
+          // outputs.reserve(def.outputs.size());
+
+          // std::for_each(def.inputs.cbegin(), def.inputs.cend(),
+          //               [&graph, &inputs](const std::string& name) { inputs.push_back(graph.GetNodeArg(name)); });
+          // std::for_each(def.outputs.cbegin(), def.outputs.cend(),
+          //               [&graph, &outputs](const std::string& name) { outputs.push_back(graph.GetNodeArg(name)); });
+
+          // auto& node = graph.AddNode(graph.GenerateNodeName(def.name), def.name, "description",
+          //               inputs, outputs, &def.attributes, def.domain);
+          graph.FinalizeFuseSubGraph(*cur_capability.sub_graph, *node);
+
+          // sanity check
+          if (!KernelRegistryManager::HasImplementationOf(kernel_registry_mgr, *node, type)) {
+            const auto& def = *cur_capability.sub_graph->GetMetaDef();
+            return ORT_MAKE_STATUS(
+                ONNXRUNTIME, FAIL, type,
+                " requested fusion of node with static kernel but no matching kernel was found. OpType:",
+                def.name, " Domain:", def.domain);
+          }
+
+        } else {
+          viewers.push_back(std::make_unique<GraphViewer>(graph, *cur_capability.sub_graph));
+          nodes_and_viewers.push_back(IExecutionProvider::FusedNodeAndGraph{*node, *viewers.back()});
+        }
       }
 
       ORT_RETURN_IF_ERROR(current_ep.Compile(nodes_and_viewers, node_compute_funcs));
@@ -431,10 +460,11 @@ static Status PartitionOnnxFormatModelImpl(Graph& graph, bool export_dll, FuncMa
         // used by SessionState
         KernelDefBuilder builder;
         BuildFusedKernelDef(builder, metadef, type);
-        ORT_RETURN_IF_ERROR(fused_kernel_registry.Register(builder,
-                                                           [](FuncManager& func_mgr, const OpKernelInfo& info, std::unique_ptr<OpKernel>& out) -> Status {
-                                                             return FunctionKernel::Create(func_mgr, info, out);
-                                                           }));
+        ORT_RETURN_IF_ERROR(fused_kernel_registry.Register(
+            builder,
+            [](FuncManager& func_mgr, const OpKernelInfo& info, std::unique_ptr<OpKernel>& out) -> Status {
+              return FunctionKernel::Create(func_mgr, info, out);
+            }));
 
         // now that we're done compiling we can remove the original nodes from the Graph and wire in the new one
         graph.FinalizeFuseSubGraph(indexed_sub_graph, *node);

@@ -3,9 +3,11 @@
 
 #include "conv.h"
 #include "core/graph/constants.h"
+#include "core/framework/transpose_helper.h"
 #include "core/providers/utils.h"
 #include "core/providers/xnnpack/detail/utils.h"
 #include "core/framework/tensorprotoutils.h"
+
 namespace onnxruntime {
 namespace xnnpack {
 
@@ -203,51 +205,41 @@ Status Conv::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr alloc,
   // only layout of weight input is adjusted via PrePack
   if (input_idx == 1) {
     auto orig_shape = tensor.Shape();
-    std::cout << "Got PrePack with W shape of " << orig_shape << "\n";
-
-    std::vector<int64_t> perm;
-    perm.reserve(4);
 
     // This is transpose of weights in PR
     //  std::vector<int64_t> weight_perm =
     //        is_depthwise ? std::vector<int64_t>{1, 2, 3, 0}  // {C/group, kH, kW, M}. group == C so -> {1, kH, kW, M}
     //                     : std::vector<int64_t>{0, 2, 3, 1}; // [M, kH, kW, C/group}. group == 1 so -> {M, kH, kW, C}
+    std::vector<int64_t> new_dims;
+    std::vector<size_t> perm;
+    size_t from, to;
 
-    // copied from PR
+    auto rank = orig_shape.NumDimensions();
+    new_dims.reserve(rank);
+
     if (IsDepthwise()) {
       perm = {1, 2, 3, 0};
+      from = 0;
+      to = 3;
+      new_dims.push_back(orig_shape[1]);
+      new_dims.push_back(orig_shape[2]);
+      new_dims.push_back(orig_shape[3]);
+      new_dims.push_back(orig_shape[0]);
     } else {
       perm = {0, 2, 3, 1};
+      from = 1;
+      to = 3;
+      new_dims.push_back(orig_shape[0]);
+      new_dims.push_back(orig_shape[2]);
+      new_dims.push_back(orig_shape[3]);
+      new_dims.push_back(orig_shape[1]);
     }
 
-    // TODO: transpose weight using perm and the common transpose helper
+    TensorShape new_shape(new_dims);
+    std::cout << "PrePack with W shape of " << orig_shape << " transposed to " << new_shape << "\n";
+    packed_w_ = Tensor::Create(tensor.DataType(), new_shape, alloc);
 
-    // NOTE: For this demo create a Tensor for the packed weight so there's a shape attached.
-    //       Could alternatively create a raw buffer with IAllocator::MakeUniquePtr<void> if the overhead of a Tensor
-    //       is not needed.
-
-    // arbitrary example moving first dim to the end - which coincidentally is the depthwise transpose required
-    // in the real implementation the transpose of the data would also be done.
-    std::vector<int64_t> new_shape;
-    auto rank = orig_shape.NumDimensions();
-    new_shape.reserve(rank);
-
-    if (IsDepthwise()) {
-      new_shape.push_back(orig_shape[1]);
-      new_shape.push_back(orig_shape[2]);
-      new_shape.push_back(orig_shape[3]);
-      new_shape.push_back(orig_shape[0]);
-    } else {
-      new_shape.push_back(orig_shape[0]);
-      new_shape.push_back(orig_shape[2]);
-      new_shape.push_back(orig_shape[3]);
-      new_shape.push_back(orig_shape[1]);
-    }
-
-    packed_w_ = Tensor::Create(tensor.DataType(), TensorShape(new_shape), alloc);
-
-    // set to arbitrary value for now
-    memset(packed_w_->MutableDataRaw(), 7, packed_w_->SizeInBytes());
+    SingleAxisTranspose(perm, tensor, *packed_w_, from, to);
 
     is_packed = true;
   }
@@ -272,15 +264,15 @@ Status Conv::Compute(OpKernelContext* context) const {
   const int64_t N = X_shape[0];  // input is NHWC
   const int64_t H = X_shape[1];
   const int64_t W = X_shape[2];
-  // const int64_t C = X_shape[3];
-  const int64_t M = M_;
 
   // We don't need to call ValidateInputShape as we checked validity in ConvChecker.
   // We also can't use it as-is as the weight tensor was pre-packed and the layout was changed there.
   // ORT_RETURN_IF_ERROR(conv_attrs_.ValidateInputShape(&X, &W));
 
-  TensorShapeVector Y_dims({N, M});
-  TensorShape input_shape = X.Shape().Slice(2);
+  // CPU Conv starts with TensorShapeVector Y_dims({N, M}); and passes in X->Shape().Slice(2);
+  // We know this is 2D in NHWC format so we need to start with 'N', pass in the H, W, and append M last
+  TensorShapeVector Y_dims({N});
+  TensorShape input_shape = {H, W};
 
   // TODO: Is the implementation/result of this any different to what XnnPackConvShapeInferKernelImpl or
   // XnnPackDepthwiseConvolution2dShapeInferImpl would produce?
@@ -288,6 +280,7 @@ Status Conv::Compute(OpKernelContext* context) const {
                                                    conv_attrs_.strides, conv_attrs_.dilations, conv_attrs_.pads,
                                                    Y_dims));
 
+  Y_dims.push_back(M_);
   Tensor* Y = context->Output(0, TensorShape(Y_dims));
   TensorShape output_shape = Y->Shape().Slice(2);
 

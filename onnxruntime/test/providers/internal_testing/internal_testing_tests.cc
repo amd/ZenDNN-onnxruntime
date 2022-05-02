@@ -244,44 +244,62 @@ TEST(InternalTestingEP, TestNhwcConversionOfStaticKernels) {
 // TEMPORARY hack to run via the Xnnpack EP stub
 #ifdef USE_XNNPACK
 TEST(XnnpackEP, TestNhwcConversionOfStaticKernels) {
-  const ORTCHAR_T* ort_model_path = ORT_MODEL_FOLDER "TEMP/example_model.onnx";
+  const auto run = [](bool use_xnnpack) {
+    const ORTCHAR_T* ort_model_path = ORT_MODEL_FOLDER "TEMP/example_model.onnx";
 
-  SessionOptions so;
-  so.optimized_model_filepath = ORT_MODEL_FOLDER "TEMP/example_model.test_output.onnx";
-  InferenceSessionWrapper session(so, GetEnvironment());
+    SessionOptions so;
+    so.optimized_model_filepath = use_xnnpack ? ORT_MODEL_FOLDER "TEMP/example_model.test_output.xnnpack.onnx"
+                                              : ORT_MODEL_FOLDER "TEMP/example_model.test_output.onnx";
 
-  auto ep = std::make_unique<XnnpackExecutionProvider>(XnnpackExecutionProviderInfo{&so});
-  ASSERT_STATUS_OK(session.RegisterExecutionProvider(std::move(ep)));
+    InferenceSessionWrapper session(so, GetEnvironment());
 
-  ASSERT_STATUS_OK(session.Load(ort_model_path));
-  ASSERT_STATUS_OK(session.Initialize());
-
-  const auto& graph = session.GetGraph();
-
-  // all Conv nodes should have been converted to NHWC versions and
-  for (const auto& node : graph.Nodes()) {
-    if (node.OpType() == "Conv") {
-      ASSERT_EQ(node.Domain(), kMSInternalNHWCDomain);
+    if (use_xnnpack) {
+      auto ep = std::make_unique<XnnpackExecutionProvider>(XnnpackExecutionProviderInfo{&so});
+      ASSERT_STATUS_OK(session.RegisterExecutionProvider(std::move(ep)));
     }
-  }
 
-  TensorShape input_shape_x{1, 128, 128, 3};
-  std::vector<float> input_x(input_shape_x.Size(), 1.f);
-  OrtValue ml_value_x;
-  CreateMLValue<float>(input_shape_x.GetDims(), input_x.data(), OrtMemoryInfo(), &ml_value_x);
+    ASSERT_STATUS_OK(session.Load(ort_model_path));
+    ASSERT_STATUS_OK(session.Initialize());
 
-  NameMLValMap feeds;
-  feeds.insert(std::make_pair("model_input", ml_value_x));
+    const auto& graph = session.GetGraph();
 
-  // prepare outputs
-  std::vector<std::string> output_names;
-  output_names.push_back("sequential");
-  std::vector<OrtValue> fetches;
+    if (use_xnnpack) {
+      // all Conv nodes should have been converted to NHWC versions and
+      for (const auto& node : graph.Nodes()) {
+        if (node.OpType() == "Conv") {
+          ASSERT_EQ(node.Domain(), kMSInternalNHWCDomain);
+        }
+      }
+    }
 
-  auto status = session.Run(feeds, output_names, &fetches);
-  ASSERT_THAT(status.ErrorMessage(),
-              ::testing::HasSubstr("Non-zero status code returned while running Conv node. Name:'Conv' "
-                                   "Status Message: TODO: add NHWC implementation here."));
+    TensorShape input_shape_x{1, 128, 128, 3};
+    std::vector<float> input_x(input_shape_x.Size(), 1.f);
+    OrtValue ml_value_x;
+    CreateMLValue<float>(input_shape_x.GetDims(), input_x.data(), OrtMemoryInfo(), &ml_value_x);
+
+    NameMLValMap feeds;
+    feeds.insert(std::make_pair("model_input", ml_value_x));
+
+    // prepare outputs
+    std::vector<std::string> output_names;
+    output_names.push_back("sequential");
+    std::vector<OrtValue> fetches;
+
+    auto status = session.Run(feeds, output_names, &fetches);
+
+    const Tensor& result = fetches[0].Get<Tensor>();
+    const float* data = result.Data<float>();
+    for (int64_t cur = 0, end = result.Shape().Size(); cur < end; ++cur) {
+      std::cout << data[cur] << " ";
+    }
+    std::cout << "\n";
+  };
+
+  std::cout << "Running with CPU EP\n";
+  run(false);
+
+  std::cout << "\n----------------------------\n\nRunning with XNNPACK EP\n";
+  run(true);
 }
 #endif
 

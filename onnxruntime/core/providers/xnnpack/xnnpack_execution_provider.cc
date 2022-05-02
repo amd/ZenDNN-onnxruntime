@@ -162,6 +162,30 @@ std::vector<std::unique_ptr<ComputeCapability>> XnnpackExecutionProvider::GetCap
       std::unique_ptr<IndexedSubGraph> sub_graph = std::make_unique<IndexedSubGraph>();
       sub_graph->nodes.push_back(node.Index());
       capabilities.push_back(std::make_unique<ComputeCapability>(std::move(sub_graph)));
+
+      // TODO: Enable this to allow Clip to fuse (in theory). We don't have mutable access to the graph though.
+      //
+      // Some options:
+      //
+      // 1) Use a stub no-op kernel for the activation. Would still be executed but would just pass through values and
+      //    use 'in place' so no additional allocation/copy is required.
+      //
+      // 2) Use Compile and call the Conv kernel via a function pointer. Adds that overhead, but a function call is
+      //    a minimal cost. Just need to make sure shape info is maintained. Would mean you have to do the fusion
+      //    at runtime though as we can't serialize a model with a compiled kernel.
+      //
+      // 3) Add support to GraphPartitioner for fusing to static kernel.
+      //    Could potentially do using the Compile interface. Pass in functor to create node. Add optional field to
+      //    NodeComputeInfo to allow EP to either use function pointers or return a new Node instead of
+      //    GraphPartitioner creating it. FinalizeFuseSubGraph handles moving edges.
+      //
+      // Stubbed out the implementation for #3 and it's pretty clean.
+      // Need to set a bool saying the ComputeCapability is for a static kernel along with setting up the
+      // IndexedSubGraph info for the fused node.
+      //   Use 'Conv' as the name and the internal NHWC domain.
+      //   Add attributes for the min/max values.
+      //
+      // supported_nodes.insert(&node);
     }
   }
 
