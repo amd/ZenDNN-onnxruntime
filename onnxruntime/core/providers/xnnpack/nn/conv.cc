@@ -17,7 +17,7 @@ Status CreateXnnpackKernel(const ConvAttributes& conv_attrs,
                            const TensorShapeVector& kernel_shape,
                            const std::optional<std::pair<float, float>>& clip_min_max,
                            bool depthwise,
-                           const float* W_data, const float* B_data,
+                           const Tensor& W, const float* B_data,
                            struct xnn_operator*& p) {
   // X input is NHWC
   // int64_t H = X_shape[1];
@@ -74,7 +74,7 @@ Status CreateXnnpackKernel(const ConvAttributes& conv_attrs,
           input_padding_top_, input_padding_right_, input_padding_bottom_, input_padding_left_,
           gsl::narrow<uint32_t>(kernel_height), gsl::narrow<uint32_t>(kernel_width), subsampling_height_,
           subsampling_width_, dilation_height_, dilation_width_, gsl::narrow<uint32_t>(input_channels) * groups *,
-          1 * group_input_channels *, depth_multiplier * group_output_channels *,
+          1 *group_input_channels*, depth_multiplier *group_output_channels*,
           input_channels *input_channel_stride*, kernel_shape[3] *output_channel_stride*,
           weight_, B->Data<float>(),
           output_min, output_max, flags, &p);
@@ -82,6 +82,9 @@ Status CreateXnnpackKernel(const ConvAttributes& conv_attrs,
       op0_.reset(p);
 
   */
+
+  const float* W_data = W.Data<float>();
+  // int64_t num_weights = W.Shape().Size();
 
   if (depthwise) {
     ORT_ENFORCE(conv_attrs.group == C);
@@ -110,9 +113,6 @@ Status CreateXnnpackKernel(const ConvAttributes& conv_attrs,
     // uint32_t group_output_channels = gsl::narrow<uint32_t>(M / conv_attrs.group);
     ORT_ENFORCE(conv_attrs.group == 1);
 
-    // TODO: What is the cost of this call?
-    // If B is not a constant initializer we have to do this on every call to Compute.
-    // Is that viable or do we need to constrain usage of xnnpack to nodes where B is constant or not specified?
     status = xnn_create_convolution2d_nhwc_f32(
         input_padding_top, input_padding_right, input_padding_bottom, input_padding_left,
         kernel_height, kernel_width,
@@ -191,7 +191,7 @@ Conv::Conv(const OpKernelInfo& info) : OpKernel(info), conv_attrs_{info} {
 
   struct xnn_operator* p = nullptr;
   ORT_THROW_IF_ERROR(CreateXnnpackKernel(conv_attrs_, C, M_, kernel_shape_, clip_min_max_, IsDepthwise(),
-                                         W->Data<float>(), B ? B->Data<float>() : nullptr, p));
+                                         *W, B ? B->Data<float>() : nullptr, p));
 
   op0_.reset(p);
 }
@@ -206,40 +206,84 @@ Status Conv::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr alloc,
   if (input_idx == 1) {
     auto orig_shape = tensor.Shape();
 
-    // This is transpose of weights in PR
+    // transpose of weights in PR
     //  std::vector<int64_t> weight_perm =
     //        is_depthwise ? std::vector<int64_t>{1, 2, 3, 0}  // {C/group, kH, kW, M}. group == C so -> {1, kH, kW, M}
     //                     : std::vector<int64_t>{0, 2, 3, 1}; // [M, kH, kW, C/group}. group == 1 so -> {M, kH, kW, C}
+    //
+    // Not sure that's correct.
+    // https://github.com/google/XNNPACK/blob/ecd8311c8fd3d9ab47edbc3df5f2b5de7dabe75f/test/convolution-operator-tester.h#L565
+    // https://github.com/google/XNNPACK/blob/ecd8311c8fd3d9ab47edbc3df5f2b5de7dabe75f/test/convolution-operator-tester.h#L950
+    //
+    // If I'm interpreting that correctly (may not be)
+    // ONNX: M, C/group, kH, kW
+    //
+    // XNNPACK
+    // Depthwise: group==C so Input: M, 1, kH, kW. xnnpack layout: kH, kW, groups, M/group
+    //            Can reshape to move kH and kW to the start in one transpose.
+    //            Is the ordering of {M} equivalent to {group, M/group} or {M/group, group}?
+    //            If the latter we need another transpose to reorder that.
+    // Standard: group==1 so Input: M, C, kH, kW. xnnpack layout: kH, kW, 1, M, C
+    //           Can reshape to move kH, kW to start.
+
     std::vector<int64_t> new_dims;
     std::vector<size_t> perm;
-    size_t from, to;
 
-    auto rank = orig_shape.NumDimensions();
-    new_dims.reserve(rank);
+    // PR version
+    // auto rank = orig_shape.NumDimensions();
+    // new_dims.reserve(rank);
+    // size_t from, to;
+    // if (IsDepthwise()) {
+    //  perm = {1, 2, 3, 0};
+    //  from = 0;
+    //  to = 3;
+    //  new_dims.push_back(orig_shape[1]);
+    //  new_dims.push_back(orig_shape[2]);
+    //  new_dims.push_back(orig_shape[3]);
+    //  new_dims.push_back(orig_shape[0]);
+    //} else {
+
+    //  perm = {0, 2, 3, 1};
+    //  from = 1;
+    //  to = 3;
+    //  new_dims.push_back(orig_shape[0]);
+    //  new_dims.push_back(orig_shape[2]);
+    //  new_dims.push_back(orig_shape[3]);
+    //  new_dims.push_back(orig_shape[1]);
+    //}
+
+    // TensorShape new_shape(new_dims);
+    // std::cout << "PrePack with W shape of " << orig_shape << " transposed to " << new_shape << "\n";
+    // packed_w_ = Tensor::Create(tensor.DataType(), new_shape, alloc);
+
+    // SingleAxisTranspose(perm, tensor, *packed_w_, from, to);
+
+    new_dims.reserve(5);
 
     if (IsDepthwise()) {
-      perm = {1, 2, 3, 0};
-      from = 0;
-      to = 3;
-      new_dims.push_back(orig_shape[1]);
       new_dims.push_back(orig_shape[2]);
       new_dims.push_back(orig_shape[3]);
-      new_dims.push_back(orig_shape[0]);
+      new_dims.push_back(conv_attrs_.group);
+      new_dims.push_back(static_cast<int64_t>(orig_shape[0] / conv_attrs_.group));
     } else {
-      perm = {0, 2, 3, 1};
-      from = 1;
-      to = 3;
-      new_dims.push_back(orig_shape[0]);
       new_dims.push_back(orig_shape[2]);
       new_dims.push_back(orig_shape[3]);
+      new_dims.push_back(1);
+      new_dims.push_back(orig_shape[0]);
       new_dims.push_back(orig_shape[1]);
     }
+
+    TensorShape shape_with_kHkW_merged = {orig_shape[0],
+                                          orig_shape[1],
+                                          orig_shape[2] * orig_shape[3]};
+
+    perm = {2, 0, 1};  // move merged kH, kW to the start
 
     TensorShape new_shape(new_dims);
     std::cout << "PrePack with W shape of " << orig_shape << " transposed to " << new_shape << "\n";
     packed_w_ = Tensor::Create(tensor.DataType(), new_shape, alloc);
 
-    SingleAxisTranspose(perm, tensor, *packed_w_, from, to);
+    SingleAxisTranspose(perm, tensor, *packed_w_, 2, 0, &shape_with_kHkW_merged);
 
     is_packed = true;
   }

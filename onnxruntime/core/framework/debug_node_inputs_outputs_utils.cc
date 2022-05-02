@@ -370,7 +370,8 @@ const NodeDumpOptions& NodeDumpOptionsFromEnvironmentVariables() {
     if (ParseEnvironmentVariableWithDefault<bool>(env_vars::kDumpInputData, false)) {
       opts.dump_flags |= NodeDumpOptions::DumpFlags::InputData;
     }
-    if (ParseEnvironmentVariableWithDefault<bool>(env_vars::kDumpOutputData, false)) {
+	// TEMPORARY
+    if (ParseEnvironmentVariableWithDefault<bool>(env_vars::kDumpOutputData, true)) {
       opts.dump_flags |= NodeDumpOptions::DumpFlags::OutputData;
     }
     if (ParseEnvironmentVariableWithDefault<bool>(env_vars::kDumpNodePlacement, true)) {
