@@ -73,7 +73,7 @@ Status ConvInteger::Compute(OpKernelContext* context) const {
 
   TensorShapeVector Y_dims({N, M});
   TensorShape input_shape = X->Shape().Slice(2);
-  ORT_RETURN_IF_ERROR(conv_attrs_.InferOutputShape(input_shape, kernel_shape, strides, dilations, pads, Y_dims));
+  ORT_RETURN_IF_ERROR(conv_attrs_.InferPadAndOutputShape(input_shape, kernel_shape, strides, dilations, pads, Y_dims));
   Tensor* Y = context->Output(0, TensorShape(Y_dims));
   TensorShape output_shape = Y->Shape().Slice(2);
 

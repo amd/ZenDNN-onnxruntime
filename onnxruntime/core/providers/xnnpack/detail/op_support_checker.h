@@ -18,11 +18,15 @@ class NodeSupportChecker {
         supported_nodes_{supported_nodes} {
   }
 
-  bool IsNodeSupported(const Node& node, bool matched_kernel);
+  bool IsNodeSupported(const Node& node);
+  const Node* IsNodeSupportedWithFusion(const Node& node);
 
  private:
   const GraphViewer& graph_;
-  const std::unordered_set<const Node*>& supported_nodes_;  // previously selected nodes
+
+  // previously selected nodes. updated in the background by the EP when it decides it can take a node as there are
+  // additional checks that aren't handled here such as kernel registry lookup to check type constraints.
+  const std::unordered_set<const Node*>& supported_nodes_;
 };
 
 }  // namespace xnnpack

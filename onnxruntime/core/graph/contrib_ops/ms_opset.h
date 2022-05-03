@@ -1,3 +1,4 @@
+
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
@@ -150,14 +151,29 @@ void RegisterNHWCSchema(F&& f, const ::ONNX_NAMESPACE::OpSchema& schema) {
                   .SetDomain(onnxruntime::kMSInternalNHWCDomain)));
 }
 
+template <typename F>
+void RegisterNHWCSchemaWithActivation(F&& f, const ::ONNX_NAMESPACE::OpSchema& schema) {
+  f(std::move(::ONNX_NAMESPACE::OpSchema(schema)
+                  .Attr("activation", "", AttributeProto::STRING, OPTIONAL_VALUE)
+                  .Attr("activation_params", "", AttributeProto::FLOATS, OPTIONAL_VALUE)
+                  .TypeAndShapeInferenceFunction([](InferenceContext&) { /*ignore*/ })
+                  .SetDomain(onnxruntime::kMSInternalNHWCDomain)));
+}
+
 #define REGISTER_NHWC_SCHEMA(X, Y) \
-  { RegisterNHWCSchema(fn, ::ONNX_NAMESPACE::GetOpSchema<::ONNX_NAMESPACE::ONNX_OPERATOR_SET_SCHEMA_CLASS_NAME(Onnx, X, Y)>()); }
+  { RegisterNHWCSchema(            \
+      fn,                          \
+      ::ONNX_NAMESPACE::GetOpSchema<::ONNX_NAMESPACE::ONNX_OPERATOR_SET_SCHEMA_CLASS_NAME(Onnx, X, Y)>()); }
+
+#define REGISTER_NHWC_SCHEMA_WITH_ACTIVATION(X, Y) \
+  { RegisterNHWCSchemaWithActivation(              \
+      fn, ::ONNX_NAMESPACE::GetOpSchema<::ONNX_NAMESPACE::ONNX_OPERATOR_SET_SCHEMA_CLASS_NAME(Onnx, X, Y)>()); }
 
 class OpSet_Internal_NHWC_ver1 {
  public:
   static void ForEachSchema(std::function<void(ONNX_NAMESPACE::OpSchema&&)> fn) {
-    REGISTER_NHWC_SCHEMA(1, Conv);
-    REGISTER_NHWC_SCHEMA(11, Conv);
+    REGISTER_NHWC_SCHEMA_WITH_ACTIVATION(1, Conv);
+    REGISTER_NHWC_SCHEMA_WITH_ACTIVATION(11, Conv);
   }
 };
 

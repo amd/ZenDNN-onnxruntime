@@ -598,7 +598,7 @@ Status Node::GetInstantiateFunctionBody(std::unique_ptr<Function>& output) const
 
 Status Node::InstantiateFunctionBody() {
   if (nullptr != func_body_) {
-    //already instantiated.
+    // already instantiated.
     return Status::OK();
   }
 
@@ -1276,16 +1276,16 @@ Graph::Graph(Graph& parent_graph, const Node& parent_node, ONNX_NAMESPACE::Graph
             parent_graph.strict_shape_type_inference_) {
 }
 
-Graph::Graph(const Model& owning_model, 
-    IOnnxRuntimeOpSchemaCollectionPtr schema_registry, 
-    ONNX_NAMESPACE::GraphProto& subgraph_proto, 
-    const std::unordered_map<std::string, int>& domain_version_map,
-    const logging::Logger& logger,
-    bool strict_shape_type_inference)
+Graph::Graph(const Model& owning_model,
+             IOnnxRuntimeOpSchemaCollectionPtr schema_registry,
+             ONNX_NAMESPACE::GraphProto& subgraph_proto,
+             const std::unordered_map<std::string, int>& domain_version_map,
+             const logging::Logger& logger,
+             bool strict_shape_type_inference)
     : Graph(owning_model,
             &subgraph_proto,
-            domain_version_map, 
-            owning_model.IrVersion(), 
+            domain_version_map,
+            owning_model.IrVersion(),
             schema_registry,
             nullptr,
             nullptr,
@@ -2552,8 +2552,8 @@ Status Graph::VerifyNodeAndOpMatch(const ResolveOptions& options) {
       if (node.since_version_ == -1) {
         node.since_version_ = node.op_->since_version();
       }
-    } 
-   
+    }
+
     ORT_RETURN_IF_ERROR(node.UpdateInputArgCount());
 
     // currently an Op is required by ValidateVersion, so we use gsl::not_null to validate that.
@@ -3853,10 +3853,17 @@ Node& Graph::CreateFusedSubGraphNode(const IndexedSubGraph& sub_graph, const std
   // if this is a full build create the lightweight Function implementation that provides the schema so that
   // kernel lookup works as per usual. in an extended minimal build we do the lookup via a hash so don't
   // need to create the schema.
-  auto temp_schema_ptr = function_utils::CreateSchema(*this, sub_graph);
-  fused_schemas_containers_.push_back(std::move(temp_schema_ptr));
-  fused_node.op_ = fused_schemas_containers_.back().get();
-  fused_node.SetSinceVersion(fused_node.op_->SinceVersion());
+  //
+  // If the fusion is going to use an existing static kernel registration the required schema should already exist.
+  if (sub_graph.HasStaticKernel() == false) {
+    auto temp_schema_ptr = function_utils::CreateSchema(*this, sub_graph);
+    fused_schemas_containers_.push_back(std::move(temp_schema_ptr));
+    fused_node.op_ = fused_schemas_containers_.back().get();
+    fused_node.SetSinceVersion(fused_node.op_->SinceVersion());
+  } else {
+    fused_node.SetSinceVersion(func_meta_def->since_version);
+  }
+
 #endif
   return fused_node;
 }
@@ -4071,10 +4078,10 @@ Status Graph::InlineFunction(Node& node) {
       }
 
       AddNode(subgraph_node.Name() + uniq_identifier, subgraph_node.OpType(), subgraph_node.Description(),
-                               inputs,
-                               outputs,
-                               &subgraph_node.GetAttributes(),
-                               subgraph_node.Domain());
+              inputs,
+              outputs,
+              &subgraph_node.GetAttributes(),
+              subgraph_node.Domain());
     }
   }
 

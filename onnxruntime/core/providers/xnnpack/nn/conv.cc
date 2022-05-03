@@ -19,14 +19,6 @@ Status CreateXnnpackKernel(const ConvAttributes& conv_attrs,
                            bool depthwise,
                            const Tensor& W, const float* B_data,
                            struct xnn_operator*& p) {
-  // X input is NHWC
-  // int64_t H = X_shape[1];
-  // int64_t W = X_shape[2];
-  // int64_t C = X_shape[3];       // input_channels
-  // int64_t M = kernel_shape[0];  // output_channels
-
-  // copied from logic in xnnpack_transformer.cc
-  // int64_t output_channels = kernel_shape[0]; -- this is misleading as 'kernel_shape' was really weight shape
   uint32_t kernel_height = gsl::narrow<uint32_t>(kernel_shape[0]);
   uint32_t kernel_width = gsl::narrow<uint32_t>(kernel_shape[1]);
 
@@ -40,8 +32,8 @@ Status CreateXnnpackKernel(const ConvAttributes& conv_attrs,
   uint32_t dilation_height = gsl::narrow<uint32_t>(conv_attrs.dilations[0]);
   uint32_t dilation_width = gsl::narrow<uint32_t>(conv_attrs.dilations[1]);
 
-  float output_min = clip_min_max ? clip_min_max->first : std::numeric_limits<float>::min();
-  float output_max = clip_min_max ? clip_min_max->second : std::numeric_limits<float>::max();
+  float output_min = clip_min_max ? clip_min_max->first : -INFINITY;
+  float output_max = clip_min_max ? clip_min_max->second : INFINITY;
 
   uint32_t flags = 0;
   if (conv_attrs.auto_pad == AutoPadType::SAME_UPPER) {
@@ -51,44 +43,10 @@ Status CreateXnnpackKernel(const ConvAttributes& conv_attrs,
   xnn_status status = xnn_status::xnn_status_uninitialized;
   p = nullptr;
 
-  /*
-  From PR
-
-  Standard:
-      size_t group_input_channels = input_channels / groups;
-      size_t group_output_channels = output_channels / groups;
-      status = xnn_create_convolution2d_nhwc_f32(
-          input_padding_top_, input_padding_right_, input_padding_bottom_, input_padding_left_,
-          gsl::narrow<uint32_t>(kernel_height), gsl::narrow<uint32_t>(kernel_width), subsampling_height_,
-          subsampling_width_, dilation_height_, dilation_width_, gsl::narrow<uint32_t>(groups),
-          gsl::narrow<uint32_t>(group_input_channels), gsl::narrow<uint32_t>(group_output_channels),
-          gsl::narrow<uint32_t>(input_channels), gsl::narrow<uint32_t>(output_channels), weight->Data<float>(),
-          B->Data<float>(), output_min, output_max, flags, &p);
-      ORT_ENFORCE(status == xnn_status_success);
-      op0_.reset(p);
-
-  Depthwise:
-
-      int64_t depth_multiplier = kernel_shape[3] / input_channels; // 'kernel_shape' is actual the weight shape
-      xnn_status status = xnn_create_convolution2d_nhwc_f32(
-          input_padding_top_, input_padding_right_, input_padding_bottom_, input_padding_left_,
-          gsl::narrow<uint32_t>(kernel_height), gsl::narrow<uint32_t>(kernel_width), subsampling_height_,
-          subsampling_width_, dilation_height_, dilation_width_, gsl::narrow<uint32_t>(input_channels) * groups *,
-          1 *group_input_channels*, depth_multiplier *group_output_channels*,
-          input_channels *input_channel_stride*, kernel_shape[3] *output_channel_stride*,
-          weight_, B->Data<float>(),
-          output_min, output_max, flags, &p);
-      ORT_ENFORCE(status == xnn_status_success);
-      op0_.reset(p);
-
-  */
-
   const float* W_data = W.Data<float>();
-  // int64_t num_weights = W.Shape().Size();
 
   if (depthwise) {
-    ORT_ENFORCE(conv_attrs.group == C);
-    // C == group and M % group == 0 so this should result in a whole number
+    // C == group and M % group == 0 so M/group is safe
     uint32_t group_output_channels = gsl::narrow<uint32_t>(M / conv_attrs.group);
 
     status = xnn_create_convolution2d_nhwc_f32(
@@ -98,21 +56,11 @@ Status CreateXnnpackKernel(const ConvAttributes& conv_attrs,
         dilation_height, dilation_width,
         // groups, group_input_channels, group_output_channels
         gsl::narrow<uint32_t>(conv_attrs.group), 1, group_output_channels,
-        // TODO: Not sure it's correct for depthwise and standard conv to have the same values here
-        // Does conv_attrs.stride potentially need to be taken into account?
-        // input channel stride, output channel stride
-        C, M,
+        C, M,  // input channel stride, output channel stride
         W_data, B_data,
         output_min, output_max, flags, &p);
 
   } else {
-    // original code had the below, but as group == 1 if this is not depthwise that seems unnecessary if you're always
-    // dividing by 1.
-    //
-    // uint32_t group_input_channels = gsl::narrow<uint32_t>(C / conv_attrs.group);
-    // uint32_t group_output_channels = gsl::narrow<uint32_t>(M / conv_attrs.group);
-    ORT_ENFORCE(conv_attrs.group == 1);
-
     status = xnn_create_convolution2d_nhwc_f32(
         input_padding_top, input_padding_right, input_padding_bottom, input_padding_left,
         kernel_height, kernel_width,
@@ -148,21 +96,22 @@ Conv::Conv(const OpKernelInfo& info) : OpKernel(info), conv_attrs_{info} {
 
   const auto& node{Node()};
 
+  const auto& input_defs = node.InputDefs();
+  const NodeArg& X = *input_defs[0];
+  C_ = X.Shape()->dim(3).dim_value();  // input is NHWC. op support checker made sure C dim was known
+
   // as the weight input is a constant initializer we can calculate all the sizes here instead of in Compute
   const Tensor* W = nullptr;
   ORT_ENFORCE(info.TryGetConstantInput(1, &W),
-              "Weight input was not constant initializer. XNNPACK EP should not have asked for the node."
-              "Node name:",
+              "Weight input was not constant initializer. XNNPACK EP should not have asked for the node. Node name:",
               node.Name());
 
-  // 'M' is first dim of weight. Prepacking will alter the layout of W so save to member for use in Compute
+  // 'M' is first dim of weight. Prepacking will alter the layout of W later
   M_ = W->Shape()[0];
 
   // this happens before PrePack, so the W input is still in the ONNX spec format
   ORT_THROW_IF_ERROR(conv_attrs_.ComputeKernelShape(W->Shape(), kernel_shape_));
 
-  // TODO: Add method to ConvAttributes to do this initialization once kernel shape is known.
-  // Or do it in ComputeKernelShape
   if (conv_attrs_.pads.empty()) {
     conv_attrs_.pads.resize(kernel_shape_.size() * 2, 0);
   }
@@ -176,24 +125,13 @@ Conv::Conv(const OpKernelInfo& info) : OpKernel(info), conv_attrs_{info} {
   }
 
   // we only take nodes with no bias, or a constant bias.
-  const Tensor* B = nullptr;
-  const auto& input_defs = node.InputDefs();
   bool has_bias = input_defs.size() == 3 && input_defs[2]->Exists();
 
-  ORT_ENFORCE(has_bias == false || info.TryGetConstantInput(2, &B),
+  ORT_ENFORCE(has_bias == false || info.TryGetConstantInput(2, &B_),
               "Invalid Node with non-constant Bias input. XNNPACK EP should not have asked for the node. Node name:",
               node.Name());
 
-  // we know we have the C, H, W values for this kernel to be used due to checks in ConvChecker.
-  const NodeArg& X = *input_defs[0];
-  TensorShape X_shape = utils::GetTensorShapeFromTensorShapeProto(*X.Shape());
-  int64_t C = X_shape[3];  // input is NHWC
-
-  struct xnn_operator* p = nullptr;
-  ORT_THROW_IF_ERROR(CreateXnnpackKernel(conv_attrs_, C, M_, kernel_shape_, clip_min_max_, IsDepthwise(),
-                                         *W, B ? B->Data<float>() : nullptr, p));
-
-  op0_.reset(p);
+  // have to delay creating the xnnpack kernel until after the weights are pre-packed.
 }
 
 // use PrePack to handle the weight layout change as that's not a simple NCHW -> NHWC transpose
@@ -204,113 +142,41 @@ Status Conv::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr alloc,
 
   // only layout of weight input is adjusted via PrePack
   if (input_idx == 1) {
+    // Transpose from {M, C/group, kH, kW} to {M, kH, kW, C/group}
     auto orig_shape = tensor.Shape();
 
-    // transpose of weights in PR
-    //  std::vector<int64_t> weight_perm =
-    //        is_depthwise ? std::vector<int64_t>{1, 2, 3, 0}  // {C/group, kH, kW, M}. group == C so -> {1, kH, kW, M}
-    //                     : std::vector<int64_t>{0, 2, 3, 1}; // [M, kH, kW, C/group}. group == 1 so -> {M, kH, kW, C}
-    //
-    // Not sure that's correct.
-    // https://github.com/google/XNNPACK/blob/ecd8311c8fd3d9ab47edbc3df5f2b5de7dabe75f/test/convolution-operator-tester.h#L565
-    // https://github.com/google/XNNPACK/blob/ecd8311c8fd3d9ab47edbc3df5f2b5de7dabe75f/test/convolution-operator-tester.h#L950
-    //
-    // If I'm interpreting that correctly (may not be)
-    // ONNX: M, C/group, kH, kW
-    //
-    // XNNPACK
-    // Depthwise: group==C so Input: M, 1, kH, kW. xnnpack layout: kH, kW, groups, M/group
-    //            Can reshape to move kH and kW to the start in one transpose.
-    //            Is the ordering of {M} equivalent to {group, M/group} or {M/group, group}?
-    //            If the latter we need another transpose to reorder that.
-    // Standard: group==1 so Input: M, C, kH, kW. xnnpack layout: kH, kW, 1, M, C
-    //           Can reshape to move kH, kW to start.
+    std::vector<size_t> perm{0, 2, 3, 1};
+    std::vector<int64_t> new_dims{orig_shape[0],
+                                  orig_shape[2],
+                                  orig_shape[3],
+                                  orig_shape[1]};
 
-    std::vector<int64_t> new_dims;
-    std::vector<size_t> perm;
+    packed_w_ = Tensor::Create(tensor.DataType(), TensorShape(new_dims), alloc);
 
-    // PR version
-    // auto rank = orig_shape.NumDimensions();
-    // new_dims.reserve(rank);
-    // size_t from, to;
-    // if (IsDepthwise()) {
-    //  perm = {1, 2, 3, 0};
-    //  from = 0;
-    //  to = 3;
-    //  new_dims.push_back(orig_shape[1]);
-    //  new_dims.push_back(orig_shape[2]);
-    //  new_dims.push_back(orig_shape[3]);
-    //  new_dims.push_back(orig_shape[0]);
-    //} else {
-
-    //  perm = {0, 2, 3, 1};
-    //  from = 1;
-    //  to = 3;
-    //  new_dims.push_back(orig_shape[0]);
-    //  new_dims.push_back(orig_shape[2]);
-    //  new_dims.push_back(orig_shape[3]);
-    //  new_dims.push_back(orig_shape[1]);
-    //}
-
-    // TensorShape new_shape(new_dims);
-    // std::cout << "PrePack with W shape of " << orig_shape << " transposed to " << new_shape << "\n";
-    // packed_w_ = Tensor::Create(tensor.DataType(), new_shape, alloc);
-
-    // SingleAxisTranspose(perm, tensor, *packed_w_, from, to);
-
-    new_dims.reserve(5);
-
-    if (IsDepthwise()) {
-      new_dims.push_back(orig_shape[2]);
-      new_dims.push_back(orig_shape[3]);
-      new_dims.push_back(conv_attrs_.group);
-      new_dims.push_back(static_cast<int64_t>(orig_shape[0] / conv_attrs_.group));
-    } else {
-      new_dims.push_back(orig_shape[2]);
-      new_dims.push_back(orig_shape[3]);
-      new_dims.push_back(1);
-      new_dims.push_back(orig_shape[0]);
-      new_dims.push_back(orig_shape[1]);
-    }
-
-    TensorShape shape_with_kHkW_merged = {orig_shape[0],
-                                          orig_shape[1],
-                                          orig_shape[2] * orig_shape[3]};
-
-    perm = {2, 0, 1};  // move merged kH, kW to the start
-
-    TensorShape new_shape(new_dims);
-    std::cout << "PrePack with W shape of " << orig_shape << " transposed to " << new_shape << "\n";
-    packed_w_ = Tensor::Create(tensor.DataType(), new_shape, alloc);
-
-    SingleAxisTranspose(perm, tensor, *packed_w_, 2, 0, &shape_with_kHkW_merged);
+    SingleAxisTranspose(perm, tensor, *packed_w_, /*from*/ 1, /*to*/ 3);
 
     is_packed = true;
+
+    // we can create the kernel now
+    struct xnn_operator* p = nullptr;
+    ORT_RETURN_IF_ERROR(CreateXnnpackKernel(conv_attrs_, C_, M_, kernel_shape_, clip_min_max_, IsDepthwise(),
+                                            *packed_w_, B_ ? B_->Data<float>() : nullptr, p));
+
+    op0_.reset(p);
   }
 
   return Status::OK();
 }
 
 Status Conv::Compute(OpKernelContext* context) const {
-  size_t num_inputs = OpKernel::Node().InputDefs().size();
   const Tensor& X = *context->Input<Tensor>(0);  // this is in NHWC format
-  // const Tensor* B = num_inputs >= 3 ? context->Input<Tensor>(2) : nullptr;
-
-  if (num_inputs == 3 && !op0_) {
-    ORT_NOT_IMPLEMENTED(
-        "TODO: Could/should we support creating an xnnpack kernel on every call to Compute? "
-        "The bias input is required at kernel creation time.");
-  }
-
   const auto& X_shape = X.Shape();
-  std::cout << "Xnnpack Conv::Compute called with input shape of " << X_shape << "\n";
-
   const int64_t N = X_shape[0];  // input is NHWC
   const int64_t H = X_shape[1];
   const int64_t W = X_shape[2];
 
   // We don't need to call ValidateInputShape as we checked validity in ConvChecker.
-  // We also can't use it as-is as the weight tensor was pre-packed and the layout was changed there.
+  // We also can't use ValidateInputShape as-is as the weight tensor was pre-packed and the layout was changed there.
   // ORT_RETURN_IF_ERROR(conv_attrs_.ValidateInputShape(&X, &W));
 
   // CPU Conv starts with TensorShapeVector Y_dims({N, M}); and passes in X->Shape().Slice(2);
@@ -318,24 +184,21 @@ Status Conv::Compute(OpKernelContext* context) const {
   TensorShapeVector Y_dims({N});
   TensorShape input_shape = {H, W};
 
-  // TODO: Is the implementation/result of this any different to what XnnPackConvShapeInferKernelImpl or
-  // XnnPackDepthwiseConvolution2dShapeInferImpl would produce?
-  ORT_RETURN_IF_ERROR(conv_attrs_.InferOutputShape(input_shape, kernel_shape_,
-                                                   conv_attrs_.strides, conv_attrs_.dilations, conv_attrs_.pads,
-                                                   Y_dims));
+  ConvAttributes::ConvPadVector pads(conv_attrs_.pads);
+  ORT_RETURN_IF_ERROR(conv_attrs_.InferPadAndOutputShape(input_shape, kernel_shape_,
+                                                         conv_attrs_.strides, conv_attrs_.dilations, pads,
+                                                         Y_dims));
 
   Y_dims.push_back(M_);
   Tensor* Y = context->Output(0, TensorShape(Y_dims));
-  TensorShape output_shape = Y->Shape().Slice(2);
 
   // Bail out early if one of the dimensions is zero.
   if (Y->Shape().Size() == 0) {
     return Status::OK();
   }
 
-  xnn_status status = xnn_setup_convolution2d_nhwc_f32(
-      op0_.get(), N, H, W, X.Data<float>(), Y->MutableData<float>(),
-      nullptr /*threadpool*/);  // TBD: how to handle threading
+  xnn_status status = xnn_setup_convolution2d_nhwc_f32(op0_.get(), N, H, W, X.Data<float>(), Y->MutableData<float>(),
+                                                       nullptr /*threadpool*/);  // TBD: how to handle threading
 
   if (status != xnn_status_success) {
     return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "xnn_setup_convolution2d_nhwc_f32 returned ", status);

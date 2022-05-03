@@ -21,12 +21,15 @@ bool IsPaddingTypeSupported(AutoPadType auto_pad) {
          auto_pad == AutoPadType::SAME_UPPER;
 }
 
-// function to check if a node is supported.
+// function to check if a node is supported. kernel must have been matched previously to check type constraints.
+using CheckerFn = std::function<bool(const Node& node,
+                                     const GraphViewer& graph)>;
+
 // supported_nodes are previously selected nodes so that we can check for connected activation nodes that an L2 fusion
-// could combine
-using CheckerFn = std::function<bool(const Node& node, bool matched_kernel,
-                                     const GraphViewer& graph,
-                                     const std::unordered_set<const Node*>& supported_nodes)>;
+// could combine. returns node to fuse with if possible.
+using FuseCheckerFn = std::function<const Node*(const Node& node,
+                                                const GraphViewer& graph,
+                                                const std::unordered_set<const Node*>& supported_nodes)>;
 
 // check if the details of Conv are supported.
 //
@@ -36,13 +39,7 @@ using CheckerFn = std::function<bool(const Node& node, bool matched_kernel,
 //
 // we already validated type constraints via the kernel lookup in GetCapability so we know we're dealing with
 // float input.
-bool ConvChecker(const Node& node, bool matched_kernel, const GraphViewer& graph,
-                 const std::unordered_set<const Node*>& /*supported_nodes*/) {
-  // require kernel match so we know type constraints etc. have been checked
-  if (!matched_kernel) {
-    return false;
-  }
-
+bool ConvChecker(const Node& node, const GraphViewer& graph) {
   bool supported = false;
 
   // use do {} while(false) so it's easier to set a breakpoint on the return
@@ -119,12 +116,10 @@ bool ConvChecker(const Node& node, bool matched_kernel, const GraphViewer& graph
   return supported;
 }
 
-bool ClipReluChecker(const Node& node, bool matched_kernel,
-                     const GraphViewer& graph,
-                     const std::unordered_set<const Node*>& supported_nodes) {
-  assert(!matched_kernel);  // we don't have a Clip kernel - temporary sanity check
-
-  bool supported = false;
+const Node* ClipReluChecker(const Node& node,
+                            const GraphViewer& graph,
+                            const std::unordered_set<const Node*>& supported_nodes) {
+  const Node* fuse_with{nullptr};
 
   do {
     if (node.Domain() != kOnnxDomain) {
@@ -161,28 +156,43 @@ bool ClipReluChecker(const Node& node, bool matched_kernel,
       }
     }
 
-    supported = true;
+    fuse_with = &input0;
+
   } while (false);
 
-  return supported;
+  return fuse_with;
 }
 
 }  // namespace
 
-bool NodeSupportChecker::IsNodeSupported(const Node& node, bool matched_kernel) {
+bool NodeSupportChecker::IsNodeSupported(const Node& node) {
   static std::unordered_map<std::string, CheckerFn> checkers{
       {"Conv", ConvChecker},
-      {"Clip", ClipReluChecker},  // testing fusion of Conv+Activation with min/max
-      {"Relu", ClipReluChecker},  // testing fusion of Conv+Activation
   };
 
   const auto entry = checkers.find(node.OpType());
   bool supported = false;
   if (entry != checkers.cend()) {
-    supported = entry->second(node, matched_kernel, graph_, supported_nodes_);
+    supported = entry->second(node, graph_);
   }
 
   return supported;
+}
+
+const Node* NodeSupportChecker::IsNodeSupportedWithFusion(const Node& node) {
+  static std::unordered_map<std::string, FuseCheckerFn> checkers{
+      {"Clip", ClipReluChecker},  // testing fusion of Conv+Activation with min/max
+      {"Relu", ClipReluChecker},  // testing fusion of Conv+Activation
+  };
+
+  const Node* fuse_with{nullptr};
+
+  const auto entry = checkers.find(node.OpType());
+  if (entry != checkers.cend()) {
+    fuse_with = entry->second(node, graph_, supported_nodes_);
+  }
+
+  return fuse_with;
 }
 }  // namespace xnnpack
 }  // namespace onnxruntime

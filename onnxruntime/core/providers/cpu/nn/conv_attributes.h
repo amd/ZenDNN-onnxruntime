@@ -127,13 +127,13 @@ struct ConvAttributes {
     return ValidateInputShape(input->Shape(), weight->Shape());
   }
 
-  Status InferOutputShape(const TensorShape& input_shape,
-                          const gsl::span<const int64_t>& kernel_shape,
-                          const gsl::span<const int64_t>& strides_p,
-                          const gsl::span<const int64_t>& dilations_p,
-                          const ConvPadVector& pads_p,
-                          TensorShapeVector& output_shape,
-                          bool force_symmetric_auto_padding = false) const {
+  Status InferPadAndOutputShape(const TensorShape& input_shape,
+                                const gsl::span<const int64_t>& kernel_shape,
+                                const gsl::span<const int64_t>& strides_p,
+                                const gsl::span<const int64_t>& dilations_p,
+                                ConvPadVector& pads_p,
+                                TensorShapeVector& output_shape,
+                                bool force_symmetric_auto_padding = false) const {
     size_t rank = input_shape.NumDimensions();
 
     // Make sure all "metadata" containers have the right number of elements
@@ -155,14 +155,12 @@ struct ConvAttributes {
 
     for (size_t dim = 0; dim < rank; ++dim) {
       int64_t output_dim_size = 0;
-      // ComputePadAndOutputShape call may update pads, but that's not relevant here so pass in a mutable copy
-      int64_t pad_head = pads_p[dim], pad_tail = pads_p[rank + dim];
       ORT_RETURN_IF_ERROR(ComputePadAndOutputShape(input_shape[dim],
                                                    strides_p[dim],
                                                    kernel_shape[dim],
                                                    dilations_p[dim],
                                                    auto_pad,
-                                                   pad_head, pad_tail,
+                                                   pads_p[dim], pads_p[rank + dim],
                                                    output_dim_size,
                                                    force_symmetric_auto_padding));
       if (output_dim_size <= 0) {

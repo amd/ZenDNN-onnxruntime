@@ -95,12 +95,17 @@ std::vector<std::unique_ptr<ComputeCapability>> XnnpackExecutionProvider::GetCap
   bool l2_optimizations_enabled = session_options_ &&
                                   session_options_->graph_optimization_level >= TransformerLevel::Level2;
 
-  // handle any nodes we have a static kernel for.
-  const auto& nodes = graph.Nodes();
+  std::unordered_map<const Node*, ComputeCapability*> node_to_compute_capability;
 
-  for (auto iter = nodes.cbegin(), end = nodes.cend(); iter != end; ++iter) {
+  // handle any nodes we have a static kernel for.
+  for (NodeIndex idx : graph.GetNodesInTopologicalOrder()) {
+    const Node* n = graph.GetNode(idx);
+    if (n == nullptr) {
+      continue;
+    }
+
+    const Node& node = *n;
     bool request_node = false;
-    const Node& node = *iter;
 
     if (node.GetExecutionProviderType() == "") {
       // unassigned node. check if we have a kernel registration for it.
@@ -108,11 +113,31 @@ std::vector<std::unique_ptr<ComputeCapability>> XnnpackExecutionProvider::GetCap
         // we have a kernel registration for the operator, and any type constraints that have been satisfied.
         // if there are additional constraints such as checking values of attributes etc. those should
         // be checked here.
-        request_node = checker.IsNodeSupported(node, /*matched_kernel*/ true);
+        request_node = checker.IsNodeSupported(node);
       } else {
-        // see if it's an activation we can fuse with a node we support
+        // see if it's an activation we can fuse with a node we support. note that we can only do this after
+        // the layout transform so we fuse with the NWHC op that we have the real kernel for.
         if (l2_optimizations_enabled) {
-          request_node = checker.IsNodeSupported(node, /*matched_kernel*/ false);
+          const Node* fuse_with = checker.IsNodeSupportedWithFusion(node);
+          if (fuse_with) {
+            if (fuse_with->Domain() == kMSInternalNHWCDomain) {
+              // add new MetaDef to existing ComputeCapability.
+              // we know an entry must exist in node_to_compute_capability as we update supported_nodes
+              // when creating the ComputeCapability, and the logic in IsNodeSupportedWithFusion
+              // checks the fuse_with node is in supported_nodes.
+              auto iter = node_to_compute_capability.find(fuse_with);
+              ORT_ENFORCE(iter != node_to_compute_capability.cend(),
+                          "node_to_compute_capability is not is sync with supported_nodes. ");
+
+              // update the MetaDef to cover the nodes being fused, add this node, and set HasStaticKernel
+              // so that GraphPartitioner matches the statically registered xnnpack Conv kernel instead of
+              // calling IExecutionProvider::Compile
+              ComputeCapability& capability = *iter->second;
+              capability.sub_graph->SetMetaDef(FuseConvActivation(*fuse_with, node, graph));
+              capability.sub_graph->nodes.push_back(node.Index());
+              capability.sub_graph->HasStaticKernel(true);
+            }
+          }
         }
       }
     } else if (node.GetExecutionProviderType() == Type()) {
@@ -163,29 +188,8 @@ std::vector<std::unique_ptr<ComputeCapability>> XnnpackExecutionProvider::GetCap
       sub_graph->nodes.push_back(node.Index());
       capabilities.push_back(std::make_unique<ComputeCapability>(std::move(sub_graph)));
 
-      // TODO: Enable this to allow Clip to fuse (in theory). We don't have mutable access to the graph though.
-      //
-      // Some options:
-      //
-      // 1) Use a stub no-op kernel for the activation. Would still be executed but would just pass through values and
-      //    use 'in place' so no additional allocation/copy is required.
-      //
-      // 2) Use Compile and call the Conv kernel via a function pointer. Adds that overhead, but a function call is
-      //    a minimal cost. Just need to make sure shape info is maintained. Would mean you have to do the fusion
-      //    at runtime though as we can't serialize a model with a compiled kernel.
-      //
-      // 3) Add support to GraphPartitioner for fusing to static kernel.
-      //    Could potentially do using the Compile interface. Pass in functor to create node. Add optional field to
-      //    NodeComputeInfo to allow EP to either use function pointers or return a new Node instead of
-      //    GraphPartitioner creating it. FinalizeFuseSubGraph handles moving edges.
-      //
-      // Stubbed out the implementation for #3 and it's pretty clean.
-      // Need to set a bool saying the ComputeCapability is for a static kernel along with setting up the
-      // IndexedSubGraph info for the fused node.
-      //   Use 'Conv' as the name and the internal NHWC domain.
-      //   Add attributes for the min/max values.
-      //
-      // supported_nodes.insert(&node);
+      node_to_compute_capability.insert({&node, capabilities.back().get()});
+      supported_nodes.insert(&node);
     }
   }
 

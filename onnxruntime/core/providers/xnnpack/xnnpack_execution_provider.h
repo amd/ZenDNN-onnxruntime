@@ -36,6 +36,8 @@ class XnnpackExecutionProvider : public IExecutionProvider {
 
   DataLayout GetPreferredLayout() const override { return DataLayout::NHWC; }
 
+  FusionStyle GetFusionStyle() const override { return FusionStyle::FilteredGraphViewer; }
+
  private:
   const SessionOptions* session_options_{nullptr};
 };

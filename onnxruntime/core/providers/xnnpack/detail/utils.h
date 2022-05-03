@@ -9,6 +9,9 @@
 #include "xnnpack.h"
 
 namespace onnxruntime {
+struct IndexedSubGraph::MetaDef;
+class GraphViewer;
+
 namespace xnnpack {
 
 // forward declaration for this EP's namespace.
@@ -26,5 +29,7 @@ struct XnnpackOperatorDeleter {
 
 using XnnpackOperator = std::unique_ptr<struct xnn_operator, XnnpackOperatorDeleter>;
 
+std::unique_ptr<IndexedSubGraph::MetaDef> FuseConvActivation(const Node& conv, const Node& activation,
+                                                             const GraphViewer& graph);
 }  // namespace xnnpack
 }  // namespace onnxruntime
