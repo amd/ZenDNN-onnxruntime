@@ -32,6 +32,7 @@ InternalTestingExecutionProvider::InternalTestingExecutionProvider(const std::un
                                                                    const std::unordered_set<std::string>& stop_ops,
                                                                    DataLayout preferred_layout)
     : IExecutionProvider{utils::kInternalTestingExecutionProvider, true},
+      ep_name_{INTERNAL_TESTING_EP},
       ops_{ops},
       stop_ops_{stop_ops},
       preferred_layout_{preferred_layout} {
@@ -59,19 +60,25 @@ std::vector<std::unique_ptr<ComputeCapability>>
 InternalTestingExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph_viewer,
                                                 const std::vector<const KernelRegistry*>& /*registries*/) const {
   // find nodes that have ops in our supported list
-  std::unordered_set<const Node*> supported_nodes;
+  std::unordered_set<const Node*> supported_static_nodes;
+  std::unordered_set<const Node*> supported_compiled_nodes;
 
   const auto& topo_nodes = graph_viewer.GetNodesInTopologicalOrder();
   std::for_each(topo_nodes.cbegin(), topo_nodes.cend(),
-                [this, &supported_nodes, &graph_viewer](NodeIndex node_index) {
+                [&, this](NodeIndex node_index) {
                   const Node* node = graph_viewer.GetNode(node_index);
                   bool supported = ops_.count(node->OpType()) != 0;
                   if (supported) {
-                    supported_nodes.insert(node);
+                    // hack to
+                    if (node->OpType() == "Conv" && enable_static_kernels_) {
+                      supported_static_nodes.insert(node);
+                    } else {
+                      supported_compiled_nodes.insert(node);
+                    }
                   }
                 });
 
-  if (supported_nodes.empty()) {
+  if (supported_static_nodes.empty() && supported_compiled_nodes.empty()) {
     return {};
   }
 
@@ -82,7 +89,7 @@ InternalTestingExecutionProvider::GetCapability(const onnxruntime::GraphViewer& 
     auto registry = GetKernelRegistry();
 
     // handle any supported nodes we have a static kernel for
-    for (const Node* node : supported_nodes) {
+    for (const Node* node : supported_static_nodes) {
       bool request_node = false;
       if (node->GetExecutionProviderType() == "") {
         // unassigned node. check if we have a kernel registration for it.
@@ -126,7 +133,7 @@ InternalTestingExecutionProvider::GetCapability(const onnxruntime::GraphViewer& 
           ORT_ENFORCE(node->Domain() == kMSInternalNHWCDomain,
                       "Node is assigned to us but is not the NHWC version of a node we originally asked for.");
         } else {
-          // node we selected in the first call to GetCapability. no need to check if we have a kernel again.
+          // node we selected in the first call to GetCapability
         }
 
         request_node = true;
@@ -144,11 +151,6 @@ InternalTestingExecutionProvider::GetCapability(const onnxruntime::GraphViewer& 
         sub_graph->nodes.push_back(node->Index());
         static_capabilities.push_back(std::make_unique<ComputeCapability>(std::move(sub_graph)));
       }
-    }
-
-    // we have static kernels so remove from supported_nodes so we don't attempt to also compile
-    for (const Node* node : nodes_with_static_kernels) {
-      supported_nodes.erase(node);
     }
   }
 
@@ -176,7 +178,7 @@ InternalTestingExecutionProvider::GetCapability(const onnxruntime::GraphViewer& 
     return ep_name_ + "_" + std::to_string(model_hash) + "_" + std::to_string(metadef_id);
   };
 
-  auto compile_capabilities = utils::CreateSupportedPartitions(graph_viewer, supported_nodes, stop_ops_,
+  auto compile_capabilities = utils::CreateSupportedPartitions(graph_viewer, supported_compiled_nodes, stop_ops_,
                                                                generate_metadef_name, ep_name_,
                                                                onnxruntime::utils::kInternalTestingExecutionProvider,
                                                                debug_output_);

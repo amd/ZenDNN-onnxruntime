@@ -193,7 +193,7 @@ TEST(InternalTestingEP, TestMixOfStaticAndCompiledKernels) {
   // Error message should come from the Conv implementation with the statically registered kernel
   ASSERT_THAT(status.ErrorMessage(),
               ::testing::HasSubstr("Non-zero status code returned while running Conv node. Name:'Conv' "
-                                   "Status Message: Internal testing EP kernels are not expected to be executed."));
+                                   "Status Message: TODO: add NHWC implementation here."));
 }
 
 TEST(InternalTestingEP, TestNhwcConversionOfStaticKernels) {
@@ -241,7 +241,7 @@ TEST(InternalTestingEP, TestNhwcConversionOfStaticKernels) {
                                    "Status Message: TODO: add NHWC implementation here."));
 }
 
-// TEMPORARY hack to run a real model using via the Xnnpack EP 
+// TEMPORARY hack to run a real model using via the Xnnpack EP
 #ifdef USE_XNNPACK
 static void XnnpackEPTest(bool use_xnnpack) {
   const ORTCHAR_T* ort_model_path = ORT_MODEL_FOLDER "TEMP/example_model.onnx";
