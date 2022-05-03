@@ -142,16 +142,9 @@ using NTO = NodesToOptimize;
 
 class FuseConvActivation : public ReplaceWithNew {
  private:
-  // if OpType or Domain are being used on an internal NHWC node keep the op and domain the same to simplify.
-  // this way the Conv implementation in that custom domain can simply support an optional activation attribute,
-  // and we only need one kernel registration.
-  std::string OpType(const RuntimeState& state) const override {
-    return state.selected_nodes.Target().Domain() == kMSInternalNHWCDomain ? "Conv" : "FusedConv";
-  }
+  std::string OpType(const RuntimeState&) const override { return "FusedConv"; }
 
-  std::string Domain(const RuntimeState& state) const override {
-    return state.selected_nodes.Target().Domain() == kMSInternalNHWCDomain ? kMSInternalNHWCDomain : kMSDomain;
-  }
+  std::string Domain(const RuntimeState&) const override { return kMSDomain; }
 
   NodeAttributes ExtraAttributes(const RuntimeState& state) const override {
     NodeAttributes extra_fused_conv_attributes;

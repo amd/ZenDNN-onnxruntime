@@ -110,33 +110,30 @@ std::vector<std::unique_ptr<ComputeCapability>> XnnpackExecutionProvider::GetCap
     if (node.GetExecutionProviderType() == "") {
       // unassigned node. check if we have a kernel registration for it.
       if (KernelRegistry::HasImplementationOf(*registry, node, Type())) {
-        // we have a kernel registration for the operator, and any type constraints that have been satisfied.
-        // if there are additional constraints such as checking values of attributes etc. those should
-        // be checked here.
+        // we have a kernel registration for the operator, and any type constraints have been satisfied.
+        // check other aspects of the node such as the attributes to make sure it is supported.
         request_node = checker.IsNodeSupported(node);
       } else {
         // see if it's an activation we can fuse with a node we support. note that we can only do this after
         // the layout transform so we fuse with the NWHC op that we have the real kernel for.
         if (l2_optimizations_enabled) {
           const Node* fuse_with = checker.IsNodeSupportedWithFusion(node);
-          if (fuse_with) {
-            if (fuse_with->Domain() == kMSInternalNHWCDomain) {
-              // add new MetaDef to existing ComputeCapability.
-              // we know an entry must exist in node_to_compute_capability as we update supported_nodes
-              // when creating the ComputeCapability, and the logic in IsNodeSupportedWithFusion
-              // checks the fuse_with node is in supported_nodes.
-              auto iter = node_to_compute_capability.find(fuse_with);
-              ORT_ENFORCE(iter != node_to_compute_capability.cend(),
-                          "node_to_compute_capability is not is sync with supported_nodes. ");
+          if (fuse_with && fuse_with->Domain() == kMSInternalNHWCDomain) {
+            // add new MetaDef to existing ComputeCapability.
+            // we know an entry must exist in node_to_compute_capability as we update supported_nodes
+            // when creating the ComputeCapability, and the logic in IsNodeSupportedWithFusion
+            // checks the fuse_with node is in supported_nodes.
+            auto iter = node_to_compute_capability.find(fuse_with);
+            ORT_ENFORCE(iter != node_to_compute_capability.cend(),
+                        "node_to_compute_capability is not is sync with supported_nodes. ");
 
-              // update the MetaDef to cover the nodes being fused, add this node, and set HasStaticKernel
-              // so that GraphPartitioner matches the statically registered xnnpack Conv kernel instead of
-              // calling IExecutionProvider::Compile
-              ComputeCapability& capability = *iter->second;
-              capability.sub_graph->SetMetaDef(FuseConvActivation(*fuse_with, node, graph));
-              capability.sub_graph->nodes.push_back(node.Index());
-              capability.sub_graph->HasStaticKernel(true);
-            }
+            // update the MetaDef to cover the nodes being fused, add this node, and set HasStaticKernel
+            // so that GraphPartitioner matches the statically registered xnnpack Conv kernel instead of
+            // calling IExecutionProvider::Compile
+            ComputeCapability& capability = *iter->second;
+            capability.sub_graph->SetMetaDef(FuseConvActivation(*fuse_with, node, graph));
+            capability.sub_graph->nodes.push_back(node.Index());
+            capability.sub_graph->SetHasStaticKernel(true);
           }
         }
       }
@@ -173,7 +170,9 @@ std::vector<std::unique_ptr<ComputeCapability>> XnnpackExecutionProvider::GetCap
         ORT_ENFORCE(node.Domain() == kMSInternalNHWCDomain,
                     "Node is assigned to us but is not the NHWC version of a node we originally asked for.");
       } else {
-        // node we selected in the first call to GetCapability. no need to check if we have a kernel again.
+        // node we selected in the first call to GetCapability that did not require a layout transform.
+        // no need to check if we have a kernel again.
+        // Currently this should not be hit as we have no kernel registrations for layout agnostic operators.
       }
 
       request_node = true;
@@ -193,8 +192,8 @@ std::vector<std::unique_ptr<ComputeCapability>> XnnpackExecutionProvider::GetCap
     }
   }
 
-  // finding nodes to compile can be inserted here and added to the ComputeCapability instances returned.
-  // GraphPartitioner will can handle a mix of static and compiled kernels.
+  // FUTURE: finding nodes to compile can be inserted here and added to the ComputeCapability instances returned.
+  // GraphPartitioner can handle a mix of static and compiled kernels.
 
   return capabilities;
 }

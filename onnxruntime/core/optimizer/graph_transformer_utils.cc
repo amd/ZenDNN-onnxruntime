@@ -212,14 +212,6 @@ InlinedVector<std::unique_ptr<GraphTransformer>> GenerateTransformers(
                                                                             onnxruntime::kAclExecutionProvider,
                                                                             onnxruntime::kArmNNExecutionProvider};
 
-      const InlinedHashSet<std::string_view> cpu_cuda_rocm_acl_armnn_xnnpack_eps =
-          {kCpuExecutionProvider,
-           kCudaExecutionProvider,
-           kRocmExecutionProvider,
-           kAclExecutionProvider,
-           kArmNNExecutionProvider,
-           kXnnpackExecutionProvider};
-
       if (!disable_quant_qdq) {
         // currently we don't support QDQS8ToU8Transformer in a minimal build and if supported, this needs to run in
         // Level 1 during export and not Level 2 at runtime as it would result in overlapping optimizations which

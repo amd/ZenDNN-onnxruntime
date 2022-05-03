@@ -28,16 +28,5 @@ class Conv : public OpKernel {
   std::unique_ptr<Tensor> packed_w_;
 };
 
-
-class InvalidNchwKernel : public OpKernel {
- public:
-  InvalidNchwKernel(const OpKernelInfo& info) : OpKernel(info) {}
-
-  Status Compute(OpKernelContext* /*context*/) const override {
-    ORT_THROW(
-        "Layout transformation in GraphPartitioner should have replaced this node with one in the "
-        "kMSInternalNHWCDomain domain.");
-  }
-};
 }  // namespace internal_testing_ep
 }  // namespace onnxruntime

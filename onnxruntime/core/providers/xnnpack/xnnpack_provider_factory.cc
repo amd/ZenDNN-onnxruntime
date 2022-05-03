@@ -18,8 +18,6 @@ struct XnnpackProviderFactory : IExecutionProviderFactory {
 
 std::unique_ptr<IExecutionProvider> XnnpackProviderFactory::CreateProvider() {
   XnnpackExecutionProviderInfo info{so_, true};
-  // TODO: wire up setting values in `info` if/when needed
-
   return std::make_unique<XnnpackExecutionProvider>(info);
 }
 

@@ -127,13 +127,13 @@ struct ConvAttributes {
     return ValidateInputShape(input->Shape(), weight->Shape());
   }
 
-  Status InferPadAndOutputShape(const TensorShape& input_shape,
-                                const gsl::span<const int64_t>& kernel_shape,
-                                const gsl::span<const int64_t>& strides_p,
-                                const gsl::span<const int64_t>& dilations_p,
-                                ConvPadVector& pads_p,
-                                TensorShapeVector& output_shape,
-                                bool force_symmetric_auto_padding = false) const {
+  Status InferPadsAndOutputShape(const TensorShape& input_shape,
+                                 const gsl::span<const int64_t>& kernel_shape,
+                                 const gsl::span<const int64_t>& strides_p,
+                                 const gsl::span<const int64_t>& dilations_p,
+                                 ConvPadVector& pads_p,
+                                 TensorShapeVector& output_shape,
+                                 bool force_symmetric_auto_padding = false) const {
     size_t rank = input_shape.NumDimensions();
 
     // Make sure all "metadata" containers have the right number of elements

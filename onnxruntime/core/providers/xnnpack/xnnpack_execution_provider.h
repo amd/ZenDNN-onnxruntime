@@ -12,9 +12,8 @@
 namespace onnxruntime {
 struct SessionOptions;
 
-// Information needed to construct Xnnpack execution providers. Stub for future use.
 struct XnnpackExecutionProviderInfo {
-  const SessionOptions* session_options{nullptr};
+  const SessionOptions* session_options{nullptr};  // required if you want fusion of Conv+Activation
   bool create_arena{true};
 
   explicit XnnpackExecutionProviderInfo(const SessionOptions* so = nullptr, bool use_arena = true)

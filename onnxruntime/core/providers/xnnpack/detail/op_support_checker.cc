@@ -81,7 +81,7 @@ bool ConvChecker(const Node& node, const GraphViewer& graph) {
     ProtoHelperNodeContext nc(node);
     OpNodeProtoHelper info(&nc);
 
-    // based on the PR the 'group' value needs to be 1 or C.
+    // 'group' value needs to be 1 or C.
     // the second dim of weight is C/group, so if that == 1, group == C
     int64_t group = 0;
     info.GetAttrOrDefault<int64_t>("group", &group, 1);
@@ -101,8 +101,6 @@ bool ConvChecker(const Node& node, const GraphViewer& graph) {
         // tf2onnx converter doesn't use SAME_LOWER.
         // SAME_UPPER maps to TF SAME padding.
         // TODO: What does PT converter use? We need to support models from PT in mobile.
-        // TODO: Can xnnpack support SAME_LOWER?
-
         auto_pad = StringToAutoPadType(auto_pad_str);
         if (!IsPaddingTypeSupported(auto_pad)) {
           break;

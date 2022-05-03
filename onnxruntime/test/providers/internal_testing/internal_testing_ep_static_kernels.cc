@@ -2,9 +2,10 @@
 // Licensed under the MIT License.
 
 #include "internal_testing_ep_static_kernels.h"
-#include "core/framework/utils.h"
 
+#include "core/framework/utils.h"
 #include "core/providers/cpu/nn/conv_attributes.h"
+#include "core/providers/utils.h"
 
 namespace onnxruntime {
 namespace internal_testing_ep {
@@ -24,14 +25,14 @@ ONNX_OPERATOR_VERSIONED_KERNEL_EX(Conv, kMSInternalNHWCDomain, 1, 10, internal_t
                                   Conv);
 ONNX_OPERATOR_VERSIONED_KERNEL_EX(Conv, kOnnxDomain, 1, 10, internal_testing_ep,
                                   KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<float>()),
-                                  InvalidNchwKernel);
+                                  utils::InvalidNchwKernel);
 
 ONNX_OPERATOR_KERNEL_EX(Conv, kMSInternalNHWCDomain, 11, internal_testing_ep,
                         KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<float>()),
                         Conv);
 ONNX_OPERATOR_KERNEL_EX(Conv, kOnnxDomain, 11, internal_testing_ep,
                         KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<float>()),
-                        InvalidNchwKernel);
+                        utils::InvalidNchwKernel);
 
 //
 // Kernel implementation examples

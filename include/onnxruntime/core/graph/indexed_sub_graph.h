@@ -64,9 +64,8 @@ struct IndexedSubGraph {
     return meta_def_.get();
   }
 
-  IndexedSubGraph& HasStaticKernel(bool value) {
+  void SetHasStaticKernel(bool value) {
     has_static_kernel_ = value;
-    return *this;
   }
 
   // if true, the fused node will use a static kernel so we don't need to call Compile.

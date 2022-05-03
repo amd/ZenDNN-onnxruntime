@@ -185,9 +185,9 @@ Status Conv::Compute(OpKernelContext* context) const {
   TensorShape input_shape = {H, W};
 
   ConvAttributes::ConvPadVector pads(conv_attrs_.pads);
-  ORT_RETURN_IF_ERROR(conv_attrs_.InferPadAndOutputShape(input_shape, kernel_shape_,
-                                                         conv_attrs_.strides, conv_attrs_.dilations, pads,
-                                                         Y_dims));
+  ORT_RETURN_IF_ERROR(conv_attrs_.InferPadsAndOutputShape(input_shape, kernel_shape_,
+                                                          conv_attrs_.strides, conv_attrs_.dilations, pads,
+                                                          Y_dims));
 
   Y_dims.push_back(M_);
   Tensor* Y = context->Output(0, TensorShape(Y_dims));

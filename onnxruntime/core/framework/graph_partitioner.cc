@@ -52,31 +52,6 @@ static void BuildFusedKernelDef(KernelDefBuilder& builder, const IndexedSubGraph
       .Provider(provider_type);
 }
 
-// TODO: Logic in GetCapabilityForEP should replace this as it can (in theory) handle static as well as
-// compiled nodes using kMSInternalNHWCDomain
-//
-/// <summary>
-/// Validate all the layout sensitive nodes which were transformed for current EP and were going to be compiled
-/// are indeed taken by current EP.
-/// If not, then we have a bug. If a node with domain kMSInternalNHWCDomain is left in the graph at this point that
-/// was not going to be handled via a static kernel, graph.Resolve will fail.
-/// </summary>
-/// <param name="graph">Graph to validate</param>
-// static Status ValidateGraphPartitioning(const Graph& graph) {
-//   for (const auto& node : graph.Nodes()) {
-//     if (node.Domain() == kMSInternalNHWCDomain) {
-//       return Status(common::ONNXRUNTIME, common::FAIL,
-//                     "Graph contains an invalid node: " +
-//                         node.Name() + " Op Type: " + node.OpType() + " with domain: " + kMSInternalNHWCDomain +
-//                         ". These are temporary nodes added during layout transformations and are not expected "
-//                         "to remain in the graph post partitioning. This could be a bug in layout transformer, "
-//                         "or in the EP that asked for the node in NHWC format.");
-//     }
-//   }
-//
-//   return Status::OK();
-// }
-
 #if !defined(ORT_MINIMAL_BUILD) || defined(ORT_EXTENDED_MINIMAL_BUILD)
 
 /// <summary>
@@ -458,8 +433,6 @@ static Status PartitionOnnxFormatModelImpl(Graph& graph, bool export_dll, FuncMa
         graph.FinalizeFuseSubGraph(indexed_sub_graph, *node);
       }
     }
-
-    // ORT_RETURN_IF_ERROR(ValidateGraphPartitioning(graph));
   }
 
   // if this is the main graph call Resolve to put the Graph back into a guaranteed good state
@@ -636,8 +609,6 @@ static Status PartitionOrtFormatModelImpl(Graph& graph, FuncManager& func_mgr,
     // now that we're done compiling we can remove the original nodes from the Graph and wire in the new one
     graph.FinalizeFuseSubGraph(indexed_sub_graph, node);
   }
-
-  // ORT_RETURN_IF_ERROR(ValidateGraphPartitioning(graph));
 
   return Status::OK();
 }

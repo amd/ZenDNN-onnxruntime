@@ -241,7 +241,7 @@ TEST(InternalTestingEP, TestNhwcConversionOfStaticKernels) {
                                    "Status Message: TODO: add NHWC implementation here."));
 }
 
-// TEMPORARY hack to run via the Xnnpack EP stub
+// TEMPORARY hack to run a real model using via the Xnnpack EP 
 #ifdef USE_XNNPACK
 static void XnnpackEPTest(bool use_xnnpack) {
   const ORTCHAR_T* ort_model_path = ORT_MODEL_FOLDER "TEMP/example_model.onnx";
