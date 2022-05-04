@@ -130,8 +130,11 @@ const Node* ClipReluChecker(const Node& node,
       break;
     }
 
+    // must be NHWC Conv in the supported nodes
     const Node& input0 = input0_edge->GetNode();
-    if (input0.OpType() != "Conv" || supported_nodes.count(&input0) == 0) {
+    if (supported_nodes.count(&input0) == 0 ||
+        input0.OpType() != "Conv" ||
+        input0.Domain() != kMSInternalNHWCDomain) {
       break;
     }
 

@@ -3849,15 +3849,14 @@ Node& Graph::CreateFusedSubGraphNode(const IndexedSubGraph& sub_graph, const std
   // need to create the schema.
   //
   // If the fusion is going to use an existing static kernel registration the required schema should already exist.
-  if (sub_graph.HasStaticKernel() == false) {
+  fused_node.SetSinceVersion(func_meta_def->since_version);
+  if (sub_graph.UseExistingSchema()) {
+    SetOpSchemaFromRegistryForNode(fused_node);
+  } else {
     auto temp_schema_ptr = function_utils::CreateSchema(*this, sub_graph);
     fused_schemas_containers_.push_back(std::move(temp_schema_ptr));
     fused_node.op_ = fused_schemas_containers_.back().get();
-    fused_node.SetSinceVersion(fused_node.op_->SinceVersion());
-  } else {
-    fused_node.SetSinceVersion(func_meta_def->since_version);
   }
-
 #endif
   return fused_node;
 }

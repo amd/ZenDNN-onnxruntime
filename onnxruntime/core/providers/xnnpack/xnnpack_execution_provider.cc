@@ -118,7 +118,7 @@ std::vector<std::unique_ptr<ComputeCapability>> XnnpackExecutionProvider::GetCap
         // the layout transform so we fuse with the NWHC op that we have the real kernel for.
         if (l2_optimizations_enabled) {
           const Node* fuse_with = checker.IsNodeSupportedWithFusion(node);
-          if (fuse_with && fuse_with->Domain() == kMSInternalNHWCDomain) {
+          if (fuse_with) {
             // add new MetaDef to existing ComputeCapability.
             // we know an entry must exist in node_to_compute_capability as we update supported_nodes
             // when creating the ComputeCapability, and the logic in IsNodeSupportedWithFusion
@@ -127,54 +127,20 @@ std::vector<std::unique_ptr<ComputeCapability>> XnnpackExecutionProvider::GetCap
             ORT_ENFORCE(iter != node_to_compute_capability.cend(),
                         "node_to_compute_capability is not is sync with supported_nodes. ");
 
-            // update the MetaDef to cover the nodes being fused, add this node, and set HasStaticKernel
-            // so that GraphPartitioner matches the statically registered xnnpack Conv kernel instead of
+            // update the MetaDef to cover the nodes being fused.
+            // the fused node will have OpType:'Conv' and Domain:kMSInternalNHWCDomain.
+            // GraphPartitioner will match the statically registered xnnpack NHWC Conv kernel instead of
             // calling IExecutionProvider::Compile
             ComputeCapability& capability = *iter->second;
             capability.sub_graph->SetMetaDef(FuseConvActivation(*fuse_with, node, graph));
             capability.sub_graph->nodes.push_back(node.Index());
-            capability.sub_graph->SetHasStaticKernel(true);
+            capability.sub_graph->SetUseExistingSchema(true);
           }
         }
       }
     } else if (node.GetExecutionProviderType() == Type()) {
-      if (node.Op() == nullptr) {
-        // node is assigned to us but the operator has no schema.
-        //
-        // it must have come from the NHWC transform if it is a layout sensitive op because...
-        //
-        // Graph::Resolve is not called after layout transform so that layout transform works in the minimal build.
-        // Due to that a node we asked for that just had the layout changed to NHWC will have a nullptr for Op().
-        //     Side note: Layout transform maintains edges and update shapes, so the graph should still be valid
-        //                and the node should have valid type/shape info.
-        //
-        // We can't do a kernel registry lookup here as that requires the schema returned by Op().
-        //     Side note: Whilst we _could_ update GraphPartitioner's GetCapabilityForEP implementation to call
-        //                Graph::SetOpSchemaFromRegistryForNode to set Op() if a schema for the NHWC op existed,
-        //                we can only do that in a full build, so it's not a general purpose solution.
-        //
-        // However, we shouldn't need to do the kernel registry lookup:
-        //   The sequence of calls is
-        //      GetCapability ->
-        //      layout transform for layout sensitive ops in that set of nodes ->
-        //      GetCapability
-        //
-        //   Any node that does NOT have an Op() that is assigned to us can only be seen in the second call to
-        //   GetCapability, and should only be a layout sensitive op.
-        //
-        // So provided we only returned layout sensitive nodes in the first call to GetCapability for which we have
-        // an NHWC kernel, we can infer that we support the replacement node.
-        //
-        // IMPORTANT NOTE: We will have a hard requirement on the new approach to enable kernel matching at runtime
-        //                 in a minimal build.
-        ORT_ENFORCE(node.Domain() == kMSInternalNHWCDomain,
-                    "Node is assigned to us but is not the NHWC version of a node we originally asked for.");
-      } else {
-        // node we selected in the first call to GetCapability that did not require a layout transform.
-        // no need to check if we have a kernel again.
-        // Currently this should not be hit as we have no kernel registrations for layout agnostic operators.
-      }
-
+      // second call to GetCapability after layout changes.
+      // as we requested the node in the first call, it should be supported in the second call
       request_node = true;
     } else {
       // node belongs to another EP

@@ -25,7 +25,6 @@
 namespace onnxruntime {
 namespace internal_testing_ep {
 
-// unique name used in allocator
 constexpr const char* INTERNAL_TESTING_EP = "InternalTestingEP";
 
 InternalTestingExecutionProvider::InternalTestingExecutionProvider(const std::unordered_set<std::string>& ops,
@@ -69,12 +68,14 @@ InternalTestingExecutionProvider::GetCapability(const onnxruntime::GraphViewer& 
                   const Node* node = graph_viewer.GetNode(node_index);
                   bool supported = ops_.count(node->OpType()) != 0;
                   if (supported) {
-                    // hack to
-                    if (node->OpType() == "Conv" && enable_static_kernels_) {
-                      supported_static_nodes.insert(node);
-                    } else {
-                      supported_compiled_nodes.insert(node);
+                    if (enable_static_kernels_) {
+                      if (node->OpType() == "Conv") {
+                        supported_static_nodes.insert(node);
+                      }
                     }
+
+                    // all kernels can potentially be compiled
+                    supported_compiled_nodes.insert(node);
                   }
                 });
 
@@ -303,8 +304,12 @@ std::unique_ptr<KernelRegistry> RegisterKernels() {
 }
 
 std::shared_ptr<KernelRegistry> InternalTestingExecutionProvider::GetKernelRegistry() const {
-  static std::shared_ptr<KernelRegistry> registry = RegisterKernels();
-  return registry;
+  if (enable_static_kernels_) {
+    static std::shared_ptr<KernelRegistry> registry = RegisterKernels();
+    return registry;
+  }
+
+  return nullptr;
 }
 
 }  // namespace internal_testing_ep

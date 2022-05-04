@@ -239,12 +239,13 @@ static Node* PlaceNode(Graph& graph, const IndexedSubGraph& capability,
 
         fused_node->SetExecutionProviderType(provider_type);
 
-        // if the fused node has a static kernel we need to return it to finalize fusion. in this case there's no
-        // op schema in the fused_node so we can't do kernel lookup.
-        // otherwise we search the kernel registries and if no kernel is registered for the fused_node we
-        // set result to the fused_node to use the Compile approach.
-        if (capability.HasStaticKernel() ||
-            !KernelRegistryManager::HasImplementationOf(kernel_registry_mgr, *fused_node, provider_type)) {
+        // if we have a static kernel we don't need to compile the node and can return nullptr
+        if (KernelRegistryManager::HasImplementationOf(kernel_registry_mgr, *fused_node, provider_type)) {
+          if (fusion_style == IExecutionProvider::FusionStyle::FilteredGraphViewer) {
+            // remove the original nodes from the Graph and wire in the new one
+            graph.FinalizeFuseSubGraph(capability, *fused_node);
+          }
+        } else {
           result = fused_node;
         }
       } else {
@@ -332,19 +333,8 @@ static Status PartitionOnnxFormatModelImpl(Graph& graph, bool export_dll, FuncMa
     const IndexedSubGraph& sub_graph = *capability->sub_graph;
     Node* n = PlaceNode(graph, sub_graph, kernel_registry_mgr, type, fusion_style, mode, fused_node_unique_id);
     if (n != nullptr) {
-      // if this node is using an existing static kernel we can finalize things now as no compile is needed
-      if (sub_graph.HasStaticKernel()) {
-        // it doesn't make sense to be using the Function based fusion style if you're matching a static kernel.
-        // this would be hit during EP development so just `assert` so we don't pay any cost for this check in
-        // a release build
-        assert(fusion_style == IExecutionProvider::FusionStyle::FilteredGraphViewer);
-
-        // remove the original nodes from the Graph and wire in the new one
-        graph.FinalizeFuseSubGraph(sub_graph, *n);
-      } else {
-        nodes_to_compile.push_back(n);
-        capabilities_to_compile.push_back(std::move(capability));
-      }
+      nodes_to_compile.push_back(n);
+      capabilities_to_compile.push_back(std::move(capability));
     }
   }
 

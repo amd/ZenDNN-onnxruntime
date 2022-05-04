@@ -64,17 +64,17 @@ struct IndexedSubGraph {
     return meta_def_.get();
   }
 
-  void SetHasStaticKernel(bool value) {
-    has_static_kernel_ = value;
+  void SetUseExistingSchema(bool value) {
+    use_existing_schema_ = value;
   }
 
-  // if true, the fused node will use a static kernel so we don't need to call Compile.
-  bool HasStaticKernel() const { return has_static_kernel_; }
+  // a schema registration exists for the fused MetaDef.domain + MetaDef.name operator
+  bool UseExistingSchema() const { return use_existing_schema_; }
 
  private:
   // subgraph meta definition.
   std::unique_ptr<MetaDef> meta_def_;
-  bool has_static_kernel_{false};
+  bool use_existing_schema_{false};
 };
 
 }  // namespace onnxruntime
