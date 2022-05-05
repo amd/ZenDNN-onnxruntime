@@ -37,7 +37,6 @@ class Conv : public OpKernel {
   std::optional<std::pair<float, float>> clip_min_max_;
 
   XnnpackOperator op0_ = nullptr;
-  AllocatorPtr cpu_allocator_;
 };
 
 }  // namespace xnnpack

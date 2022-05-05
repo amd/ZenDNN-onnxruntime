@@ -74,7 +74,7 @@ InternalTestingExecutionProvider::GetCapability(const onnxruntime::GraphViewer& 
                       }
                     }
 
-                    // all kernels can potentially be compiled
+                    // all kernels can potentially be compiled in this test setup
                     supported_compiled_nodes.insert(node);
                   }
                 });
@@ -151,6 +151,12 @@ InternalTestingExecutionProvider::GetCapability(const onnxruntime::GraphViewer& 
         std::unique_ptr<IndexedSubGraph> sub_graph = std::make_unique<IndexedSubGraph>();
         sub_graph->nodes.push_back(node->Index());
         static_capabilities.push_back(std::make_unique<ComputeCapability>(std::move(sub_graph)));
+
+        // in this simple example setup we prefer static kernels over compiled nodes as that's easier to work with
+        // for unit tests.
+        // most likely a 'real' EP that had both would reverse the order and look for groups of nodes to compile first,
+        // and remove those from supported_static_nodes before checking for nodes with static kernels.
+        supported_compiled_nodes.erase(node);
       }
     }
   }
@@ -203,7 +209,6 @@ common::Status InternalTestingExecutionProvider::Compile(const std::vector<Fused
       const GraphViewer& graph_viewer = node_and_viewer.filtered_graph;
       auto layout_sensitive_ops = layout_transformer::GetORTLayoutSensitiveOps();
       for (const auto& unfused_node : graph_viewer.Nodes()) {
-        std::cout << unfused_node.OpType() << std::endl;
         if (layout_sensitive_ops.count(unfused_node.OpType()) && unfused_node.Domain() != kMSInternalNHWCDomain) {
           return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL,
                                  "Found a layout sensitive op which is still in NCHW format. Node: ",

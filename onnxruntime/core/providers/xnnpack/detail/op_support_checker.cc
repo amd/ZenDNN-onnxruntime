@@ -10,6 +10,7 @@
 #include "core/graph/graph_viewer.h"
 #include "core/graph/graph_utils.h"
 #include "core/providers/common.h"
+#include "core/providers/cpu/nn/pool_attributes.h"
 
 namespace onnxruntime {
 namespace xnnpack {
@@ -55,9 +56,7 @@ bool ConvChecker(const Node& node, const GraphViewer& graph) {
       break;
     }
 
-    // for simplicity require C, H, W to be known. this allows creation of the xnnpack kernel in the Conv ctor.
-    // otherwise we would have to delay it to the first call to Compute.
-    // C/H/W should be known upfront anyway so this isn't expected to fail
+    // require C, H, W to be known so we can construct the xnnpack kernel prior to Compute
     if (!x_shape->dim(1).has_dim_value() ||
         !x_shape->dim(2).has_dim_value() ||
         !x_shape->dim(3).has_dim_value()) {
@@ -114,6 +113,61 @@ bool ConvChecker(const Node& node, const GraphViewer& graph) {
   return supported;
 }
 
+bool MaxPoolChecker(const Node& node, const GraphViewer& /*graph*/) {
+  bool supported = false;
+
+  // use do {} while(false) so it's easier to set a breakpoint on the return
+  do {
+    // MaxPool has 1 input.
+    auto input_defs = node.InputDefs();
+    const auto& x_arg = *input_defs[0];
+
+    // we only support 2D (4 dims with batch and channel)
+    const auto* x_shape = x_arg.Shape();
+    if (!x_shape || x_shape->dim_size() != 4) {
+      break;
+    }
+
+    // require C, H, W to be known so we can construct the xnnpack kernel prior to Compute
+    if (!x_shape->dim(1).has_dim_value() ||
+        !x_shape->dim(2).has_dim_value() ||
+        !x_shape->dim(3).has_dim_value()) {
+      break;
+    }
+
+    // we don't support creating the optional 'I' output
+    const auto& output_defs = node.OutputDefs();
+    if (output_defs.size() == 2 && output_defs[1]->Exists()) {
+      break;
+    }
+
+    ProtoHelperNodeContext nc(node);
+    OpNodeProtoHelper info(&nc);
+    PoolAttributes pool_attrs(info, "MaxPool", node.SinceVersion());
+
+    // xnnpack doesn't appear to support using 'ceil' to calculate the output shape
+    // https://github.com/google/XNNPACK/blob/3caa8b9de973839afa1e2a1462ff356e6927a66b/src/operators/max-pooling-nhwc.c#L256
+    // calls compute_output_dimension but there's no ability to specify rounding that value up.
+    if (pool_attrs.ceil_mode != 0) {
+      break;
+    }
+
+    if (!IsPaddingTypeSupported(pool_attrs.auto_pad)) {
+      break;
+    }
+
+    if ((pool_attrs.kernel_shape.size() != 2) ||
+        (pool_attrs.kernel_shape[0] == 1 && pool_attrs.kernel_shape[1] == 1)) {
+      // XNNPack doesn't support 1x1 maxpool.
+      break;
+    }
+
+    supported = true;
+  } while (false);
+
+  return supported;
+}
+
 const Node* ClipReluChecker(const Node& node,
                             const GraphViewer& graph,
                             const std::unordered_set<const Node*>& supported_nodes) {
@@ -130,11 +184,11 @@ const Node* ClipReluChecker(const Node& node,
       break;
     }
 
-    // must be NHWC Conv in the supported nodes
+    // must be NHWC Conv or MaxPool in the supported nodes
     const Node& input0 = input0_edge->GetNode();
     if (supported_nodes.count(&input0) == 0 ||
-        input0.OpType() != "Conv" ||
-        input0.Domain() != kMSInternalNHWCDomain) {
+        input0.Domain() != kMSInternalNHWCDomain ||
+        (input0.OpType() != "Conv" && input0.OpType() != "MaxPool")) {
       break;
     }
 
@@ -169,6 +223,7 @@ const Node* ClipReluChecker(const Node& node,
 bool NodeSupportChecker::IsNodeSupported(const Node& node) {
   static std::unordered_map<std::string, CheckerFn> checkers{
       {"Conv", ConvChecker},
+      {"MaxPool", MaxPoolChecker},
   };
 
   const auto entry = checkers.find(node.OpType());
@@ -182,8 +237,8 @@ bool NodeSupportChecker::IsNodeSupported(const Node& node) {
 
 const Node* NodeSupportChecker::IsNodeSupportedWithFusion(const Node& node) {
   static std::unordered_map<std::string, FuseCheckerFn> checkers{
-      {"Clip", ClipReluChecker},  // testing fusion of Conv+Activation with min/max
-      {"Relu", ClipReluChecker},  // testing fusion of Conv+Activation
+      {"Clip", ClipReluChecker},  // fusion of Conv+Clip or MaxPool+Clip
+      {"Relu", ClipReluChecker},  // fusion of Conv+Relu or MaxPool+Relu
   };
 
   const Node* fuse_with{nullptr};

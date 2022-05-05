@@ -1455,6 +1455,9 @@ if (onnxruntime_USE_XNNPACK)
   file(GLOB_RECURSE onnxruntime_providers_xnnpack_cc_srcs
     "${ONNXRUNTIME_ROOT}/core/providers/xnnpack/*.h"
     "${ONNXRUNTIME_ROOT}/core/providers/xnnpack/*.cc"
+    # utils for handling QDQ models
+    "${ONNXRUNTIME_ROOT}/core/providers/shared/node_unit/node_unit.h"
+    "${ONNXRUNTIME_ROOT}/core/providers/shared/node_unit/node_unit.cc"
   )
 
   source_group(TREE ${ONNXRUNTIME_ROOT}/core FILES ${onnxruntime_providers_xnnpack_cc_srcs})

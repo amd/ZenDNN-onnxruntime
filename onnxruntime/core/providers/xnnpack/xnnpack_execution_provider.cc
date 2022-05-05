@@ -8,6 +8,7 @@
 #include "core/framework/compute_capability.h"
 #include "core/framework/kernel_registry.h"
 #include "core/framework/session_options.h"
+#include "core/providers/shared/node_unit/node_unit.h"
 
 #include <xnnpack.h>
 
@@ -20,25 +21,54 @@ KernelCreateInfo BuildKernelCreateInfo<void>() {
   return info;
 }
 
-// NCHW stubs
-class ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kOnnxDomain, 1, 10, Conv);
-class ONNX_OPERATOR_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kOnnxDomain, 11, Conv);
+// define the class name for the NCHW stub and the 'real' NHWC kernel. same for the BuildKernelCreateInfo entries.
+//
+// NOTE: If KernelRegistry::HasImplementationOf supported overriding Node.Domain() we wouldn't need to have a dummy
+//       registration in the ONNX domain as we could call HasImplementationOf to match the kernel kMSInternalNHWCDomain
+//       in GetCapability. The NHWC schema is copied from the ONNX schema, so all the values relevant to kernel
+//       matching are the same.
+#define VERSIONED_KERNEL_CLASS_NAME(Start, End, Op)                                                        \
+  class ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kOnnxDomain, Start, End, Op); \
+  class ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, Start, End, Op)
 
-// NHWC 'real' kernels
-class ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, 1, 10, Conv);
-class ONNX_OPERATOR_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, 11, Conv);
+#define KERNEL_CLASS_NAME(Start, Op)                                                        \
+  class ONNX_OPERATOR_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kOnnxDomain, Start, Op); \
+  class ONNX_OPERATOR_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, Start, Op)
+
+#define KERNEL_CREATE_INFO_VERSIONED(Start, End, Op)                                                      \
+  BuildKernelCreateInfo<                                                                                  \
+      ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kOnnxDomain, Start, End, Op)>, \
+      BuildKernelCreateInfo<                                                                              \
+          ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, Start, End, Op)>
+
+#define KERNEL_CREATE_INFO(Start, Op)                                                      \
+  BuildKernelCreateInfo<                                                                   \
+      ONNX_OPERATOR_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kOnnxDomain, Start, Op)>, \
+      BuildKernelCreateInfo<                                                               \
+          ONNX_OPERATOR_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, Start, Op)>
+
+VERSIONED_KERNEL_CLASS_NAME(1, 10, Conv);
+KERNEL_CLASS_NAME(11, Conv);
+
+VERSIONED_KERNEL_CLASS_NAME(1, 7, MaxPool);
+VERSIONED_KERNEL_CLASS_NAME(8, 9, MaxPool);
+VERSIONED_KERNEL_CLASS_NAME(10, 10, MaxPool);
+VERSIONED_KERNEL_CLASS_NAME(11, 11, MaxPool);
+KERNEL_CLASS_NAME(12, MaxPool);
 
 std::unique_ptr<KernelRegistry> RegisterKernels() {
   auto kernel_registry = std::make_unique<onnxruntime::KernelRegistry>();
 
   static const BuildKernelCreateInfoFn function_table[] = {
       BuildKernelCreateInfo<void>,  // default entry to avoid the list become empty after ops-reducing
-      // orig NCHW ops with dummy kernel
-      BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kOnnxDomain, 1, 10, Conv)>,
-      BuildKernelCreateInfo<ONNX_OPERATOR_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kOnnxDomain, 11, Conv)>,
-      // 'real' NHWC kernels
-      BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, 1, 10, Conv)>,
-      BuildKernelCreateInfo<ONNX_OPERATOR_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWCDomain, 11, Conv)>,
+      KERNEL_CREATE_INFO_VERSIONED(1, 10, Conv),
+      KERNEL_CREATE_INFO(11, Conv),
+
+      KERNEL_CREATE_INFO_VERSIONED(1, 7, MaxPool),
+      KERNEL_CREATE_INFO_VERSIONED(8, 9, MaxPool),
+      KERNEL_CREATE_INFO_VERSIONED(10, 10, MaxPool),
+      KERNEL_CREATE_INFO_VERSIONED(11, 11, MaxPool),
+      KERNEL_CREATE_INFO(12, MaxPool),
   };
 
   for (auto& function_table_entry : function_table) {
@@ -97,10 +127,23 @@ std::vector<std::unique_ptr<ComputeCapability>> XnnpackExecutionProvider::GetCap
 
   std::unordered_map<const Node*, ComputeCapability*> node_to_compute_capability;
 
+  // Get all the NodeUnits in the GraphViewer so we can check if something is in a QDQ node group
+  std::vector<std::unique_ptr<NodeUnit>> node_unit_holder;
+  std::unordered_map<const Node*, const NodeUnit*> node_unit_map;
+  std::tie(node_unit_holder, node_unit_map) = GetAllNodeUnits(graph);
+
   // handle any nodes we have a static kernel for.
   for (NodeIndex idx : graph.GetNodesInTopologicalOrder()) {
     const Node* n = graph.GetNode(idx);
     if (n == nullptr) {
+      continue;
+    }
+
+    // node is part of a QDQ group. when we implement support for quantized ops we could potentially handle the
+    // QDQ group. until then we have to leave it as-is otherwise we'll make performance worse.
+    // e.g. If we took the MaxPool from DQ -> MaxPool -> Q we are forcing it to run in fp32 instead of allowing a QDQ
+    // aware EP to convert the group into a single quantized MaxPool node.
+    if (node_unit_map[n]->UnitType() == NodeUnit::Type::QDQGroup) {
       continue;
     }
 
@@ -115,7 +158,7 @@ std::vector<std::unique_ptr<ComputeCapability>> XnnpackExecutionProvider::GetCap
         request_node = checker.IsNodeSupported(node);
       } else {
         // see if it's an activation we can fuse with a node we support. note that we can only do this after
-        // the layout transform so we fuse with the NWHC op that we have the real kernel for.
+        // the layout transform as we need to fuse with the NWHC op that we have the real kernel for.
         if (l2_optimizations_enabled) {
           const Node* fuse_with = checker.IsNodeSupportedWithFusion(node);
           if (fuse_with) {
@@ -140,7 +183,7 @@ std::vector<std::unique_ptr<ComputeCapability>> XnnpackExecutionProvider::GetCap
       }
     } else if (node.GetExecutionProviderType() == Type()) {
       // second call to GetCapability after layout changes.
-      // as we requested the node in the first call, it should be supported in the second call
+      // as we requested the node in the first call, it should be supported in the second call.
       request_node = true;
     } else {
       // node belongs to another EP
