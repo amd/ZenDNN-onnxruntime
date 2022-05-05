@@ -17,7 +17,6 @@
 
 #include <queue>
 
-// TEST
 #include "core/framework/op_kernel.h"
 #include "core/framework/kernel_registry.h"
 #include "internal_testing_ep_static_kernels.h"  // for BuildKernelCreateInfo declaration
@@ -25,13 +24,13 @@
 namespace onnxruntime {
 namespace internal_testing_ep {
 
-// unique name used in allocator
 constexpr const char* INTERNAL_TESTING_EP = "InternalTestingEP";
 
 InternalTestingExecutionProvider::InternalTestingExecutionProvider(const std::unordered_set<std::string>& ops,
                                                                    const std::unordered_set<std::string>& stop_ops,
                                                                    DataLayout preferred_layout)
     : IExecutionProvider{utils::kInternalTestingExecutionProvider, true},
+      ep_name_{INTERNAL_TESTING_EP},
       ops_{ops},
       stop_ops_{stop_ops},
       preferred_layout_{preferred_layout} {
@@ -59,19 +58,28 @@ std::vector<std::unique_ptr<ComputeCapability>>
 InternalTestingExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph_viewer,
                                                 const std::vector<const KernelRegistry*>& /*registries*/) const {
   // find nodes that have ops in our supported list
-  std::unordered_set<const Node*> supported_nodes;
+  std::unordered_set<const Node*> supported_static_nodes;
+  std::unordered_set<const Node*> supported_compiled_nodes;
 
   const auto& topo_nodes = graph_viewer.GetNodesInTopologicalOrder();
   std::for_each(topo_nodes.cbegin(), topo_nodes.cend(),
-                [this, &supported_nodes, &graph_viewer](NodeIndex node_index) {
+                [&, this](NodeIndex node_index) {
                   const Node* node = graph_viewer.GetNode(node_index);
                   bool supported = ops_.count(node->OpType()) != 0;
                   if (supported) {
-                    supported_nodes.insert(node);
+                    if (enable_static_kernels_) {
+                      // we have a static kernel for Conv
+                      if (node->OpType() == "Conv") {
+                        supported_static_nodes.insert(node);
+                      }
+                    }
+
+                    // all kernels can potentially be compiled in this test setup
+                    supported_compiled_nodes.insert(node);
                   }
                 });
 
-  if (supported_nodes.empty()) {
+  if (supported_static_nodes.empty() && supported_compiled_nodes.empty()) {
     return {};
   }
 
@@ -82,7 +90,7 @@ InternalTestingExecutionProvider::GetCapability(const onnxruntime::GraphViewer& 
     auto registry = GetKernelRegistry();
 
     // handle any supported nodes we have a static kernel for
-    for (const Node* node : supported_nodes) {
+    for (const Node* node : supported_static_nodes) {
       bool request_node = false;
       if (node->GetExecutionProviderType() == "") {
         // unassigned node. check if we have a kernel registration for it.
@@ -93,42 +101,8 @@ InternalTestingExecutionProvider::GetCapability(const onnxruntime::GraphViewer& 
           request_node = true;
         }
       } else if (node->GetExecutionProviderType() == Type()) {
-        if (node->Op() == nullptr) {
-          // node is assigned to us but the operator has no schema.
-          //
-          // it must have come from the NHWC transform if it is a layout sensitive op because...
-          //
-          // Graph::Resolve is not called after layout transform so that layout transform works in the minimal build.
-          //     Side note: Layout transform maintains edges and update shapes, so the graph should still be valid
-          //                and the node should have valid type/shape info.
-          //
-          // Due to that a node we asked for that just had the layout changed to NHWC will have a nullptr for Op().
-          //
-          // We can't do a kernel registry lookup here as that requires the schema returned by Op().
-          //     Side note: Whilst we _could_ update GraphPartitioner's GetCapabilityForEP implementation to call
-          //                Graph::SetOpSchemaFromRegistryForNode to set Op() if a schema for the NHWC op existed,
-          //                we can only do that in a full build, so it's not a general purpose solution.
-          //
-          // However, we shouldn't need to do the kernel registry lookup:
-          //   The sequence of calls is
-          //      GetCapability ->
-          //      layout transform for layout sensitive ops in that set of nodes ->
-          //      GetCapability
-          //
-          //   Any node that does NOT have an Op() that is assigned to us can only be seen in the second call to
-          //   GetCapability, and should only be a layout sensitive op.
-          //
-          // So provided we only returned layout sensitive nodes in the first call to GetCapability for which we have
-          // an NHWC kernel, we can infer that we support the replacement node.
-          //
-          // IMPORTANT NOTE: We will have a hard requirement on the new approach to enable kernel matching at runtime
-          //                 in a minimal build.
-          ORT_ENFORCE(node->Domain() == kMSInternalNHWCDomain,
-                      "Node is assigned to us but is not the NHWC version of a node we originally asked for.");
-        } else {
-          // node we selected in the first call to GetCapability. no need to check if we have a kernel again.
-        }
-
+        // node we selected in the first call to GetCapability. if it was layout sensitive it is now in the
+        // kMSInternalNHWCDomain domain
         request_node = true;
       } else {
         // node belongs to another EP
@@ -136,19 +110,19 @@ InternalTestingExecutionProvider::GetCapability(const onnxruntime::GraphViewer& 
       }
 
       if (request_node) {
-        // create a ComputeCapability for the individual node. The kernel lookup will happen during SessionState
-        // finalization.
+        // create a ComputeCapability for the individual node.
         nodes_with_static_kernels.insert(node);
 
         std::unique_ptr<IndexedSubGraph> sub_graph = std::make_unique<IndexedSubGraph>();
         sub_graph->nodes.push_back(node->Index());
         static_capabilities.push_back(std::make_unique<ComputeCapability>(std::move(sub_graph)));
-      }
-    }
 
-    // we have static kernels so remove from supported_nodes so we don't attempt to also compile
-    for (const Node* node : nodes_with_static_kernels) {
-      supported_nodes.erase(node);
+        // in this simple example setup we prefer static kernels over compiled nodes as that's easier to work with
+        // for unit tests.
+        // most likely a 'real' EP that had both would reverse the order and look for groups of nodes to compile first,
+        // and remove those from supported_static_nodes before checking for nodes with static kernels.
+        supported_compiled_nodes.erase(node);
+      }
     }
   }
 
@@ -176,7 +150,7 @@ InternalTestingExecutionProvider::GetCapability(const onnxruntime::GraphViewer& 
     return ep_name_ + "_" + std::to_string(model_hash) + "_" + std::to_string(metadef_id);
   };
 
-  auto compile_capabilities = utils::CreateSupportedPartitions(graph_viewer, supported_nodes, stop_ops_,
+  auto compile_capabilities = utils::CreateSupportedPartitions(graph_viewer, supported_compiled_nodes, stop_ops_,
                                                                generate_metadef_name, ep_name_,
                                                                onnxruntime::utils::kInternalTestingExecutionProvider,
                                                                debug_output_);
@@ -200,7 +174,6 @@ common::Status InternalTestingExecutionProvider::Compile(const std::vector<Fused
       const GraphViewer& graph_viewer = node_and_viewer.filtered_graph;
       auto layout_sensitive_ops = layout_transformer::GetORTLayoutSensitiveOps();
       for (const auto& unfused_node : graph_viewer.Nodes()) {
-        std::cout << unfused_node.OpType() << std::endl;
         if (layout_sensitive_ops.count(unfused_node.OpType()) && unfused_node.Domain() != kMSInternalNHWCDomain) {
           return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL,
                                  "Found a layout sensitive op which is still in NCHW format. Node: ",
@@ -281,7 +254,7 @@ std::unique_ptr<KernelRegistry> RegisterKernels() {
   auto kernel_registry = std::make_unique<onnxruntime::KernelRegistry>();
 
   static const BuildKernelCreateInfoFn function_table[] = {
-      BuildKernelCreateInfo<void>,  // default entry to avoid the list become empty after ops-reducing
+      BuildKernelCreateInfo<void>,  // default entry to avoid the list becoming empty after ops-reducing
       // orig NCHW ops with dummy kernel
       BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(internal_testing_ep, kOnnxDomain, 1, 10, Conv)>,
       BuildKernelCreateInfo<ONNX_OPERATOR_KERNEL_CLASS_NAME(internal_testing_ep, kOnnxDomain, 11, Conv)>,
@@ -301,8 +274,12 @@ std::unique_ptr<KernelRegistry> RegisterKernels() {
 }
 
 std::shared_ptr<KernelRegistry> InternalTestingExecutionProvider::GetKernelRegistry() const {
-  static std::shared_ptr<KernelRegistry> registry = RegisterKernels();
-  return registry;
+  if (enable_static_kernels_) {
+    static std::shared_ptr<KernelRegistry> registry = RegisterKernels();
+    return registry;
+  }
+
+  return nullptr;
 }
 
 }  // namespace internal_testing_ep

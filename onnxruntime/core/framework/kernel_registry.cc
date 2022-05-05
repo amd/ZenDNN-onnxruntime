@@ -32,9 +32,9 @@ bool TraverseFormalParametersWithTypeProto(const Node& node,
                                            TraverseFn traverse_fn) {
   const ONNX_NAMESPACE::OpSchema& op_schema = *node.Op();
 
-  // was the param name matched in either inputs, outputs or type constraints.
+  // was the param name matched in either inputs, outputs or type constraints. 
   // this validates the name was valid and that the type involved will be returned if available.
-  // if the name is invalid we do not return a type, and any applicable type constraint can not be applied
+  // if the name is invalid we do not return a type, and any applicable type constraint can not be applied 
   // in VerifyKernelDef.
   bool matched = false;
 
@@ -110,7 +110,7 @@ class TypeBindingResolver {
   // being used by the node. e.g. if type constraint 'T' allows float and double, any input or output for that node
   // that has constraint 'T' must use the same type, be that float or double.
   //
-  // Also can resolve an input/output name to a contraint when a type constraint name is not used.
+  // Also can resolve an input/output name to a constraint when a type constraint name is not used.
   // e.g. the 'shape' input of Reshape has a directly specified constraint of 'tensor(int64)'.
   //
   // Returns the resolved TypeProto* or nullptr if unable to resolve due to the
@@ -187,9 +187,7 @@ bool KernelRegistry::VerifyKernelDef(const Node& node,
   // so kernel_def Since(6) will become invalid now.
   // After ONNX add "until version" on the schema object, we will update this place
   bool valid_version = kernel_start_version == node_since_version  // the idea case this branch should be kernel_start_version >= node_version && kernel_start_version <= until_version
-                       || (kernel_start_version < node_since_version &&
-                           kernel_end_version != INT_MAX &&
-                           kernel_end_version >= node_since_version);
+                       || (kernel_start_version < node_since_version && kernel_end_version != INT_MAX && kernel_end_version >= node_since_version);
   if (!valid_version) {
     std::ostringstream ostr;
     ostr << "Op with name (" << node.Name() << ")"
@@ -316,6 +314,35 @@ Status KernelRegistry::TryFindKernel(const Node& node,
   }
 
   return Status(common::ONNXRUNTIME, common::FAIL, "Kernel not found");
+}
+
+Status KernelRegistry::TryFindKernel(const std::string& op_name, const std::string& domain, const int& version,
+                                     const std::unordered_map<std::string, MLDataType>& type_constraints,
+                                     ProviderType exec_provider, const KernelCreateInfo** out) const {
+  *out = nullptr;
+  auto range = kernel_creator_fn_map_.equal_range(GetMapKey(op_name, domain, exec_provider));
+  for (auto i = range.first; i != range.second; ++i) {  //loop through all kernels
+    const KernelCreateInfo& kci = i->second;
+    int start_ver{};
+    int end_ver{};
+    kci.kernel_def->SinceVersion(&start_ver, &end_ver);
+    if (start_ver <= version && end_ver >= version) {  //try match the version
+      auto& kci_constraints = kci.kernel_def->TypeConstraints();
+      bool match = true;
+      for (auto& constraint : type_constraints) {  //try match type constraints
+        auto iter = kci_constraints.find(constraint.first);
+        if (iter == kci_constraints.end() || find(iter->second.begin(), iter->second.end(), constraint.second) == iter->second.end()) {
+          match = false;
+          break;
+        }
+      }  //for
+      if (match) {
+        *out = &kci;  //found match, exit loop
+        break;
+      }
+    }  //if
+  }    //for
+  return *out == nullptr ? Status(common::ONNXRUNTIME, common::FAIL, "Kernel not found") : Status::OK();
 }
 #endif  // !defined(ORT_MINIMAL_BUILD)
 

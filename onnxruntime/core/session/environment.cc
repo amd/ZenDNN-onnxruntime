@@ -12,7 +12,6 @@
 #include "onnx/defs/operator_sets_ml.h"
 #include "core/graph/contrib_ops/ms_opset.h"
 #include "core/graph/contrib_ops/onnx_deprecated_opset.h"
-#include "core/framework/provider_shutdown.h"
 #if defined(ENABLE_TRAINING) || defined(ENABLE_TRAINING_OPS)
 #include "onnx/defs/operator_sets_training.h"
 #endif
@@ -48,13 +47,6 @@ using namespace ::onnxruntime::common;
 using namespace ONNX_NAMESPACE;
 
 std::once_flag schemaRegistrationOnceFlag;
-
-Environment::~Environment() {
-// We don't support any shared providers in the minimal build yet
-#if !defined(ORT_MINIMAL_BUILD)
-  UnloadSharedProviders();
-#endif
-}
 
 Status Environment::Create(std::unique_ptr<logging::LoggingManager> logging_manager,
                            std::unique_ptr<Environment>& environment,
@@ -229,7 +221,14 @@ Status Environment::Initialize(std::unique_ptr<logging::LoggingManager> logging_
       }
       domainToVersionRangeInstance.AddDomainToVersion(onnxruntime::kMSExperimentalDomain, 1, 1);
       domainToVersionRangeInstance.AddDomainToVersion(onnxruntime::kMSNchwcDomain, 1, 1);
-      domainToVersionRangeInstance.AddDomainToVersion(onnxruntime::kMSInternalNHWCDomain, 1, 1);
+
+      // we have static registrations for NHWC versions of ONNX operators so this domain needs to extend to the
+      // latest ONNX version
+      auto onnx_version = domainToVersionRangeInstance.LastReleaseVersionMap()
+                              .find(ONNX_NAMESPACE::ONNX_DOMAIN)
+                              ->second;
+      domainToVersionRangeInstance.AddDomainToVersion(onnxruntime::kMSInternalNHWCDomain, 1, onnx_version);
+
       domainToVersionRangeInstance.AddDomainToVersion(onnxruntime::kPytorchAtenDomain, 1, 1);
 #ifdef USE_DML
       domainToVersionRangeInstance.AddDomainToVersion(onnxruntime::kMSDmlDomain, 1, 1);
