@@ -598,7 +598,6 @@ Status Node::GetInstantiateFunctionBody(std::unique_ptr<Function>& output) const
 
 Status Node::InstantiateFunctionBody() {
   if (nullptr != func_body_) {
-    // already instantiated.
     return Status::OK();
   }
 
@@ -1277,16 +1276,16 @@ Graph::Graph(Graph& parent_graph, const Node& parent_node, ONNX_NAMESPACE::Graph
             parent_graph.strict_shape_type_inference_) {
 }
 
-Graph::Graph(const Model& owning_model,
-             IOnnxRuntimeOpSchemaCollectionPtr schema_registry,
-             ONNX_NAMESPACE::GraphProto& subgraph_proto,
-             const std::unordered_map<std::string, int>& domain_version_map,
-             const logging::Logger& logger,
-             bool strict_shape_type_inference)
+Graph::Graph(const Model& owning_model, 
+    IOnnxRuntimeOpSchemaCollectionPtr schema_registry, 
+    ONNX_NAMESPACE::GraphProto& subgraph_proto, 
+    const std::unordered_map<std::string, int>& domain_version_map,
+    const logging::Logger& logger,
+    bool strict_shape_type_inference)
     : Graph(owning_model,
             &subgraph_proto,
-            domain_version_map,
-            owning_model.IrVersion(),
+            domain_version_map, 
+            owning_model.IrVersion(), 
             schema_registry,
             nullptr,
             nullptr,
@@ -2552,9 +2551,8 @@ Status Graph::VerifyNodeAndOpMatch(const ResolveOptions& options) {
       // schema construction will happen during function body initialization.
       if (node.since_version_ == -1) {
         node.since_version_ = node.op_->since_version();
-      }
-    }
-
+    } 
+   
     ORT_RETURN_IF_ERROR(node.UpdateInputArgCount());
 
     // currently an Op is required by ValidateVersion, so we use gsl::not_null to validate that.
@@ -3854,10 +3852,11 @@ Node& Graph::CreateFusedSubGraphNode(const IndexedSubGraph& sub_graph, const std
   if (sub_graph.UseExistingSchema()) {
     SetOpSchemaFromRegistryForNode(fused_node);
   } else {
-    auto temp_schema_ptr = function_utils::CreateSchema(*this, sub_graph);
-    fused_schemas_containers_.push_back(std::move(temp_schema_ptr));
-    fused_node.op_ = fused_schemas_containers_.back().get();
-  }
+  auto temp_schema_ptr = function_utils::CreateSchema(*this, sub_graph);
+  fused_schemas_containers_.push_back(std::move(temp_schema_ptr));
+  fused_node.op_ = fused_schemas_containers_.back().get();
+  fused_node.SetSinceVersion(fused_node.op_->SinceVersion());
+
 #endif
   return fused_node;
 }
