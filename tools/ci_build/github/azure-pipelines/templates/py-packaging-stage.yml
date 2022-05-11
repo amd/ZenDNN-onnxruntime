@@ -292,39 +292,13 @@ stages:
             PythonVersion: '3.7'
             MsbuildPlatform: x64
             buildArch: x64
-          Python38_x64:
-            PythonVersion: '3.8'
-            MsbuildPlatform: x64
-            buildArch: x64
-          Python39_x64:
-            PythonVersion: '3.9'
-            MsbuildPlatform: x64
-            buildArch: x64
-          Python310_x64:
-            PythonVersion: '3.10'
-            MsbuildPlatform: x64
-            buildArch: x64
-          Python37_x86:
-            PythonVersion: '3.7'
-            MsbuildPlatform: Win32
-            buildArch: x86
-          Python38_x86:
-            PythonVersion: '3.8'
-            MsbuildPlatform: Win32
-            buildArch: x86
-          Python39_x86:
-            PythonVersion: '3.9'
-            MsbuildPlatform: Win32
-            buildArch: x86
-          Python310_x86:
-            PythonVersion: '3.10'
-            MsbuildPlatform: Win32
-            buildArch: x86
       variables:
         OnnxRuntimeBuildDirectory: '$(Build.BinariesDirectory)'
         EnvSetupScript: setup_env.bat
         setVcvars: true
         BuildConfig: 'RelWithDebInfo'
+        VCPKG_ROOT: 'C:\vcpkg'
+        VCPKG_DEFAULT_TRIPLET: x64-windows-static-md
       timeoutInMinutes: 120
       workspace:
         clean: all
@@ -353,6 +327,7 @@ stages:
 
       - script: |
           python -m pip install -q setuptools wheel numpy==1.21.0
+          echo %VCPKG_ROOT%
         workingDirectory: '$(Build.BinariesDirectory)'
         displayName: 'Install python modules'
 
@@ -380,7 +355,7 @@ stages:
             --enable_onnx_tests
             ${{ parameters.build_py_parameters }}
             --parallel --update
-            $(TelemetryOption)
+            $(TelemetryOption) --cmake_extra_defines onnxruntime_PREFER_SYSTEM_LIB=ON
           workingDirectory: '$(Build.BinariesDirectory)'
 
       - task: VSBuild@1

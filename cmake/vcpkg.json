@@ -1,0 +1,9 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg/master/scripts/vcpkg.schema.json",
+  "name": "onnxruntime",
+  "version": "1.12.0",
+  "builtin-baseline":"e809a42f87565e803b2178a0c11263f462d1800a",
+  "dependencies": [
+    { "name": "protobuf", "version>=": "3.18.0" }
+  ]
+}
