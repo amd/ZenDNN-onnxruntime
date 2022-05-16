@@ -106,6 +106,7 @@ option(onnxruntime_PREFER_SYSTEM_LIB "Experimental: Build with the preinstalled 
 option(onnxruntime_USE_ROCM "Build with AMD GPU support" OFF)
 option(onnxruntime_USE_TVM "Build with TVM support" OFF)
 option(onnxruntime_TVM_CUDA_RUNTIME "Build TVM with CUDA support" OFF)
+option(onnxruntime_USE_XNNPACK "Build with XNNPACK support. Provides as an alternative math library on ARM, WebAssembly and x86." OFF)
 
 # Options related to reducing the binary size produced by the build
 option(onnxruntime_DISABLE_CONTRIB_OPS "Disable contrib ops" OFF)
@@ -192,9 +193,6 @@ if (APPLE)
 elseif (NOT WIN32 AND NOT APPLE)
     message("Building ONNX Runtime for ${CMAKE_SYSTEM_PROCESSOR}")
 endif()
-
-# option to enable XNNPACK
-option(onnxruntime_USE_XNNPACK "Enable XNNPACK as an alternative math library on ARM" OFF)
 
 # Single output director for all binaries
 set(RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin CACHE PATH "Single output directory for all binaries.")
@@ -915,9 +913,9 @@ if (onnxruntime_ENABLE_CPUINFO)
     endif()
   else()
     if (onnxruntime_BUILD_WEBASSEMBLY AND NOT onnxruntime_USE_XNNPACK)
-    set(CPUINFO_SUPPORTED FALSE)
+      set(CPUINFO_SUPPORTED FALSE)
     else()
-    set(CPUINFO_SUPPORTED TRUE)
+      set(CPUINFO_SUPPORTED TRUE)
     endif()
     if (WIN32)
       # Exclude Windows ARM build and Windows Store
@@ -1214,18 +1212,32 @@ if (onnxruntime_USE_XNNPACK)
   set(CLOG_SOURCE_DIR "${PYTORCH_CPUINFO_DIR}/deps/clog")
   set(CPUINFO_SOURCE_DIR ${PYTORCH_CPUINFO_DIR})
 
-  if (onnxruntime_BUILD_WEBASSEMBLY AND onnxruntime_ENABLE_WEBASSEMBLY_SIMD)
-    set(XNNPACK_BUILD_WASM_WITH_SIMD ON CACHE INTERNAL "")
-  endif()
-  if (onnxruntime_BUILD_WEBASSEMBLY AND onnxruntime_ENABLE_WEBASSEMBLY_THREADS)
-    set(XNNPACK_BUILD_WASM_WITH_PTHREAD ON CACHE INTERNAL "")
-  endif()
-
   add_subdirectory(external/FP16)  
   add_subdirectory(external/pthreadpool)
-  add_subdirectory(xnnpack)
+  
+  # add_subdirectory(xnnpack)  
+  add_subdirectory(external/xnnpack)
+  
+  # set(onnxruntime_EXTERNAL_LIBRARIES_XNNPACK XNNPACK pthreadpool)
+  # list(APPEND onnxruntime_EXTERNAL_LIBRARIES XNNPACK pthreadpool)
+
+  if (onnxruntime_BUILD_WEBASSEMBLY AND onnxruntime_ENABLE_WEBASSEMBLY_SIMD)
+    # set(XNNPACK_BUILD_WASM_WITH_SIMD ON CACHE INTERNAL "")
+    # not sure if this is needed on any other plaforms 
+    if (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Android")
+      TARGET_COMPILE_OPTIONS(XNNPACK "-msimd128")
+    endif()
+  endif()
+  if (onnxruntime_BUILD_WEBASSEMBLY AND onnxruntime_ENABLE_WEBASSEMBLY_THREADS)
+    # set(XNNPACK_BUILD_WASM_WITH_PTHREAD ON CACHE INTERNAL "")
+    # not sure if this is needed on any other plaforms 
+    if (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Android")
+      TARGET_COMPILE_OPTIONS(XNNPACK PRIVATE "-pthread")
+    endif()
+  endif()
+
   set_target_properties(XNNPACK PROPERTIES FOLDER "External")
-  set_target_properties(pthreadpool PROPERTIES FOLDER "External")
+  set_target_properties(pthreadpool PROPERTIES FOLDER "External")  
 endif()
 
 function(onnxruntime_set_compile_flags target_name)
