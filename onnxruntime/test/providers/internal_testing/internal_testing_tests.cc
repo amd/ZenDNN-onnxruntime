@@ -152,7 +152,7 @@ TEST(InternalTestingEP, PreventSaveOfModelWithCompiledOps) {
 }
 
 TEST(InternalTestingEP, TestMixOfStaticAndCompiledKernels) {
-  const ORTCHAR_T* ort_model_path = ORT_MODEL_FOLDER "transform/fusion/conv_relu.onnx";
+  const ORTCHAR_T* ort_model_path = ORT_MODEL_FOLDER "transform/fusion/conv_relu_opset12.onnx";
 
   SessionOptions so;
   InferenceSessionWrapper session(so, GetEnvironment());
