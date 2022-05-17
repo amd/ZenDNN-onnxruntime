@@ -1459,7 +1459,7 @@ if (onnxruntime_USE_XNNPACK)
     "${ONNXRUNTIME_ROOT}/core/providers/shared/node_unit/node_unit.h"
     "${ONNXRUNTIME_ROOT}/core/providers/shared/node_unit/node_unit.cc"
   )
-
+  
   source_group(TREE ${ONNXRUNTIME_ROOT}/core FILES ${onnxruntime_providers_xnnpack_cc_srcs})
   onnxruntime_add_static_library(onnxruntime_providers_xnnpack ${onnxruntime_providers_xnnpack_cc_srcs})
   onnxruntime_add_include_to_target(onnxruntime_providers_xnnpack
