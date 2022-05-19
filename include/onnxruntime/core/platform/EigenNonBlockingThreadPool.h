@@ -1283,6 +1283,15 @@ int CurrentThreadId() const final {
   return -1;
 }
 
+  void EnableSpinning() {
+  spin_loop_status_ = kBusy;
+  WakeAllWorkers();
+}
+
+void DisableSpinning() {
+  spin_loop_status_ = kIdle;
+}
+
  private:
   void ComputeCoprimes(int N, Eigen::MaxSizeVector<unsigned>* coprimes) {
     for (int i = 1; i <= N; i++) {
@@ -1385,7 +1394,8 @@ int CurrentThreadId() const final {
         assert(seen != ThreadStatus::Blocking);
         if (seen == ThreadStatus::Blocked) {
           status = ThreadStatus::Waking;
-          cv.notify_one();
+          lk.unlock();
+          cv.notify_one(); 
         }
       }
     }
@@ -1432,15 +1442,26 @@ int CurrentThreadId() const final {
   std::atomic<unsigned> blocked_;  // Count of blocked workers, used as a termination condition
   std::atomic<bool> done_;
 
+  enum SpinLoopStatus {
+    kIdle,
+    kBusy
+  };
+
+  std::atomic<SpinLoopStatus> spin_loop_status_{kIdle};
+
   // Wake any blocked workers so that they can cleanly exit WorkerLoop().  For
   // a clean exit, each thread will observe (1) done_ set, indicating that the
   // destructor has been called, (2) all threads blocked, and (3) no
   // items in the work queues.
 
-  void WakeAllWorkersForExit() {
-    for (auto &td: worker_data_) {
+  void WakeAllWorkers() {
+    for (auto& td : worker_data_) {
       td.EnsureAwake();
     }
+  }
+
+  void WakeAllWorkersForExit() {
+    WakeAllWorkers();
   }
 
   // Main worker thread loop.
@@ -1470,6 +1491,9 @@ int CurrentThreadId() const final {
             t = Steal(StealAttemptKind::TRY_ONE);
           } else {
             t = q.PopFront();
+          }
+          if (spin_loop_status_ == kIdle) {
+            break;
           }
           onnxruntime::concurrency::SpinPause();
         }
