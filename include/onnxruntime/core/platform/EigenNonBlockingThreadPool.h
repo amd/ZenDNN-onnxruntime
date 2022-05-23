@@ -44,6 +44,9 @@
 #include "core/common/spin_pause.h"
 #include "core/platform/ort_mutex.h"
 #include "core/platform/Barrier.h"
+#include "core/platform/telemetry.h"
+
+#include <avrt.h>
 
 // ORT thread pool overview
 // ------------------------
@@ -146,6 +149,8 @@
 
 namespace onnxruntime {
 namespace concurrency {
+
+extern const char* const mm_task_name;
 
 #ifdef _WIN32
 using CHAR_TYPE = wchar_t;
@@ -747,7 +752,9 @@ class ThreadPoolTempl : public onnxruntime::concurrency::ExtendedThreadPoolInter
     }
 
     worker_data_.resize(num_threads_);
+    const Telemetry* telemetry = &env_.GetTelemetryProvider();
     for (auto i = 0u; i < num_threads_; i++) {
+      worker_data_[i].telemetry_ = telemetry;
       worker_data_[i].thread.reset(env_.CreateThread(name, i, WorkerLoop, this, thread_options));
     }
   }
@@ -1283,7 +1290,7 @@ int CurrentThreadId() const final {
   return -1;
 }
 
-  void EnableSpinning() {
+void EnableSpinning() {
   spin_loop_status_ = kBusy;
   WakeAllWorkers();
 }
@@ -1343,6 +1350,8 @@ void DisableSpinning() {
   struct WorkerData {
     constexpr WorkerData() : thread(), queue() {
     }
+
+    const Telemetry* telemetry_{nullptr};
     std::unique_ptr<Thread> thread;
     Queue queue;
 
@@ -1419,9 +1428,11 @@ void DisableSpinning() {
       status = ThreadStatus::Blocking;
       if (should_block()) {
         status = ThreadStatus::Blocked;
+        telemetry_->LogThreadBlock();
         while (status == ThreadStatus::Blocked) {
           cv.wait(lk);
         }
+        telemetry_->LogThreadWakeup();
         post_block();
       }
       status = ThreadStatus::Spinning;
@@ -1448,6 +1459,32 @@ void DisableSpinning() {
   };
 
   std::atomic<SpinLoopStatus> spin_loop_status_{kIdle};
+
+  static void threadSetMmCharacteristics(HANDLE& mm_handle) {
+    DWORD mmcssTaskIndex = 0;
+    mm_handle = ::AvSetMmThreadCharacteristicsA(mm_task_name, &mmcssTaskIndex);
+    if (!mm_handle) {
+      auto error_code = ::GetLastError();
+      ORT_THROW("AvSetMmThreadCharacteristicsA failed: ", std::system_category().message(error_code));
+    }
+  }
+
+  static void threadSetMmPriority(HANDLE mm_handle, int priority) {
+    BOOL success = ::AvSetMmThreadPriority(mm_handle, static_cast<AVRT_PRIORITY>(priority));
+    if (!success) {
+      auto error_code = ::GetLastError();
+      ORT_THROW("AvSetMmThreadPriority failed: ", std::system_category().message(error_code));
+    }
+  }
+
+  static void threadRevokeMmCharacteristics(HANDLE mm_handle) {
+    BOOL ok = ::AvRevertMmThreadCharacteristics(mm_handle);
+    if (!ok) {
+      auto error_code = ::GetLastError();
+      ORT_THROW("AvSetMmThreadPriority failed: ", std::system_category().message(error_code));
+    }
+  }
+
 
   // Wake any blocked workers so that they can cleanly exit WorkerLoop().  For
   // a clean exit, each thread will observe (1) done_ set, indicating that the
@@ -1481,6 +1518,10 @@ void DisableSpinning() {
 
     SetDenormalAsZero(set_denormal_as_zero_);
     profiler_.LogThreadId(thread_id);
+
+    HANDLE mm_handle = NULL;
+    threadSetMmCharacteristics(mm_handle);
+    threadSetMmPriority(mm_handle, AVRT_PRIORITY_NORMAL);
 
     while (!should_exit) {
       Task t = q.PopFront();
@@ -1570,6 +1611,8 @@ void DisableSpinning() {
         td.SetSpinning();
       }
     }
+
+    threadRevokeMmCharacteristics(mm_handle);
     
     // Whichever thread(s) observe the termination conditions are responsible for waking
     // any other threads that have remained blocked.

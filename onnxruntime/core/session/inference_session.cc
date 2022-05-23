@@ -1906,19 +1906,23 @@ Status InferenceSession::Run(const RunOptions& run_options,
       session_state_->IncrementGraphExecutionCounter();
 #endif
       struct InvocationCounterGuard {
+        const Env& env_;
         concurrency::ThreadPool* intra_tp_;
         concurrency::ThreadPool* inter_tp_;
         std::atomic_int32_t& counter_ref_;
-        InvocationCounterGuard(concurrency::ThreadPool* intra_tp,
+        InvocationCounterGuard(const Env& env,
+                               concurrency::ThreadPool* intra_tp,
                                concurrency::ThreadPool* inter_tp,
                                std::atomic_int32_t& ref) noexcept
-            : intra_tp_(intra_tp), inter_tp_(inter_tp), counter_ref_(ref) {
+            : env_(env), intra_tp_(intra_tp), inter_tp_(inter_tp), counter_ref_(ref) {
           counter_ref_.fetch_add(1, std::memory_order_relaxed);
+          env_.GetTelemetryProvider().LogSpinningStart();
           if (intra_tp_) intra_tp_->EnableSpinning();
           if (inter_tp_) inter_tp_->EnableSpinning();
         }
         ~InvocationCounterGuard() {
           if (1 == counter_ref_.fetch_sub(1, std::memory_order_acq_rel)) {
+            env_.GetTelemetryProvider().LogSpinningStop();
             if (intra_tp_) intra_tp_->DisableSpinning();
             if (inter_tp_) inter_tp_->DisableSpinning();
           }
@@ -1927,12 +1931,7 @@ Status InferenceSession::Run(const RunOptions& run_options,
 
       concurrency::ThreadPool* intra_tp_ = (use_per_session_threads_) ? thread_pool_.get() : intra_op_thread_pool_from_env_;
       concurrency::ThreadPool* inter_tp = (use_per_session_threads_) ? inter_op_thread_pool_.get() : inter_op_thread_pool_from_env_;
-      InvocationCounterGuard counter_guard(intra_tp_, inter_tp, invocation_refcounter_);
-
-      if (intra_tp_ != nullptr) {
-        // Nested PS are prohibited
-        concurrency::ThreadPool::ParallelSection ps(intra_tp_);
-      }
+      InvocationCounterGuard counter_guard(env, intra_tp_, inter_tp, invocation_refcounter_);
       ORT_CHECK_AND_SET_RETVAL(utils::ExecuteGraph(*session_state_, feeds_fetches_manager, feeds, *p_fetches,
                                                    session_options_.execution_mode, run_options.terminate, run_logger,
                                                    run_options.only_execute_path_to_fetches));
