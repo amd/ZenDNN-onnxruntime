@@ -173,6 +173,8 @@ def run_trt_standalone(trtexec, model_name, model_path, all_inputs_shape, fp16, 
     else:
         out = get_output(load_command)
 
+    logger.info(out)
+
     # parse trtexec output
     tmp = out.split("\n")
     target_list = []
@@ -186,30 +188,44 @@ def run_trt_standalone(trtexec, model_name, model_path, all_inputs_shape, fp16, 
     target = target_list[2]
     avg_latency_match = re.search("mean = (.*?) ms", target)
     if avg_latency_match:
-        result["average_latency_ms"] = avg_latency_match.group(1)  # extract number
+        result["latency_mean_ms"] = avg_latency_match.group(1)  # extract number
     percentile_match = re.search("percentile\(90%\) = (.*?) ms", target)
     if percentile_match:
-        result["latency_90_percentile"] = percentile_match.group(1)  # extract number
+        result["latency_90_pt_ms"] = percentile_match.group(1)  # extract number
     if mem_usage:
         result["memory"] = mem_usage
 
+    # TODO: Parse from trtexec output
+    result["latency_cv"] = 0
+    result["latency_min_ms"] = result["latency_mean_ms"]
+    result["latency_max_ms"] = result["latency_mean_ms"]
     logger.info(result)
     return result
 
 
 def get_latency_result(runtimes, batch_size):
-    latency_ms = sum(runtimes) / float(len(runtimes)) * 1000.0
-    latency_variance = np.var(runtimes, dtype=np.float64) * 1000.0
+    latency_mean = np.mean(runtimes)
+    latency_min = min(runtimes)
+    latency_90_pt = np.percentile(runtimes, 90)
+    latency_max = max(runtimes)
+
+    latency_std = np.std(runtimes, ddof=1)
+    latency_cv = (latency_std / latency_mean) * 100.0
+
+    latency_mean_ms = latency_mean * 1000.0
+    latency_min_ms = latency_min * 1000.0
+    latency_90_pt_ms = latency_90_pt * 1000.0
+    latency_max_ms = latency_max * 1000.0
     throughput = batch_size * (1000.0 / latency_ms)
 
     result = {
         "test_times": len(runtimes),
-        "latency_variance": "{:.2f}".format(latency_variance),
-        "latency_90_percentile": "{:.2f}".format(np.percentile(runtimes, 90) * 1000.0),
-        "latency_95_percentile": "{:.2f}".format(np.percentile(runtimes, 95) * 1000.0),
-        "latency_99_percentile": "{:.2f}".format(np.percentile(runtimes, 99) * 1000.0),
-        "average_latency_ms": "{:.2f}".format(latency_ms),
         "QPS": "{:.2f}".format(throughput),
+        "latency_cv": "{:.2f}".format(latency_cv),
+        "latency_mean_ms": "{:.2f}".format(latency_mean_ms),
+        "latency_min_ms": "{:.2f}".format(latency_min_ms),
+        "latency_90_pt_ms": "{:.2f}".format(latency_90_pt_ms),
+        "latency_max_ms": "{:.2f}".format(latency_max_ms),
     }
     return result
 
@@ -1335,8 +1351,11 @@ def run_onnxruntime(args, models):
                 if result:
 
                     latency_result[ep] = {}
-                    latency_result[ep]["average_latency_ms"] = result["average_latency_ms"]
-                    latency_result[ep]["latency_90_percentile"] = result["latency_90_percentile"]
+                    latency_result[ep]["latency_mean_ms"] = result["latency_mean_ms"]
+                    latency_result[ep]["latency_min_ms"] = result["latency_min_ms"]
+                    latency_result[ep]["latency_90_pt_ms"] = result["latency_90_pt_ms"]
+                    latency_result[ep]["latency_max_ms"] = result["latency_max_ms"]
+                    latency_result[ep]["latency_cv"] = result["latency_cv"]
                     if "memory" in result:
                         mem_usage = result["memory"]
                     if mem_usage:
@@ -1456,64 +1475,6 @@ def run_onnxruntime(args, models):
         model_to_metrics,
         model_to_session,
     )
-
-
-def calculate_gain(value, ep1, ep2):
-    ep1_latency = float(value[ep1]["average_latency_ms"])
-    ep2_latency = float(value[ep2]["average_latency_ms"])
-    gain = (ep2_latency - ep1_latency) * 100 / ep2_latency
-    return gain
-
-
-def add_improvement_information(model_to_latency):
-    for key, value in model_to_latency.items():
-        if trt in value and cuda in value:
-            gain = calculate_gain(value, trt, cuda)
-            value[trt_cuda_gain] = "{:.2f} %".format(gain)
-        if trt_fp16 in value and cuda_fp16 in value:
-            gain = calculate_gain(value, trt_fp16, cuda_fp16)
-            value[trt_cuda_fp16_gain] = "{:.2f} %".format(gain)
-        if trt in value and standalone_trt in value:
-            gain = calculate_gain(value, trt, standalone_trt)
-            value[trt_native_gain] = "{:.2f} %".format(gain)
-        if trt_fp16 in value and standalone_trt_fp16 in value:
-            gain = calculate_gain(value, trt_fp16, standalone_trt_fp16)
-            value[trt_native_fp16_gain] = "{:.2f} %".format(gain)
-
-
-def output_details(results, csv_filename):
-    need_write_header = True
-    if os.path.exists(csv_filename):
-        need_write_header = False
-
-    with open(csv_filename, mode="a", newline="") as csv_file:
-        column_names = [
-            "engine",
-            "version",
-            "device",
-            "fp16",
-            "io_binding",
-            "graph_optimizations",
-            "enable_cache",
-            "model_name",
-            "inputs",
-            "batch_size",
-            "sequence_length",
-            "datetime",
-            "test_times",
-            "QPS",
-            "average_latency_ms",
-            "latency_variance",
-            "latency_90_percentile",
-            "latency_95_percentile",
-            "latency_99_percentile",
-        ]
-
-        csv_writer = csv.DictWriter(csv_file, fieldnames=column_names)
-        if need_write_header:
-            csv_writer.writeheader()
-        for result in results:
-            csv_writer.writerow(result)
 
 
 def output_fail(model_to_fail_ep, csv_filename):
@@ -1723,14 +1684,14 @@ def output_latency(results, csv_filename):
     if os.path.exists(csv_filename):
         need_write_header = False
 
-    with open(csv_filename, mode="a", newline="") as csv_file:
-        column_names = [model_title]
-        for provider in provider_list:
-            column_names.append(provider + avg_ending)
-            column_names.append(provider + percentile_ending)
-            if cpu not in provider:
-                column_names.append(provider + memory_ending)
+    column_names = ['model', 'ep', 'latency_mean_ms', 'latency_min_ms', 'latency_90_pt_ms', 'latency_max_ms', 'latency_cv']
+    for provider in provider_list:
+        column_names.append(provider + avg_ending)
+        column_names.append(provider + percentile_ending)
+        if cpu not in provider:
+            column_names.append(provider + memory_ending)
 
+    with open(csv_filename, mode="a", newline="") as csv_file:
         csv_writer = csv.writer(csv_file)
 
         if need_write_header:
@@ -2210,7 +2171,6 @@ def main():
         logger.info("\n==========================================")
         logger.info("=========== Models/EPs latency ===========")
         logger.info("==========================================")
-        add_improvement_information(model_to_latency)
         pretty_print(pp, model_to_latency)
         write_map_to_file(model_to_latency, LATENCY_FILE)
         if args.write_test_result:
@@ -2219,13 +2179,6 @@ def main():
             )
             csv_filename = os.path.join(path, csv_filename)
             output_latency(model_to_latency, csv_filename)
-
-    if success_results:
-        csv_filename = (
-            args.benchmark_success_csv if args.benchmark_success_csv else f"benchmark_success_{time_stamp}.csv"
-        )
-        csv_filename = os.path.join(path, csv_filename)
-        output_details(success_results, csv_filename)
 
     if len(model_to_metrics) > 0:
         logger.info("\n=========================================")
