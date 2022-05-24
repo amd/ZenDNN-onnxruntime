@@ -375,4 +375,7 @@ ORT_API_STATUS_IMPL(InvokeOp,
 
 ORT_API(void, ReleaseOp, _Frees_ptr_opt_ OrtOp* op);
 
+ORT_API_STATUS_IMPL(SessionOptionsAppendExecutionProvider_Xnnpack,
+                    _In_ OrtSessionOptions* options, _In_ const OrtXnnpackProviderOptions* migraphx_options);
+
 }  // namespace OrtApis

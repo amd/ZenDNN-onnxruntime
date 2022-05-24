@@ -551,6 +551,11 @@ inline SessionOptions& SessionOptions::AppendExecutionProvider_MIGraphX(const Or
   return *this;
 }
 
+inline SessionOptions& SessionOptions::AppendExecutionProvider_Xnnpack(const OrtXnnpackProviderOptions* provider_options) {
+  ThrowOnError(GetApi().SessionOptionsAppendExecutionProvider_Xnnpack(p_, provider_options));
+  return *this;
+}
+
 inline SessionOptions& SessionOptions::SetCustomCreateThreadFn(OrtCustomCreateThreadFn ort_custom_create_thread_fn) {
   ThrowOnError(GetApi().SessionOptionsSetCustomCreateThreadFn(p_, ort_custom_create_thread_fn));
   return *this;

@@ -7,6 +7,8 @@
 #include "core/framework/utils.h"
 #include "core/graph/graph.h"
 #include "core/providers/xnnpack/xnnpack_execution_provider.h"
+#include "core/session/onnxruntime_cxx_api.h"
+#include "core/session/inference_session.h"
 
 #include "test/framework/test_utils.h"
 #include "test/util/include/asserts.h"
@@ -19,6 +21,9 @@ using namespace ONNX_NAMESPACE;
 using namespace onnxruntime::logging;
 
 #define ORT_MODEL_FOLDER ORT_TSTR("testdata/")
+
+// in test_main.cc
+extern std::unique_ptr<Ort::Env> ort_env;
 
 namespace onnxruntime {
 namespace test {
@@ -77,6 +82,29 @@ TEST(XnnpackEP, TestNhwcConvReluClipFusion) {
 
   auto ep = DefaultXnnpackExecutionProvider();
   RunAndVerifyOutputsWithEP(ort_model_path, "TestNhwcConvReluClipFusion", std::move(ep), feeds, params);
+}
+
+TEST(XnnpackEP, TestAddEpUsingPublicApi) {
+  Ort::SessionOptions so;
+  so.AppendExecutionProvider_Xnnpack(nullptr);
+
+  const ORTCHAR_T* ort_model_path = ORT_MODEL_FOLDER "nhwc_conv_clip_relu.onnx";
+  Ort::Session session(*ort_env, ort_model_path, so);
+
+  // dirty hack to access the underlying InferenceSession but don't know a better way.
+  const OrtSession* ort_session = session;
+  const InferenceSession* s = reinterpret_cast<const InferenceSession*>(ort_session);
+
+  bool have_xnnpack_ep = false;
+
+  for (const auto& provider : s->GetRegisteredProviderTypes()) {
+    if (provider == kXnnpackExecutionProvider) {
+      have_xnnpack_ep = true;
+      break;
+    }
+  }
+
+  ASSERT_TRUE(have_xnnpack_ep) << "Xnnpack EP was not found in registered providers for session.";
 }
 #endif
 
