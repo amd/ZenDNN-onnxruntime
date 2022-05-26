@@ -48,6 +48,7 @@ def dict_to_args(dct):
 def main():
     args = parse_arguments()
     setup_logger(False)
+    logger.setLevel(logging.CRITICAL)
     pp = pprint.PrettyPrinter(indent=4)
 
     # create ep list to iterate through
@@ -71,6 +72,7 @@ def main():
     benchmark_status_csv = status_name + csv_ending
     benchmark_session_csv = session_name + csv_ending
     specs_csv = specs_name + csv_ending
+
 
     for model, model_info in models.items():
         logger.info("\n" + "=" * 40 + "=" * len(model))
@@ -168,7 +170,7 @@ def main():
 
         if os.path.exists(SESSION_FILE):
             model_to_session = read_map_from_file(SESSION_FILE)
-            pretty_print(pp, model_to_session)
+            #pretty_print(pp, model_to_session)
             output_session_creation(model_to_session, os.path.join(path, benchmark_session_csv))
             logger.info("\nSaved session creation results to {}".format(benchmark_session_csv))
 
@@ -179,7 +181,7 @@ def main():
         if os.path.exists(FAIL_MODEL_FILE) or len(model_to_fail_ep) > 1:
             model_to_fail_ep = read_map_from_file(FAIL_MODEL_FILE)
             output_fail(model_to_fail_ep, os.path.join(path, benchmark_fail_csv))
-            logger.info(model_to_fail_ep)
+            pretty_print(pp, model_to_fail_ep)
             logger.info("\nSaved model failing results to {}".format(benchmark_fail_csv))
 
         logger.info("\n=======================================================")
@@ -196,7 +198,7 @@ def main():
             is_fail = True
             model_status = build_status(model_status, model_fail, is_fail)
 
-        pretty_print(pp, model_status)
+        #pretty_print(pp, model_status)
 
         output_status(model_status, os.path.join(path, benchmark_status_csv))
         logger.info("\nSaved model status results to {}".format(benchmark_status_csv))
@@ -207,18 +209,16 @@ def main():
 
         if os.path.exists(LATENCY_FILE):
             model_to_latency = read_map_from_file(LATENCY_FILE)
-            add_improvement_information(model_to_latency)
-
             pretty_print(pp, model_to_latency)
 
-            output_latency(model_to_latency, os.path.join(path, benchmark_latency_csv))
+            output_latency(model_to_latency, os.path.join(path, benchmark_latency_csv), args)
             logger.info("\nSaved model latency results to {}".format(benchmark_latency_csv))
 
     logger.info("\n===========================================")
     logger.info("=========== System information  ===========")
     logger.info("===========================================")
     info = get_system_info(args)
-    pretty_print(pp, info)
+    #pretty_print(pp, info)
     logger.info("\n")
     output_specs(info, os.path.join(path, specs_csv))
     logger.info("\nSaved hardware specs to {}".format(specs_csv))
