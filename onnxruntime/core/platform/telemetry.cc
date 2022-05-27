@@ -86,5 +86,29 @@ void Telemetry::LogThreadBlock() const {
 void Telemetry::LogThreadWakeup() const {
 }
 
+void Telemetry::LogThreadStartJob(unsigned) const {
+}
+
+void Telemetry::LogThreadEndJob(unsigned) const {
+}
+
+void Telemetry::LogThreadStartDispatcher() const {
+}
+
+void Telemetry::LogThreadEndDispatcher() const {
+}
+
+void Telemetry::LogStartParallelSection() const {
+}
+
+void Telemetry::LogEndParallelSection() const {
+}
+
+void Telemetry::LogRunParallelSectionStart() const {
+}
+
+void Telemetry::LogRunParallelSectionEnd() const {
+}
+
 }  // namespace onnxruntime
 

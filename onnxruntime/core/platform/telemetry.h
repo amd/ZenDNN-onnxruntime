@@ -69,6 +69,22 @@ class Telemetry {
 
   virtual void LogThreadWakeup() const;
 
+  virtual void LogThreadStartJob(unsigned par_idx) const;
+
+  virtual void LogThreadEndJob(unsigned par_idx) const;
+
+  virtual void LogThreadStartDispatcher() const;
+
+  virtual void LogThreadEndDispatcher() const;
+
+  virtual void LogStartParallelSection() const;
+
+  virtual void LogEndParallelSection() const;
+
+  virtual void LogRunParallelSectionStart() const;
+
+  virtual void LogRunParallelSectionEnd() const;
+
  private:
   ORT_DISALLOW_COPY_ASSIGNMENT_AND_MOVE(Telemetry);
 };

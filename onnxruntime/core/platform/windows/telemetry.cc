@@ -329,4 +329,96 @@ void WindowsTelemetry::LogThreadWakeup() const {
                     TraceLoggingKeyword(MICROSOFT_KEYWORD_MEASURES));
 }
 
+void WindowsTelemetry::LogThreadStartJob(unsigned par_idx) const {
+  if (global_register_count_ == 0 || enabled_ == false)
+    return;
+
+  TraceLoggingWrite(telemetry_provider_handle,
+                    "LogThreadStartJob",
+                    TraceLoggingBool(true, "UTCReplace_AppSessionGuid"),
+                    TelemetryPrivacyDataTag(PDT_ProductAndServicePerformance),
+                    TraceLoggingKeyword(MICROSOFT_KEYWORD_MEASURES),
+                    // Telemetry info
+                    TraceLoggingUInt64(par_idx, "par_idx"));
+}
+
+void WindowsTelemetry::LogThreadEndJob(unsigned par_idx) const {
+  if (global_register_count_ == 0 || enabled_ == false)
+    return;
+
+  TraceLoggingWrite(telemetry_provider_handle,
+                    "LogThreadEndJob",
+                    TraceLoggingBool(true, "UTCReplace_AppSessionGuid"),
+                    TelemetryPrivacyDataTag(PDT_ProductAndServicePerformance),
+                    TraceLoggingKeyword(MICROSOFT_KEYWORD_MEASURES),
+                    // Telemetry info
+                    TraceLoggingUInt64(par_idx, "par_idx"));
+}
+
+void WindowsTelemetry::LogThreadStartDispatcher() const {
+  if (global_register_count_ == 0 || enabled_ == false)
+    return;
+
+  TraceLoggingWrite(telemetry_provider_handle,
+                    "LogThreadStartDispatcher",
+                    TraceLoggingBool(true, "UTCReplace_AppSessionGuid"),
+                    TelemetryPrivacyDataTag(PDT_ProductAndServicePerformance),
+                    TraceLoggingKeyword(MICROSOFT_KEYWORD_MEASURES));
+}
+
+void WindowsTelemetry::LogThreadEndDispatcher() const {
+  if (global_register_count_ == 0 || enabled_ == false)
+    return;
+
+  TraceLoggingWrite(telemetry_provider_handle,
+                    "LogThreadEndDispatcher",
+                    TraceLoggingBool(true, "UTCReplace_AppSessionGuid"),
+                    TelemetryPrivacyDataTag(PDT_ProductAndServicePerformance),
+                    TraceLoggingKeyword(MICROSOFT_KEYWORD_MEASURES));
+}
+
+void WindowsTelemetry::LogStartParallelSection() const {
+  if (global_register_count_ == 0 || enabled_ == false)
+    return;
+
+  TraceLoggingWrite(telemetry_provider_handle,
+                    "LogStartParallelSection",
+                    TraceLoggingBool(true, "UTCReplace_AppSessionGuid"),
+                    TelemetryPrivacyDataTag(PDT_ProductAndServicePerformance),
+                    TraceLoggingKeyword(MICROSOFT_KEYWORD_MEASURES));
+}
+
+void WindowsTelemetry::LogEndParallelSection() const {
+  if (global_register_count_ == 0 || enabled_ == false)
+    return;
+
+  TraceLoggingWrite(telemetry_provider_handle,
+                    "LogEndParallelSection",
+                    TraceLoggingBool(true, "UTCReplace_AppSessionGuid"),
+                    TelemetryPrivacyDataTag(PDT_ProductAndServicePerformance),
+                    TraceLoggingKeyword(MICROSOFT_KEYWORD_MEASURES));
+}
+
+void WindowsTelemetry::LogRunParallelSectionStart() const {
+  if (global_register_count_ == 0 || enabled_ == false)
+    return;
+
+  TraceLoggingWrite(telemetry_provider_handle,
+                    "LogRunParallelSectionStart",
+                    TraceLoggingBool(true, "UTCReplace_AppSessionGuid"),
+                    TelemetryPrivacyDataTag(PDT_ProductAndServicePerformance),
+                    TraceLoggingKeyword(MICROSOFT_KEYWORD_MEASURES));
+}
+
+void WindowsTelemetry::LogRunParallelSectionEnd() const {
+  if (global_register_count_ == 0 || enabled_ == false)
+    return;
+
+  TraceLoggingWrite(telemetry_provider_handle,
+                    "LogRunParallelSectionEnd",
+                    TraceLoggingBool(true, "UTCReplace_AppSessionGuid"),
+                    TelemetryPrivacyDataTag(PDT_ProductAndServicePerformance),
+                    TraceLoggingKeyword(MICROSOFT_KEYWORD_MEASURES));
+}
+
 }  // namespace onnxruntime

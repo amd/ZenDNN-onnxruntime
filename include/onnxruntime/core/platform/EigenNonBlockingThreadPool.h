@@ -46,7 +46,7 @@
 #include "core/platform/Barrier.h"
 #include "core/platform/telemetry.h"
 
-#include <avrt.h>
+//#include <avrt.h>
 
 // ORT thread pool overview
 // ------------------------
@@ -680,6 +680,7 @@ class ThreadPoolTempl : public onnxruntime::concurrency::ExtendedThreadPoolInter
   }
 
   ThreadPoolProfiler profiler_;
+  const Telemetry* telemetry_;
 
  public:
 
@@ -731,6 +732,7 @@ class ThreadPoolTempl : public onnxruntime::concurrency::ExtendedThreadPoolInter
   ThreadPoolTempl(const CHAR_TYPE* name, int num_threads, bool allow_spinning, Environment& env,
                   const ThreadOptions& thread_options)
       : profiler_(num_threads, name),
+        telemetry_(&env.GetTelemetryProvider()),
         env_(env),
         num_threads_(num_threads),
         allow_spinning_(allow_spinning),
@@ -752,9 +754,8 @@ class ThreadPoolTempl : public onnxruntime::concurrency::ExtendedThreadPoolInter
     }
 
     worker_data_.resize(num_threads_);
-    const Telemetry* telemetry = &env_.GetTelemetryProvider();
     for (auto i = 0u; i < num_threads_; i++) {
-      worker_data_[i].telemetry_ = telemetry;
+      worker_data_[i].telemetry_ = telemetry_;
       worker_data_[i].thread.reset(env_.CreateThread(name, i, WorkerLoop, this, thread_options));
     }
   }
@@ -834,6 +835,7 @@ void StartParallelSectionInternal(PerThread &pt,
 }
 
 void StartParallelSection(ThreadPoolParallelSection &ps) override {
+  telemetry_->LogStartParallelSection();
   PerThread* pt = GetPerThread();
   StartParallelSectionInternal(*pt, ps);
 }
@@ -922,6 +924,7 @@ void EndParallelSectionInternal(PerThread &pt,
 void EndParallelSection(ThreadPoolParallelSection &ps) override {
   PerThread* pt = GetPerThread();
   EndParallelSectionInternal(*pt, ps);
+  telemetry_->LogEndParallelSection();
 }
 
 //----------------------------------------------------------------------
@@ -1155,6 +1158,7 @@ void RunInParallelInternal(PerThread& pt,
         // it knows that it revoked the dispatcher.  Conversely, if it
         // revokes a task, and then sees dispatch_started=true, then
         // it knows it revoked a worker task. ]
+        telemetry_->LogThreadStartDispatcher();
         ps.dispatch_started.store(true, std::memory_order_seq_cst);
 
         // Schedule tasks par_idx=[current_dop+1,new_dop)
@@ -1170,6 +1174,7 @@ void RunInParallelInternal(PerThread& pt,
 
         // Dispatcher's work complete
         ps.work_done.store(true, std::memory_order_release);
+        telemetry_->LogThreadEndDispatcher();
       };
 
       profiler_.LogStart();
@@ -1208,6 +1213,7 @@ void RunInParallelSection(ThreadPoolParallelSection &ps,
                           unsigned n,
                           std::ptrdiff_t block_size) override {
   ORT_ENFORCE(n <= num_threads_+1, "More work items than threads");
+  telemetry_->LogRunParallelSectionStart();
   profiler_.LogStartAndCoreAndBlock(block_size);
   PerThread* pt = GetPerThread();
   assert(pt->leading_par_section && "RunInParallel, but not in parallel section");
@@ -1222,17 +1228,19 @@ void RunInParallelSection(ThreadPoolParallelSection &ps,
 
   // Increase the worker count if needed.  Each worker will pick up
   // loops to execute from the current parallel section.
-  std::function<void(unsigned)> worker_fn = [&ps](unsigned par_idx) {
+  std::function<void(unsigned)> worker_fn = [&ps, this](unsigned par_idx) {
     while (ps.active) {
       if (ps.current_loop.load() == nullptr) {
         onnxruntime::concurrency::SpinPause();
       } else {
+        telemetry_->LogThreadStartJob(par_idx);
         ps.workers_in_loop++;
         ThreadPoolLoop *work_item = ps.current_loop;
         if (work_item && par_idx < work_item->threads_needed) {
           work_item->fn(par_idx);
         }
         ps.workers_in_loop--;
+        telemetry_->LogThreadEndJob(par_idx);
       }
     }
   };
@@ -1241,7 +1249,9 @@ void RunInParallelSection(ThreadPoolParallelSection &ps,
   profiler_.LogEndAndStart(ThreadPoolProfiler::DISTRIBUTION);
 
   // Run work in the main thread
+  telemetry_->LogThreadStartJob(0);
   loop.fn(0);
+  telemetry_->LogThreadEndJob(0);
   profiler_.LogEndAndStart(ThreadPoolProfiler::RUN);
 
   // Wait for workers to exit the loop
@@ -1250,6 +1260,7 @@ void RunInParallelSection(ThreadPoolParallelSection &ps,
     onnxruntime::concurrency::SpinPause();
   }
   profiler_.LogEnd(ThreadPoolProfiler::WAIT);
+  telemetry_->LogRunParallelSectionEnd();
 }
 
 // Run a single parallel loop _without_ a parallel section.  This is a
@@ -1266,16 +1277,20 @@ void RunInParallelSection(ThreadPoolParallelSection &ps,
 //  1. run fn(...);
 void RunInParallel(std::function<void(unsigned idx)> fn, unsigned n, std::ptrdiff_t block_size) override {
   ORT_ENFORCE(n <= num_threads_+1, "More work items than threads");
+  telemetry_->LogRunParallelSectionStart();
   profiler_.LogStartAndCoreAndBlock(block_size);
   PerThread* pt = GetPerThread();
   ThreadPoolParallelSection ps;
   StartParallelSectionInternal(*pt, ps);
   RunInParallelInternal(*pt, ps, n, true, fn);  // select dispatcher and do job distribution;
   profiler_.LogEndAndStart(ThreadPoolProfiler::DISTRIBUTION);
+  telemetry_->LogThreadStartJob(0);
   fn(0);  // run fn(0)
+  telemetry_->LogThreadEndJob(0);
   profiler_.LogEndAndStart(ThreadPoolProfiler::RUN);
   EndParallelSectionInternal(*pt, ps);  // wait for all
   profiler_.LogEnd(ThreadPoolProfiler::WAIT);
+  telemetry_->LogRunParallelSectionEnd();
 }
 
 int NumThreads() const final {
@@ -1292,7 +1307,7 @@ int CurrentThreadId() const final {
 
 void EnableSpinning() {
   spin_loop_status_ = kBusy;
-  WakeAllWorkers();
+  // WakeAllWorkers();
 }
 
 void DisableSpinning() {
@@ -1519,9 +1534,9 @@ void DisableSpinning() {
     SetDenormalAsZero(set_denormal_as_zero_);
     profiler_.LogThreadId(thread_id);
 
-    HANDLE mm_handle = NULL;
-    threadSetMmCharacteristics(mm_handle);
-    threadSetMmPriority(mm_handle, AVRT_PRIORITY_NORMAL);
+    //HANDLE mm_handle = NULL;
+    //threadSetMmCharacteristics(mm_handle);
+    //threadSetMmPriority(mm_handle, AVRT_PRIORITY_NORMAL);
 
     while (!should_exit) {
       Task t = q.PopFront();
@@ -1612,7 +1627,7 @@ void DisableSpinning() {
       }
     }
 
-    threadRevokeMmCharacteristics(mm_handle);
+    //threadRevokeMmCharacteristics(mm_handle);
     
     // Whichever thread(s) observe the termination conditions are responsible for waking
     // any other threads that have remained blocked.

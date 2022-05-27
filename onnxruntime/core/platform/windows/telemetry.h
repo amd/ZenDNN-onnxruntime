@@ -53,6 +53,21 @@ class WindowsTelemetry : public Telemetry {
 
   void LogThreadWakeup() const override;
 
+  void LogThreadStartJob(unsigned) const override;
+
+  void LogThreadEndJob(unsigned) const override;
+
+  void LogThreadStartDispatcher() const override;
+
+  void LogThreadEndDispatcher() const override;
+
+  void LogStartParallelSection() const override;
+
+  void LogEndParallelSection() const override;
+
+  void LogRunParallelSectionStart() const override;
+
+  void LogRunParallelSectionEnd() const override;
 
  private:
   static OrtMutex mutex_;

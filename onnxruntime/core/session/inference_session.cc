@@ -1910,11 +1910,13 @@ Status InferenceSession::Run(const RunOptions& run_options,
         concurrency::ThreadPool* intra_tp_;
         concurrency::ThreadPool* inter_tp_;
         std::atomic_int32_t& counter_ref_;
+        onnxruntime::concurrency::ThreadPool::ParallelSection ps_;
         InvocationCounterGuard(const Env& env,
                                concurrency::ThreadPool* intra_tp,
                                concurrency::ThreadPool* inter_tp,
                                std::atomic_int32_t& ref) noexcept
-            : env_(env), intra_tp_(intra_tp), inter_tp_(inter_tp), counter_ref_(ref) {
+            : 
+              env_(env), intra_tp_(intra_tp), inter_tp_(inter_tp), counter_ref_(ref), ps_((intra_tp_) ? intra_tp_ : inter_tp_) {
           counter_ref_.fetch_add(1, std::memory_order_relaxed);
           env_.GetTelemetryProvider().LogSpinningStart();
           if (intra_tp_) intra_tp_->EnableSpinning();
