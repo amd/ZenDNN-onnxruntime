@@ -36,7 +36,7 @@ void usage() {
       "\t-v: verbose\n"
       "\t-n [test_case_name]: Specifies a single test case to run.\n"
       "\t-e [EXECUTION_PROVIDER]: EXECUTION_PROVIDER could be 'cpu', 'cuda', 'dnnl', 'tensorrt', "
-      "'openvino', 'nuphar', 'rocm', 'migraphx', 'acl', 'armnn', 'nnapi' or 'coreml'. "
+      "'openvino', 'nuphar', 'rocm', 'migraphx', 'acl', 'armnn', 'xnnpack', 'nnapi' or 'coreml'. "
       "Default: 'cpu'.\n"
       "\t-p: Pause after launch, can attach debugger and continue\n"
       "\t-x: Use parallel executor, default (without -x): sequential executor.\n"
@@ -104,6 +104,7 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
   bool enable_armnn = false;
   bool enable_rocm = false;
   bool enable_migraphx = false;
+  bool enable_xnnpack = false;
   int device_id = 0;
   GraphOptimizationLevel graph_optimization_level = ORT_ENABLE_ALL;
   bool user_graph_optimization_level_set = false;
@@ -179,6 +180,8 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
             enable_rocm = true;
           } else if (!CompareCString(optarg, ORT_TSTR("migraphx"))) {
             enable_migraphx = true;
+          } else if (!CompareCString(optarg, ORT_TSTR("xnnpack"))) {
+            enable_xnnpack = true;
           } else {
             usage();
             return -1;
@@ -323,7 +326,7 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
     }
     if (enable_openvino) {
 #ifdef USE_OPENVINO
-      //Setting default optimization level for OpenVINO can be overriden with -o option
+      // Setting default optimization level for OpenVINO can be overriden with -o option
       sf.SetGraphOptimizationLevel(ORT_DISABLE_ALL);
       sf.AppendExecutionProvider_OpenVINO(OrtOpenVINOProviderOptions{});
 #else
@@ -423,6 +426,15 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
 #endif
     }
 
+    if (enable_xnnpack) {
+#ifdef USE_XNNPACK
+      Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_Xnnpack(sf, nullptr));
+#else
+      fprintf(stderr, "XNNPACK is not supported in this build");
+      return -1;
+#endif
+    }
+
     if (user_graph_optimization_level_set) {
       sf.SetGraphOptimizationLevel(graph_optimization_level);
     }
@@ -491,7 +503,7 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
       all_disabled_tests.insert(std::begin(dnnl_disabled_tests), std::end(dnnl_disabled_tests));
     }
 #if !defined(__amd64__) && !defined(_M_AMD64)
-    //out of memory
+    // out of memory
     static const ORTCHAR_T* x86_disabled_tests[] = {ORT_TSTR("mlperf_ssd_resnet34_1200"), ORT_TSTR("mask_rcnn_keras"), ORT_TSTR("mask_rcnn"), ORT_TSTR("faster_rcnn"), ORT_TSTR("vgg19"), ORT_TSTR("coreml_VGG16_ImageNet")};
     all_disabled_tests.insert(std::begin(x86_disabled_tests), std::end(x86_disabled_tests));
 #endif
@@ -821,7 +833,7 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
     broken_tests.insert({"tinyyolov3", "The parameter is incorrect"});
     broken_tests.insert({"mlperf_ssd_mobilenet_300", "unknown error"});
     broken_tests.insert({"mlperf_ssd_resnet34_1200", "unknown error"});
-    broken_tests.insert({"tf_inception_v1", "flaky test"});  //TODO: Investigate cause for flakiness
+    broken_tests.insert({"tf_inception_v1", "flaky test"});  // TODO: Investigate cause for flakiness
     broken_tests.insert({"faster_rcnn", "Linux: faster_rcnn:output=6383:shape mismatch, expect {77} got {57}"});
     broken_tests.insert({"split_zero_size_splits", "alloc failed"});
   }
