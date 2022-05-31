@@ -365,7 +365,10 @@ def inference_ort(
     success = False
 
     # get and load inputs and outputs
-    for ort_input in ort_inputs:
+    #for ort_input in ort_inputs:
+    ort_input = ort_inputs[0] if len(ort_inputs) else None
+
+    if ort_input:
         io_binding = session.io_binding()
         sess_inputs, sess_outputs = get_ort_session_inputs_and_outputs(name, session, ort_input)
         if debug:
@@ -1711,7 +1714,7 @@ def output_latency(results, csv_filename, args):
                     latency_info["latency_90_pt_ms"],
                     latency_info["latency_max_ms"],
                     latency_info["latency_cv"],
-                    latency_info["memory"],
+                    latency_info.get("memory", 0),
                     str(args.upload_index),
                 ]
                 csv_writer.writerow(row)

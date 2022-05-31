@@ -99,6 +99,8 @@ def main():
                 ep,
                 "--write_test_result",
                 "false",
+                "--upload_index",
+                str(args.upload_index),
             ]
 
             if ep == standalone_trt or ep == standalone_trt_fp16:

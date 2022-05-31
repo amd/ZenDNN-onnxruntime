@@ -1,3 +1,5 @@
 onnxmltools
 pandas
 coloredlogs
+sympy
+packaging
