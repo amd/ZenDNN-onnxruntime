@@ -12,7 +12,7 @@
 namespace onnxruntime {
 
 namespace {
-//It assumes max(OrtMemType) <= 1, min(OrtMemType) = -2
+// It assumes max(OrtMemType) <= 1, min(OrtMemType) = -2
 inline int MakeKey(int id, OrtMemType mem_type) {
   return id << 2 | (mem_type + 2);
 }
@@ -54,14 +54,20 @@ IExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph,
 
 // Returns true if an allocator was found and replaced
 static bool FindAndReplaceAllocator(const OrtMemoryInfo& mem_info,
-                                    const MemoryInfoSet& mem_info_set,
-                                    AllocatorMap& allocators,
+                                    std::unordered_map<int, AllocatorPtr>& allocators,
+                                    std::vector<AllocatorPtr>& allocator_list,
                                     AllocatorPtr replacing_allocator) {
-  auto ite = mem_info_set.find(mem_info);
+  auto iter = allocators.find(MakeKey(mem_info.id, mem_info.mem_type));
+  if (iter != allocators.end()) {
+    IAllocator* existing_alloc = iter->second.get();
+    for (auto& entry : allocator_list) {
+      if (entry.get() == existing_alloc) {
+        entry = replacing_allocator;
+        break;
+      }
+    }
 
-  if (ite != mem_info_set.end()) {
-    const int key = MakeKey(mem_info.id, mem_info.mem_type);
-    allocators[key] = replacing_allocator;
+    iter->second = replacing_allocator;
     return true;
   }
 
@@ -71,84 +77,39 @@ static bool FindAndReplaceAllocator(const OrtMemoryInfo& mem_info,
 // Update allocator in the provider if already present; ignore if not.
 void IExecutionProvider::ReplaceAllocator(AllocatorPtr allocator) {
   const auto& info = allocator->Info();
+  FindAndReplaceAllocator(info, allocators_, allocator_list_, allocator);
+}
 
-  if (FindAndReplaceAllocator(info, mem_info_set_, allocators_, allocator)) {
-    // We found an allocator corresponding to the provided
-    // allocator's OrtMemoryInfo and we replaced it with the
-    // provided allocator.
-    // We return back.
-    return;
-  }
+static void InsertAllocatorImpl(AllocatorPtr allocator,
+                                std::unordered_map<int, AllocatorPtr>& allocators,
+                                std::vector<AllocatorPtr>& allocator_list,
+                                bool throw_if_dup) {
+  const OrtMemoryInfo& info = allocator->Info();
+  const int key = MakeKey(info.id, info.mem_type);
 
-  else {
-    // If we can't find an allocator registered with the exact OrtMemoryInfo
-    // as that of the replacing allocator, we do a "loosened" check
-    // (i.e.) check if there is an allocator registered with OrtAllocatorType
-    // as OrtArenaAllocator because for external user provided allocator
-    // we only accept OrtAllocatorType as OrtDeviceAllocator.
-    // If we do find such a registered allocator, we can safely go ahead
-    // and replace that with the provided allocator. This may seem like
-    // we are replacing an arena allocator with a non-arena allocator
-    // but in reality any user provided allocator may still be an arena
-    // allocator. We don't allow users to use OrtAllocatorType as
-    // OrtArenaAllocator for their allocators because we reserve its usage
-    // for our internal BFCArena.
-    // TODO: Should we remove the OrtAllocatorType field from OrtMemoryInfo to
-    // avoid such problems and also remove the unintuitive phenomenon of binding
-    // the allocator type info to OrtMemoryInfo (which loosely is just device info) ?
-    const auto& original_info = allocator->Info();
-
-    // If the alloc_type was OrtArenaAllocator already, then it is a no-op
-    if (original_info.alloc_type == OrtAllocatorType::OrtArenaAllocator) {
+  auto iter = allocators.find(key);
+  if (iter != allocators.end()) {
+    auto msg = MakeString("Duplicate allocator for mem_type:", info.mem_type, " device:", info.device.ToString(),
+                          " Existing allocator: ", iter->second->Info().name,
+                          " New allocator: ", allocator->Info().name);
+    if (throw_if_dup) {
+      ORT_THROW(msg);
+    } else {
+      LOGS_DEFAULT(WARNING) << msg;
       return;
     }
-
-    auto check_info = original_info;
-
-    // Mutate the alloc_type
-    check_info.alloc_type = OrtAllocatorType::OrtArenaAllocator;
-
-    if (FindAndReplaceAllocator(check_info, mem_info_set_,
-                                allocators_, allocator)) {
-      // We found an allocator corresponding to the mutated OrtMemoryInfo
-      // and we replaced it with the provided allocator.
-      // Before we return back, we need to do some house-keeping
-      // (i.e.) update the EP's OrtMemoryInfo set
-
-      // Delete the existing OrtMemoryInfo  corresponding to the allocator
-      // that was replaced
-      mem_info_set_.erase(check_info);
-
-      // Replace it with the provided allocator's OrtMemoryInfo
-      mem_info_set_.insert(allocator->Info());
-    }
   }
+
+  allocators.insert({key, allocator});
+  allocator_list.push_back(allocator);
 }
 
 void IExecutionProvider::InsertAllocator(AllocatorPtr allocator) {
-  const OrtMemoryInfo& info = allocator->Info();
-  auto ite = mem_info_set_.find(info);
-  if (ite != mem_info_set_.end()) {
-    ORT_THROW("duplicated allocator");
-  }
-  const int key = MakeKey(info.id, info.mem_type);
-  allocators_.insert({key, allocator});
-  mem_info_set_.insert(ite, info);
-  allocator_list_.push_back(allocator);
+  InsertAllocatorImpl(allocator, allocators_, allocator_list_, true);
 }
 
 void IExecutionProvider::TryInsertAllocator(AllocatorPtr allocator) {
-  const OrtMemoryInfo& info = allocator->Info();
-  auto ite = mem_info_set_.find(info);
-  if (ite != mem_info_set_.end()) {
-    LOGS_DEFAULT(WARNING) << "duplicated allocator: " << info.ToString();
-    return;
-  }
-  InsertAllocator(allocator);
-}
-
-void IExecutionProvider::RegisterAllocator(std::shared_ptr<AllocatorManager>) {
-  return;
+  InsertAllocatorImpl(allocator, allocators_, allocator_list_, false);
 }
 
 #if !defined(ORT_MINIMAL_BUILD) || defined(ORT_EXTENDED_MINIMAL_BUILD)

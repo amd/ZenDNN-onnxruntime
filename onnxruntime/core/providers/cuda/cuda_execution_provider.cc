@@ -2431,40 +2431,47 @@ CUDAExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph,
   return result;
 }
 
-void CUDAExecutionProvider::RegisterAllocator(std::shared_ptr<AllocatorManager> allocator_manager) {
+void CUDAExecutionProvider::RegisterAllocator(AllocatorManager& allocator_manager) {
   // Try to get a CUDA allocator from allocator manager first
   // Used to allocate CUDA device memory
-  auto cuda_alloc = allocator_manager->GetAllocator(info_.device_id, OrtMemTypeDefault);
+  OrtDevice cpu_device{OrtDevice::CPU, OrtDevice::MemType::DEFAULT, 0};
+  OrtDevice cuda_device{OrtDevice::GPU, OrtDevice::MemType::DEFAULT, info_.device_id};
+  OrtDevice pinned_device{OrtDevice::GPU, OrtDevice::MemType::CUDA_PINNED, info_.device_id};
+
+  auto cuda_alloc = allocator_manager.GetAllocator(cuda_device);
   if (nullptr == cuda_alloc) {
     cuda_alloc = CreateCudaAllocator(info_.device_id, info_.gpu_mem_limit, info_.arena_extend_strategy,
                                      info_.external_allocator_info, info_.default_memory_arena_cfg);
-    allocator_manager->InsertAllocator(cuda_alloc);
+    allocator_manager.InsertAllocator(cuda_alloc);
   }
+
   TryInsertAllocator(std::move(cuda_alloc));
 
   // OrtMemTypeCPUOutput -- allocated by cudaMallocHost, used to copy CUDA device memory to CPU
   // Use pinned memory instead of pageable memory make the data transfer faster
   // Used by node MemcpyToHost only
-  auto cuda_pinned_alloc = allocator_manager->GetAllocator(DEFAULT_CPU_ALLOCATOR_DEVICE_ID, OrtMemTypeCPUOutput);
+  auto cuda_pinned_alloc = allocator_manager.GetAllocator(pinned_device);
   if (nullptr == cuda_pinned_alloc) {
     AllocatorCreationInfo pinned_memory_info(
         [](OrtDevice::DeviceId device_id) {
           return std::make_unique<CUDAPinnedAllocator>(device_id, CUDA_PINNED);
         },
-        DEFAULT_CPU_ALLOCATOR_DEVICE_ID);
+        // TODO: Validate if possible. This was set to 0, but don't we have to allocate pinned memory on the correct GPU?
+        // https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__DEVICE.html#group__CUDART__DEVICE_1g159587909ffa0791bbe4b40187a4c6bb
+        // says the pinned memory allocated by cudaMallocHost is associated with a specific device, so isn't it more
+        // correct to use the device_id unless we wanted to share the pinned memory allocator across devices at the
+        // risk the lifetime isn't managed correctly if one of those devices go away?
+        info_.device_id);
 
     cuda_pinned_alloc = CreateAllocator(pinned_memory_info);
-    allocator_manager->InsertAllocator(cuda_pinned_alloc);
+    allocator_manager.InsertAllocator(cuda_pinned_alloc);
   }
+
   TryInsertAllocator(std::move(cuda_pinned_alloc));
 
   // OrtMemTypeCPUInput -- CUDA op place the input on CPU and will not be accessed by CUDA kernel, no sync issue
-  auto cuda_cpu_alloc = allocator_manager->GetAllocator(DEFAULT_CPU_ALLOCATOR_DEVICE_ID, OrtMemTypeCPUInput);
+  auto cuda_cpu_alloc = allocator_manager.GetAllocator(cpu_device);
   if (nullptr == cuda_cpu_alloc) {
-    // TODO: this is actually used for the cuda kernels which explicitly ask for inputs from CPU.
-    // This will be refactored/removed when allocator and execution provider are decoupled.
-    // Need to move the OrtMemoryType out of Allocator, that's one thing blocking us to share it with CPU EP
-    // CPUAllocator is OrtMemTypeDefault for CPU EP
     AllocatorCreationInfo cpu_memory_info(
         [](int device_id) {
           return std::make_unique<CPUAllocator>(
@@ -2474,8 +2481,9 @@ void CUDAExecutionProvider::RegisterAllocator(std::shared_ptr<AllocatorManager> 
         DEFAULT_CPU_ALLOCATOR_DEVICE_ID);
 
     cuda_cpu_alloc = CreateAllocator(cpu_memory_info);
-    allocator_manager->InsertAllocator(cuda_cpu_alloc);
+    allocator_manager.InsertAllocator(cuda_cpu_alloc);
   }
+
   TryInsertAllocator(std::move(cuda_cpu_alloc));
 }
 

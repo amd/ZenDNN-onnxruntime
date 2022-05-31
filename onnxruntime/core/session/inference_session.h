@@ -628,6 +628,9 @@ class InferenceSession {
    */
   void ShrinkMemoryArenas(const std::vector<AllocatorPtr>& arenas_to_shrink);
 
+  // Iterate the execution providers calling RegisterAllocator to setup any allocator sharing between them.
+  void RegisterAllocators();
+
 #if !defined(ORT_MINIMAL_BUILD)
   virtual common::Status AddPredefinedTransformers(
       GraphTransformerManager& transformer_manager,
@@ -780,7 +783,7 @@ class InferenceSession {
   // "session.use_ort_model_bytes_directly" to "1", this will be empty
   std::vector<uint8_t> ort_format_model_bytes_data_holder_;
 
-  std::shared_ptr<onnxruntime::AllocatorManager> allocator_manager_;
+  AllocatorManager allocator_manager_;
 
   // Container to store pre-packed weights to share between sessions.
   // The life-cycle of the cache itself is maintained by the user and the user will ensure

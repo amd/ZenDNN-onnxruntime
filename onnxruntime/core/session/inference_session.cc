@@ -268,8 +268,7 @@ void InferenceSession::ConstructorCommon(const SessionOptions& session_options,
   if (use_per_session_threads_) {
     LOGS(*session_logger_, INFO) << "Creating and using per session threadpools since use_per_session_threads_ is true";
     {
-      if (!external_intra_op_thread_pool_)
-      {
+      if (!external_intra_op_thread_pool_) {
         bool allow_intra_op_spinning =
             session_options_.config_options.GetConfigOrDefault(kOrtSessionOptionsConfigAllowIntraOpSpinning, "1") == "1";
         OrtThreadPoolParams to = session_options_.intra_op_param;
@@ -284,8 +283,8 @@ void InferenceSession::ConstructorCommon(const SessionOptions& session_options,
         // If the thread pool can use all the processors, then
         // we set affinity of each thread to each processor.
         to.auto_set_affinity = to.thread_pool_size == 0 &&
-                              session_options_.execution_mode == ExecutionMode::ORT_SEQUENTIAL &&
-                              to.affinity_vec_len == 0;
+                               session_options_.execution_mode == ExecutionMode::ORT_SEQUENTIAL &&
+                               to.affinity_vec_len == 0;
         to.allow_spinning = allow_intra_op_spinning;
         to.dynamic_block_base_ = std::stoi(session_options_.config_options.GetConfigOrDefault(kOrtSessionOptionsConfigDynamicBlockBase, "0"));
         LOGS(*session_logger_, INFO) << "Dynamic block base set to " << to.dynamic_block_base_;
@@ -303,8 +302,7 @@ void InferenceSession::ConstructorCommon(const SessionOptions& session_options,
       }
     }
     if (session_options_.execution_mode == ExecutionMode::ORT_PARALLEL) {
-      if (!external_inter_op_thread_pool_)
-      {
+      if (!external_inter_op_thread_pool_) {
         bool allow_inter_op_spinning =
             session_options_.config_options.GetConfigOrDefault(kOrtSessionOptionsConfigAllowInterOpSpinning, "1") == "1";
         OrtThreadPoolParams to = session_options_.inter_op_param;
@@ -354,7 +352,6 @@ void InferenceSession::ConstructorCommon(const SessionOptions& session_options,
   }
 
   telemetry_ = {};
-  allocator_manager_ = std::make_shared<onnxruntime::AllocatorManager>();
 }
 
 InferenceSession::InferenceSession(const SessionOptions& session_options, const Environment& session_env)
@@ -381,8 +378,7 @@ InferenceSession::InferenceSession(const SessionOptions& session_options,
       logging_manager_(session_env.GetLoggingManager()),
       external_intra_op_thread_pool_(external_intra_op_thread_pool),
       external_inter_op_thread_pool_(external_inter_op_thread_pool),
-      environment_(session_env)
-{
+      environment_(session_env) {
   // Initialize assets of this session instance
   ConstructorCommon(session_options, session_env);
 }
@@ -478,6 +474,19 @@ InferenceSession::~InferenceSession() {
 #endif
 }
 
+void InferenceSession::RegisterAllocators() {
+  // iterate in reverse order. the reason we do this is that we are currently using this to share a CPU or CUDA
+  // allocator between CPU and XNNPACK or CUDA and TensorRT. The config options for the CPU and CUDA EPs are far
+  // more comprehensive so we want to prefer those and need to call RegisterAllocator for them first.
+  // Long term we should move to defining allocator settings on a device centric basis so EP registration order is
+  // not a factor.
+  std::for_each(std::make_reverse_iterator(execution_providers_.end()),
+                std::make_reverse_iterator(execution_providers_.begin()),
+                [this](ExecutionProviders::iterator iter) {
+                  (*iter)->RegisterAllocator(allocator_manager_);
+                });
+}
+
 common::Status InferenceSession::RegisterExecutionProvider(const std::shared_ptr<IExecutionProvider>& p_exec_provider) {
   if (p_exec_provider == nullptr) {
     return Status(common::ONNXRUNTIME, common::FAIL, "Received nullptr for exec provider");
@@ -494,8 +503,6 @@ common::Status InferenceSession::RegisterExecutionProvider(const std::shared_ptr
   }
 
   const std::string& provider_type = p_exec_provider->Type();
-
-  p_exec_provider->RegisterAllocator(allocator_manager_);
 
   // Some session option values (default or user provided) may not work with some EPs.
   // Rather than put the onus on the user to know these, make the appropriate change while logging the change.
@@ -1306,6 +1313,9 @@ common::Status InferenceSession::Initialize() {
       UpdateProvidersWithSharedAllocators();
     }
 
+    // setup any local allocator sharing between the registered EPs
+    RegisterAllocators();
+
 #ifdef ONNXRUNTIME_ENABLE_INSTRUMENT
     TraceLoggingWriteStart(session_activity, "OrtInferenceSessionActivity");
     session_activity_started_ = true;
@@ -1530,6 +1540,8 @@ void InferenceSession::UpdateProvidersWithSharedAllocators() {
   using namespace std;
   const auto& provider_ids = execution_providers_.GetIds();
   for (const auto& one_shared_alloc : environment_.GetRegisteredSharedAllocators()) {
+    allocator_manager_.InsertAllocator(one_shared_alloc);
+
     for (const auto& id : provider_ids) {
       auto* provider_ptr = execution_providers_.Get(id);
       provider_ptr->ReplaceAllocator(one_shared_alloc);

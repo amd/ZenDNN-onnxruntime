@@ -227,7 +227,7 @@ struct ProviderHost {
 
   virtual int IExecutionProvider__GenerateMetaDefId(const IExecutionProvider* p, const onnxruntime::GraphViewer& graph_viewer, HashValue& model_hash) = 0;
 
-  virtual void IExecutionProvider__RegisterAllocator(IExecutionProvider* p, std::shared_ptr<AllocatorManager> allocator_manager) = 0;
+  virtual void IExecutionProvider__RegisterAllocator(IExecutionProvider* p, AllocatorManager& allocator_manager) = 0;
   // Status
   virtual std::string Status__ToString(const Status* p) = 0;
 

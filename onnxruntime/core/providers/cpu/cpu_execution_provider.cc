@@ -25,6 +25,30 @@ struct KernelRegistryAndStatus {
 
 namespace onnxruntime {
 
+void CPUExecutionProvider::RegisterAllocator(AllocatorManager& allocator_manager) {
+  bool create_arena = info_.create_arena;
+
+  auto cpu_alloc = allocator_manager.GetAllocator(OrtDevice{OrtDevice::CPU, OrtDevice::MemType::DEFAULT, 0});
+
+  if (!cpu_alloc) {
+#if defined(USE_JEMALLOC) || defined(USE_MIMALLOC)
+    // JEMalloc/mimalloc already have memory pool, so just use device allocator.
+    create_arena = false;
+#elif !(defined(__amd64__) || defined(_M_AMD64) || defined(__aarch64__) || defined(_M_ARM64))
+    // Disable Arena allocator for x86_32 build because it may run into infinite loop when integer overflow happens
+    create_arena = false;
+#endif
+
+    AllocatorCreationInfo device_info{[](int) { return std::make_unique<CPUAllocator>(); },
+                                      DEFAULT_CPU_ALLOCATOR_DEVICE_ID, create_arena};
+
+    cpu_alloc = CreateAllocator(device_info);
+    allocator_manager.InsertAllocator(cpu_alloc);
+  }
+
+  InsertAllocator(cpu_alloc);
+}
+
 // Forward declarations of op kernels
 class ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 6, 10, Clip);
 class ONNX_OPERATOR_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 6, Elu);
@@ -1264,9 +1288,9 @@ Status RegisterOnnxOperatorKernels(KernelRegistry& kernel_registry) {
                                                                     NonMaxSuppression)>,
     BuildKernelCreateInfo<ONNX_OPERATOR_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 10, IsInf)>,
     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 10, 15, float,
-                                                                RoiAlign)>,
+                                                                          RoiAlign)>,
     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 10, 15, double,
-                                                                RoiAlign)>,
+                                                                          RoiAlign)>,
     BuildKernelCreateInfo<ONNX_OPERATOR_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 10, ReverseSequence)>,
     // opset 11
     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 11, 11,
@@ -1916,7 +1940,7 @@ Status RegisterOnnxOperatorKernels(KernelRegistry& kernel_registry) {
     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 16, double,
                                                                 RoiAlign)>,
     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 16, float,
-                                                                GridSample)>,                                                                
+                                                                GridSample)>,
     BuildKernelCreateInfo<ONNX_OPERATOR_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 16, ScatterElements)>,
     BuildKernelCreateInfo<ONNX_OPERATOR_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 16, ScatterND)>,
     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 16, string, Where)>,
