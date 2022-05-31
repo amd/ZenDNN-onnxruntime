@@ -482,8 +482,8 @@ void InferenceSession::RegisterAllocators() {
   // not a factor.
   std::for_each(std::make_reverse_iterator(execution_providers_.end()),
                 std::make_reverse_iterator(execution_providers_.begin()),
-                [this](ExecutionProviders::iterator iter) {
-                  (*iter)->RegisterAllocator(allocator_manager_);
+                [this](auto& iter) {
+                  iter->RegisterAllocator(allocator_manager_);
                 });
 }
 

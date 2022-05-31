@@ -25,28 +25,33 @@ struct KernelRegistryAndStatus {
 
 namespace onnxruntime {
 
-void CPUExecutionProvider::RegisterAllocator(AllocatorManager& allocator_manager) {
-  bool create_arena = info_.create_arena;
+CPUExecutionProvider::CPUExecutionProvider(const CPUExecutionProviderInfo& info)
+    : IExecutionProvider{onnxruntime::kCpuExecutionProvider} {
+  // we always create an allocator for the CPU EP
+  bool create_arena = info.create_arena;
 
-  auto cpu_alloc = allocator_manager.GetAllocator(OrtDevice{OrtDevice::CPU, OrtDevice::MemType::DEFAULT, 0});
-
-  if (!cpu_alloc) {
 #if defined(USE_JEMALLOC) || defined(USE_MIMALLOC)
-    // JEMalloc/mimalloc already have memory pool, so just use device allocator.
-    create_arena = false;
+  // JEMalloc/mimalloc already have memory pool, so just use device allocator.
+  create_arena = false;
 #elif !(defined(__amd64__) || defined(_M_AMD64) || defined(__aarch64__) || defined(_M_ARM64))
-    // Disable Arena allocator for x86_32 build because it may run into infinite loop when integer overflow happens
-    create_arena = false;
+  // Disable Arena allocator for x86_32 build because it may run into infinite loop when integer overflow happens
+  create_arena = false;
 #endif
 
-    AllocatorCreationInfo device_info{[](int) { return std::make_unique<CPUAllocator>(); },
-                                      DEFAULT_CPU_ALLOCATOR_DEVICE_ID, create_arena};
+  AllocatorCreationInfo device_info{[](int) { return std::make_unique<CPUAllocator>(); },
+                                    DEFAULT_CPU_ALLOCATOR_DEVICE_ID, create_arena};
 
-    cpu_alloc = CreateAllocator(device_info);
-    allocator_manager.InsertAllocator(cpu_alloc);
+  InsertAllocator(CreateAllocator(device_info));
+}
+
+void CPUExecutionProvider::RegisterAllocator(AllocatorManager& allocator_manager) {
+  OrtDevice cpu_device{OrtDevice::CPU, OrtDevice::MemType::DEFAULT, 0};
+  auto cpu_alloc = allocator_manager.GetAllocator(OrtMemTypeDefault, cpu_device);
+
+  if (!cpu_alloc) {
+    // share our allocator
+    allocator_manager.InsertAllocator(GetAllocator(0, OrtMemTypeDefault));
   }
-
-  InsertAllocator(cpu_alloc);
 }
 
 // Forward declarations of op kernels

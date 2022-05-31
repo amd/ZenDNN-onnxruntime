@@ -72,7 +72,7 @@ class IExecutionProvider {
   /**
    * Get an allocator with specified device id and MemType. Return nullptr if it doesn't exist
    */
-  virtual AllocatorPtr GetAllocator(int id, OrtMemType mem_type) const;
+  virtual AllocatorPtr GetAllocator(int device_id, OrtMemType mem_type) const;
 
   /**
    * Returns a data transfer object that implements methods to copy to and
@@ -274,7 +274,7 @@ class IExecutionProvider {
      Register allocators for EP, potentially re-using existing allocators for a device from allocator_manager.
      If the EP implements this it should delay creating any allocators until this is called.
   */
-  virtual void RegisterAllocator(AllocatorManager& /*allocator_manager*/) {}
+  virtual void RegisterAllocator(AllocatorManager& /*allocator_manager*/);
 
   virtual std::unique_ptr<profiling::EpProfiler> GetProfiler() {
     return {};
@@ -292,7 +292,7 @@ class IExecutionProvider {
   // allocator lookup is via device id and OrtMemType, but there's an implicit connection to the underlying OrtDevice
   // involved that depends on what sort of EP this is.
   // e.g. for a CPU based EP, 'default' memory is a CPU device, and for a GPU based EP 'default' memory is a
-  // GPU device. 
+  // GPU device.
   // Alternatively we could build a map of deviceid+OrtMemType to OrtDevice when inserting allocators so that
   // we have a clearer 1:1 relationship between an OrtDevice and an allocator.
   using AllocatorMap = std::unordered_map<int, AllocatorPtr>;

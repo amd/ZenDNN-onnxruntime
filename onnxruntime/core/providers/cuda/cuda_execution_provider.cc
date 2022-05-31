@@ -2434,11 +2434,11 @@ CUDAExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph,
 void CUDAExecutionProvider::RegisterAllocator(AllocatorManager& allocator_manager) {
   // Try to get a CUDA allocator from allocator manager first
   // Used to allocate CUDA device memory
-  OrtDevice cpu_device{OrtDevice::CPU, OrtDevice::MemType::DEFAULT, 0};
   OrtDevice cuda_device{OrtDevice::GPU, OrtDevice::MemType::DEFAULT, info_.device_id};
-  OrtDevice pinned_device{OrtDevice::GPU, OrtDevice::MemType::CUDA_PINNED, info_.device_id};
+  OrtDevice pinned_device{OrtDevice::CPU, OrtDevice::MemType::CUDA_PINNED, info_.device_id};
+  OrtDevice cpu_device{OrtDevice::CPU, OrtDevice::MemType::DEFAULT, 0};
 
-  auto cuda_alloc = allocator_manager.GetAllocator(cuda_device);
+  auto cuda_alloc = allocator_manager.GetAllocator(OrtMemTypeDefault, cuda_device);
   if (nullptr == cuda_alloc) {
     cuda_alloc = CreateCudaAllocator(info_.device_id, info_.gpu_mem_limit, info_.arena_extend_strategy,
                                      info_.external_allocator_info, info_.default_memory_arena_cfg);
@@ -2450,7 +2450,7 @@ void CUDAExecutionProvider::RegisterAllocator(AllocatorManager& allocator_manage
   // OrtMemTypeCPUOutput -- allocated by cudaMallocHost, used to copy CUDA device memory to CPU
   // Use pinned memory instead of pageable memory make the data transfer faster
   // Used by node MemcpyToHost only
-  auto cuda_pinned_alloc = allocator_manager.GetAllocator(pinned_device);
+  auto cuda_pinned_alloc = allocator_manager.GetAllocator(OrtMemTypeCPUOutput, pinned_device);
   if (nullptr == cuda_pinned_alloc) {
     AllocatorCreationInfo pinned_memory_info(
         [](OrtDevice::DeviceId device_id) {
@@ -2470,7 +2470,9 @@ void CUDAExecutionProvider::RegisterAllocator(AllocatorManager& allocator_manage
   TryInsertAllocator(std::move(cuda_pinned_alloc));
 
   // OrtMemTypeCPUInput -- CUDA op place the input on CPU and will not be accessed by CUDA kernel, no sync issue
-  auto cuda_cpu_alloc = allocator_manager.GetAllocator(cpu_device);
+  // TODO: Currently we can't re-use the CPU EP's allocator as the EP implementation is doing allocator lookup based
+  // on OrtMemoryInfo values and not the device.
+  auto cuda_cpu_alloc = allocator_manager.GetAllocator(OrtMemTypeCPUInput, cpu_device);
   if (nullptr == cuda_cpu_alloc) {
     AllocatorCreationInfo cpu_memory_info(
         [](int device_id) {

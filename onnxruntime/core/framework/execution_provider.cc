@@ -18,8 +18,8 @@ inline int MakeKey(int id, OrtMemType mem_type) {
 }
 }  // namespace
 
-AllocatorPtr IExecutionProvider::GetAllocator(int id, OrtMemType mem_type) const {
-  auto iter = allocators_.find(MakeKey(id, mem_type));
+AllocatorPtr IExecutionProvider::GetAllocator(int device_id, OrtMemType mem_type) const {
+  auto iter = allocators_.find(MakeKey(device_id, mem_type));
   if (iter != allocators_.end()) {
     return iter->second;
   }
@@ -94,14 +94,13 @@ static void InsertAllocatorImpl(AllocatorPtr allocator,
                           " New allocator: ", allocator->Info().name);
     if (throw_if_dup) {
       ORT_THROW(msg);
-    } else {
-      LOGS_DEFAULT(WARNING) << msg;
-      return;
     }
-  }
 
-  allocators.insert({key, allocator});
-  allocator_list.push_back(allocator);
+    LOGS_DEFAULT(WARNING) << msg;
+  } else {
+    allocators.insert({key, allocator});
+    allocator_list.push_back(allocator);
+  }
 }
 
 void IExecutionProvider::InsertAllocator(AllocatorPtr allocator) {
@@ -110,6 +109,9 @@ void IExecutionProvider::InsertAllocator(AllocatorPtr allocator) {
 
 void IExecutionProvider::TryInsertAllocator(AllocatorPtr allocator) {
   InsertAllocatorImpl(allocator, allocators_, allocator_list_, false);
+}
+
+void IExecutionProvider::RegisterAllocator(AllocatorManager&) {
 }
 
 #if !defined(ORT_MINIMAL_BUILD) || defined(ORT_EXTENDED_MINIMAL_BUILD)

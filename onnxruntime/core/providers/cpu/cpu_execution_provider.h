@@ -25,10 +25,7 @@ using FuseRuleFn = std::function<void(const onnxruntime::GraphViewer&,
 // Logical device representation.
 class CPUExecutionProvider : public IExecutionProvider {
  public:
-  explicit CPUExecutionProvider(const CPUExecutionProviderInfo& info)
-      : IExecutionProvider{onnxruntime::kCpuExecutionProvider},
-        info_{info} {
-  }
+  explicit CPUExecutionProvider(const CPUExecutionProviderInfo& info);
 
   void RegisterAllocator(AllocatorManager& allocator_manager) override;
 

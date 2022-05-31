@@ -13,8 +13,15 @@ namespace onnxruntime {
 using namespace common;
 
 namespace {
-int32_t MakeKey(OrtDevice device) {
-  return int32_t(device.CPU) << 24 | int32_t(device.Type()) << 16 | device.Id();
+int32_t MakeKey(OrtMemType mem_type, OrtDevice device) {
+  // shorten device id so we can fit everything
+  uint8_t short_device = gsl::narrow<uint8_t>(device.Id());
+  // and convert mem_type. OrtMemType weirdly uses -2 as the first value so we offset by that before narrowing
+  uint8_t ort_mem_type = gsl::narrow<uint8_t>(mem_type + 2);
+
+  // NOTE: ort_mem_type is the type of memory for a kernel's input/output
+  //       OrtDevice.MemType is the device allocator's memory type.
+  return int32_t(device.Type()) << 24 | int32_t(device.MemType()) << 16 | short_device << 8 | ort_mem_type;
 }
 }  // namespace
 
@@ -61,7 +68,7 @@ AllocatorPtr CreateAllocator(const AllocatorCreationInfo& info) {
 // Update allocator in the provider if already present; ignore if not.
 void AllocatorManager::ReplaceAllocator(AllocatorPtr allocator) {
   const auto& info = allocator->Info();
-  auto iter = allocators_.find(MakeKey(info.device));
+  auto iter = allocators_.find(MakeKey(info.mem_type, info.device));
   if (iter != allocators_.end()) {
     iter->second = allocator;
   }
@@ -69,10 +76,10 @@ void AllocatorManager::ReplaceAllocator(AllocatorPtr allocator) {
 
 void AllocatorManager::InsertAllocator(AllocatorPtr allocator) {
   const OrtMemoryInfo& info = allocator->Info();
-  int32_t key = MakeKey(info.device);
+  int32_t key = MakeKey(info.mem_type, info.device);
   auto iter = allocators_.find(key);
   if (iter != allocators_.end()) {
-    ORT_THROW("Duplicate allocator for device ", info.device.ToString(),
+    ORT_THROW("Duplicate allocator for OrtMemType:", info.mem_type, " device:", info.device.ToString(),
               " Existing allocator: ", iter->second->Info().name,
               " New allocator: ", allocator->Info().name);
   }
@@ -80,8 +87,8 @@ void AllocatorManager::InsertAllocator(AllocatorPtr allocator) {
   allocators_[key] = allocator;
 }
 
-AllocatorPtr AllocatorManager::GetAllocator(OrtDevice device) const {
-  auto iter = allocators_.find(MakeKey(device));
+AllocatorPtr AllocatorManager::GetAllocator(OrtMemType mem_type, OrtDevice device) const {
+  auto iter = allocators_.find(MakeKey(mem_type, device));
   return iter != allocators_.end() ? iter->second : nullptr;
 }
 }  // namespace onnxruntime

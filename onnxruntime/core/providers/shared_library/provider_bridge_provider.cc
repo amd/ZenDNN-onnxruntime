@@ -106,8 +106,8 @@ void AllocatorManager::InsertAllocator(AllocatorPtr allocator) {
   return g_host->AllocatorManager__InsertAllocator(this, allocator);
 }
 
-AllocatorPtr AllocatorManager::GetAllocator(int id, OrtMemType mem_type) const {
-  return g_host->AllocatorManager__GetAllocator(this, id, mem_type);
+AllocatorPtr AllocatorManager::GetAllocator(OrtMemType mem_type, OrtDevice device) const {
+  return g_host->AllocatorManager__GetAllocator(this, mem_type, device);
 }
 
 template <>

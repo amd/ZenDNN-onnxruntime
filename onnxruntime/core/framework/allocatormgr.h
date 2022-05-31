@@ -45,7 +45,7 @@ class AllocatorManager {
   void InsertAllocator(AllocatorPtr allocator);
   void ReplaceAllocator(AllocatorPtr allocator);
   // Get an allocator for the device. Return nullptr if it doesn't exist
-  AllocatorPtr GetAllocator(OrtDevice device) const;
+  AllocatorPtr GetAllocator(OrtMemType mem_type, OrtDevice device) const;
 
  private:
   // map of OrtDevice info (converted to int32_t value) to AllocatorPrt

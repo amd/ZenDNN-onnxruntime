@@ -2224,13 +2224,13 @@ ROCMExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph,
 }
 
 void ROCMExecutionProvider::RegisterAllocator(AllocatorManager& allocator_manager) {
-  OrtDevice cpu_device{OrtDevice::CPU, OrtDevice::MemType::DEFAULT, 0};
   OrtDevice gpu_device{OrtDevice::GPU, OrtDevice::MemType::DEFAULT, info_.device_id};
-  OrtDevice pinned_device{OrtDevice::GPU, OrtDevice::MemType::CUDA_PINNED, info_.device_id};
+  OrtDevice pinned_device{OrtDevice::CPU, OrtDevice::MemType::CUDA_PINNED, info_.device_id};
+  OrtDevice cpu_device{OrtDevice::CPU, OrtDevice::MemType::DEFAULT, 0};
 
   // Try to get a ROCM allocator from allocator manager first
   // Used to allocate ROCM device memory
-  auto rocm_alloc = allocator_manager.GetAllocator(gpu_device);
+  auto rocm_alloc = allocator_manager.GetAllocator(OrtMemTypeDefault, gpu_device);
   if (nullptr == rocm_alloc) {
     rocm_alloc = CreateRocmAllocator(info_.device_id, info_.gpu_mem_limit, info_.arena_extend_strategy,
                                      info_.external_allocator_info, info_.default_memory_arena_cfg);
@@ -2242,7 +2242,7 @@ void ROCMExecutionProvider::RegisterAllocator(AllocatorManager& allocator_manage
   // OrtMemTypeCPUOutput -- allocated by hipHostMalloc, used to copy ROCM device memory to CPU
   // Use pinned memory instead of pageable memory make the data transfer faster
   // Used by node MemcpyToHost only
-  auto rocm_pinned_alloc = allocator_manager.GetAllocator(pinned_device);
+  auto rocm_pinned_alloc = allocator_manager.GetAllocator(OrtMemTypeCPUOutput, pinned_device);
   if (nullptr == rocm_pinned_alloc) {
     AllocatorCreationInfo pinned_memory_info(
         [](OrtDevice::DeviceId device_id) {
@@ -2257,7 +2257,7 @@ void ROCMExecutionProvider::RegisterAllocator(AllocatorManager& allocator_manage
   TryInsertAllocator(std::move(rocm_pinned_alloc));
 
   // OrtMemTypeCPUInput -- ROCM op place the input on CPU and will not be accessed by ROCM kernel, no sync issue
-  auto rocm_cpu_alloc = allocator_manager.GetAllocator(cpu_device);
+  auto rocm_cpu_alloc = allocator_manager.GetAllocator(OrtMemTypeCPUInput, cpu_device);
   if (nullptr == rocm_cpu_alloc) {
     AllocatorCreationInfo cpu_memory_info(
         [](int device_id) {

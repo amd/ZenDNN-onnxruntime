@@ -448,13 +448,13 @@ AllocatorPtr TensorrtExecutionProvider::GetAllocator(int id, OrtMemType mem_type
 }
 
 void TensorrtExecutionProvider::RegisterAllocator(AllocatorManager& allocator_manager) {
-  OrtDevice cpu_device{OrtDevice::CPU, OrtDevice::MemType::DEFAULT, 0};
   OrtDevice gpu_device{OrtDevice::GPU, OrtDevice::MemType::DEFAULT, info_.device_id};
-  OrtDevice pinned_device{OrtDevice::GPU, OrtDevice::MemType::CUDA_PINNED, info_.device_id};
+  OrtDevice pinned_device{OrtDevice::CPU, OrtDevice::MemType::CUDA_PINNED, info_.device_id};
+  OrtDevice cpu_device{OrtDevice::CPU, OrtDevice::MemType::DEFAULT, 0};
 
   // Try to get a CUDA allocator from allocator manager first
   // Used to allocate CUDA device memory
-  allocator_ = allocator_manager.GetAllocator(gpu_device);
+  allocator_ = allocator_manager.GetAllocator(OrtMemTypeDefault, gpu_device);
   if (nullptr == allocator_) {
     AllocatorCreationInfo default_memory_info(
         [](OrtDevice::DeviceId device_id) { return CreateCUDAAllocator(device_id, onnxruntime::CUDA); }, device_id_);
@@ -467,7 +467,7 @@ void TensorrtExecutionProvider::RegisterAllocator(AllocatorManager& allocator_ma
   // OrtMemTypeCPUOutput -- allocated by cudaMallocHost, used to copy CUDA device memory to CPU
   // Use pinned memory instead of pageable memory make the data transfer faster
   // Used by node MemcpyToHost only
-  auto cuda_pinned_alloc = allocator_manager.GetAllocator(pinned_device);
+  auto cuda_pinned_alloc = allocator_manager.GetAllocator(OrtMemTypeCPUOutput, pinned_device);
   if (nullptr == cuda_pinned_alloc) {
     AllocatorCreationInfo pinned_allocator_info(
         [](OrtDevice::DeviceId device_id) {
@@ -481,7 +481,7 @@ void TensorrtExecutionProvider::RegisterAllocator(AllocatorManager& allocator_ma
 
   TryInsertAllocator(cuda_pinned_alloc);
 
-  auto cuda_cpu_alloc = allocator_manager.GetAllocator(cpu_device);
+  auto cuda_cpu_alloc = allocator_manager.GetAllocator(OrtMemTypeCPUInput, cpu_device);
   if (nullptr == cuda_cpu_alloc) {
     AllocatorCreationInfo cpu_memory_info(
         [](int device_id) {

@@ -124,13 +124,13 @@ AllocatorPtr MIGraphXExecutionProvider::GetAllocator(int id, OrtMemType mem_type
 }
 
 void MIGraphXExecutionProvider::RegisterAllocator(AllocatorManager& allocator_manager) {
+  OrtDevice gpu_device{OrtDevice::GPU, OrtDevice::MemType::DEFAULT, info_.device_id};
+  OrtDevice pinned_device{OrtDevice::CPU, OrtDevice::MemType::CUDA_PINNED, info_.device_id};
+  OrtDevice cpu_device{OrtDevice::CPU, OrtDevice::MemType::DEFAULT, 0};
+  
   // Try to get a HIP allocator from allocator manager first
   // Used to allocate HIP device memory
-  OrtDevice cpu_device{OrtDevice::CPU, OrtDevice::MemType::DEFAULT, 0};
-  OrtDevice gpu_device{OrtDevice::GPU, OrtDevice::MemType::DEFAULT, info_.device_id};
-  OrtDevice pinned_device{OrtDevice::GPU, OrtDevice::MemType::CUDA_PINNED, info_.device_id};
-
-  allocator_ = allocator_manager.GetAllocator(gpu_device);
+  allocator_ = allocator_manager.GetAllocator(OrtMemTypeDefault, gpu_device);
   if (nullptr == allocator_) {
     AllocatorCreationInfo default_memory_info(
         [](OrtDevice::DeviceId device_id) { return CreateROCMAllocator(device_id, onnxruntime::CUDA); }, device_id_);
@@ -144,7 +144,7 @@ void MIGraphXExecutionProvider::RegisterAllocator(AllocatorManager& allocator_ma
   // OrtMemTypeCPUOutput -- allocated by hipMallocHost, used to copy HIP device memory to CPU
   // Use pinned memory instead of pageable memory make the data transfer faster
   // Used by node MemcpyToHost only
-  auto hip_pinned_alloc = allocator_manager.GetAllocator(pinned_device);
+  auto hip_pinned_alloc = allocator_manager.GetAllocator(OrtMemTypeCPUOutput, pinned_device);
   if (nullptr == hip_pinned_alloc) {
     AllocatorCreationInfo pinned_allocator_info(
         [](OrtDevice::DeviceId device_id) {
@@ -158,7 +158,7 @@ void MIGraphXExecutionProvider::RegisterAllocator(AllocatorManager& allocator_ma
 
   TryInsertAllocator(hip_pinned_alloc);
 
-  auto hip_cpu_alloc = allocator_manager.GetAllocator(cpu_device);
+  auto hip_cpu_alloc = allocator_manager.GetAllocator(OrtMemTypeCPUInput, cpu_device);
   if (nullptr == hip_cpu_alloc) {
     // This will be refactored/removed when allocator and execution provider are decoupled.
     // Need to move the OrtMemoryType out of Allocator, that's one thing blocking us to share it with CPU EP
