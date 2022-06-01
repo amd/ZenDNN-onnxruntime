@@ -2224,8 +2224,9 @@ ROCMExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph,
 }
 
 void ROCMExecutionProvider::RegisterAllocator(AllocatorManager& allocator_manager) {
-  OrtDevice gpu_device{OrtDevice::GPU, OrtDevice::MemType::DEFAULT, info_.device_id};
-  OrtDevice pinned_device{OrtDevice::CPU, OrtDevice::MemType::CUDA_PINNED, info_.device_id};
+  OrtDevice::DeviceId short_device_id = gsl::narrow<OrtDevice::DeviceId>(info_.device_id);
+  OrtDevice gpu_device{OrtDevice::GPU, OrtDevice::MemType::DEFAULT, short_device_id};
+  OrtDevice pinned_device{OrtDevice::CPU, OrtDevice::MemType::CUDA_PINNED, short_device_id};
   OrtDevice cpu_device{OrtDevice::CPU, OrtDevice::MemType::DEFAULT, 0};
 
   // Try to get a ROCM allocator from allocator manager first
