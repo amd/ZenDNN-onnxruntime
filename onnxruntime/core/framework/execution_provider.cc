@@ -52,32 +52,30 @@ IExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph,
 #endif
 }
 
-// Returns true if an allocator was found and replaced
-static bool FindAndReplaceAllocator(const OrtMemoryInfo& mem_info,
-                                    std::unordered_map<int, AllocatorPtr>& allocators,
-                                    std::vector<AllocatorPtr>& allocator_list,
-                                    AllocatorPtr replacing_allocator) {
-  auto iter = allocators.find(MakeKey(mem_info.id, mem_info.mem_type));
-  if (iter != allocators.end()) {
-    IAllocator* existing_alloc = iter->second.get();
-    for (auto& entry : allocator_list) {
-      if (entry.get() == existing_alloc) {
-        entry = replacing_allocator;
-        break;
-      }
-    }
-
-    iter->second = replacing_allocator;
-    return true;
-  }
-
-  return false;
-}
-
 // Update allocator in the provider if already present; ignore if not.
+// We match using the device id, OrtMemType and OrtDevice info.
+// We ignore the allocator name, and OrtAllocatorType (whether internally an arena is used or not).
+// TODO: We should remove OrtAllocatorType from OrtMemoryInfo as it's an implmentation detail of the allocator.
 void IExecutionProvider::ReplaceAllocator(AllocatorPtr allocator) {
   const auto& info = allocator->Info();
-  FindAndReplaceAllocator(info, allocators_, allocator_list_, allocator);
+
+  auto iter = allocators_.find(MakeKey(info.id, info.mem_type));
+  if (iter != allocators_.end()) {
+    // check device as mem_type is relative to the device
+    // e.g. OrtMemTypeDefault is CPU for a CPU EP and GPU for a CUDA EP. An individual EP will only have one
+    // allocator for an OrtMemType value, so this check is to ensure we don't replace with an incompatible allocator.
+    if (iter->second->Info().device == info.device) {
+      IAllocator* existing_alloc = iter->second.get();
+      for (auto& entry : allocator_list_) {
+        if (entry.get() == existing_alloc) {
+          entry = allocator;
+          break;
+        }
+      }
+
+      iter->second = allocator;
+    }
+  }
 }
 
 static void InsertAllocatorImpl(AllocatorPtr allocator,
@@ -89,7 +87,7 @@ static void InsertAllocatorImpl(AllocatorPtr allocator,
 
   auto iter = allocators.find(key);
   if (iter != allocators.end()) {
-    auto msg = MakeString("Duplicate allocator for mem_type:", info.mem_type, " device:", info.device.ToString(),
+    auto msg = MakeString("Duplicate allocator for OrtMemType:", info.mem_type, " device:", info.device.ToString(),
                           " Existing allocator: ", iter->second->Info().name,
                           " New allocator: ", allocator->Info().name);
     if (throw_if_dup) {

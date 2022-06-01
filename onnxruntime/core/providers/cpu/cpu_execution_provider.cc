@@ -24,28 +24,8 @@ struct KernelRegistryAndStatus {
 }  // namespace
 
 namespace onnxruntime {
-
-CPUExecutionProvider::CPUExecutionProvider(const CPUExecutionProviderInfo& info)
-    : IExecutionProvider{onnxruntime::kCpuExecutionProvider} {
-  // we always create an allocator for the CPU EP
-  bool create_arena = info.create_arena;
-
-#if defined(USE_JEMALLOC) || defined(USE_MIMALLOC)
-  // JEMalloc/mimalloc already have memory pool, so just use device allocator.
-  create_arena = false;
-#elif !(defined(__amd64__) || defined(_M_AMD64) || defined(__aarch64__) || defined(_M_ARM64))
-  // Disable Arena allocator for x86_32 build because it may run into infinite loop when integer overflow happens
-  create_arena = false;
-#endif
-
-  AllocatorCreationInfo device_info{[](int) { return std::make_unique<CPUAllocator>(); },
-                                    DEFAULT_CPU_ALLOCATOR_DEVICE_ID, create_arena};
-
-  InsertAllocator(CreateAllocator(device_info));
-}
-
 void CPUExecutionProvider::RegisterAllocator(AllocatorManager& allocator_manager) {
-  OrtDevice cpu_device{OrtDevice::CPU, OrtDevice::MemType::DEFAULT, 0};
+  OrtDevice cpu_device{OrtDevice::CPU, OrtDevice::MemType::DEFAULT, DEFAULT_CPU_ALLOCATOR_DEVICE_ID};
   auto cpu_alloc = allocator_manager.GetAllocator(OrtMemTypeDefault, cpu_device);
 
   if (!cpu_alloc) {

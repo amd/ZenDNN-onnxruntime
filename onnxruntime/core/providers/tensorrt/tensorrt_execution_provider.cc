@@ -484,6 +484,10 @@ void TensorrtExecutionProvider::RegisterAllocator(AllocatorManager& allocator_ma
 
   auto cuda_cpu_alloc = allocator_manager.GetAllocator(OrtMemTypeCPUInput, cpu_device);
   if (nullptr == cuda_cpu_alloc) {
+    // TODO: this is actually used for the cuda kernels which explicitly ask for inputs from CPU.
+    // This will be refactored/removed when allocator and execution provider are decoupled.
+    // Need to move the OrtMemoryType out of Allocator, that's one thing blocking us to share it with CPU EP
+    // CPUAllocator is OrtMemTypeDefault for CPU EP
     AllocatorCreationInfo cpu_memory_info(
         [](int device_id) {
           return std::make_unique<CPUAllocator>(

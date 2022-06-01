@@ -25,7 +25,23 @@ using FuseRuleFn = std::function<void(const onnxruntime::GraphViewer&,
 // Logical device representation.
 class CPUExecutionProvider : public IExecutionProvider {
  public:
-  explicit CPUExecutionProvider(const CPUExecutionProviderInfo& info);
+  explicit CPUExecutionProvider(const CPUExecutionProviderInfo& info)
+      : IExecutionProvider{onnxruntime::kCpuExecutionProvider} {
+    bool create_arena = info.create_arena;
+
+#if defined(USE_JEMALLOC) || defined(USE_MIMALLOC)
+  // JEMalloc/mimalloc already have memory pool, so just use device allocator.
+  create_arena = false;
+#elif !(defined(__amd64__) || defined(_M_AMD64) || defined(__aarch64__) || defined(_M_ARM64))
+  // Disable Arena allocator for x86_32 build because it may run into infinite loop when integer overflow happens
+  create_arena = false;
+#endif
+
+  AllocatorCreationInfo device_info{[](int) { return std::make_unique<CPUAllocator>(); },
+                                    DEFAULT_CPU_ALLOCATOR_DEVICE_ID, create_arena};
+
+  InsertAllocator(CreateAllocator(device_info));
+  }
 
   void RegisterAllocator(AllocatorManager& allocator_manager) override;
 
@@ -34,7 +50,6 @@ class CPUExecutionProvider : public IExecutionProvider {
 
  private:
   std::vector<FuseRuleFn> fuse_rules_;
-  const CPUExecutionProviderInfo info_;
 };
 
 // Registers all available CPU kernels

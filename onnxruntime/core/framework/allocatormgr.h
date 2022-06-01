@@ -37,7 +37,6 @@ struct AllocatorCreationInfo {
 AllocatorPtr CreateAllocator(const AllocatorCreationInfo& info);
 
 // Used for sharing allocators across EPs. e.g. CUDA with TensorRT, CPU with XNNPACK
-// We keep one allocator per-OrtDevice as that should be sufficient.
 class AllocatorManager {
   //
  public:
@@ -48,9 +47,9 @@ class AllocatorManager {
   AllocatorPtr GetAllocator(OrtMemType mem_type, OrtDevice device) const;
 
  private:
-  // map of OrtDevice info (converted to int32_t value) to AllocatorPrt
-  using DeviceToAllocatorMap = std::unordered_map<int32_t, AllocatorPtr>;
-  DeviceToAllocatorMap allocators_;
+  // key from OrtMemType+OrtDevice mapped to AllocatorPtr
+  using AllocatorMap = std::unordered_map<int32_t, AllocatorPtr>;
+  AllocatorMap allocators_;
 };
 
 }  // namespace onnxruntime

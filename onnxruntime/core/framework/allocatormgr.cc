@@ -19,8 +19,8 @@ int32_t MakeKey(OrtMemType mem_type, OrtDevice device) {
   // and convert mem_type. OrtMemType weirdly uses -2 as the first value so we offset by that before narrowing
   uint8_t ort_mem_type = gsl::narrow<uint8_t>(mem_type + 2);
 
-  // NOTE: ort_mem_type is the type of memory for a kernel's input/output
-  //       OrtDevice.MemType is the device allocator's memory type.
+  // NOTE: OrtMemType is the type of memory for a kernel's input/output
+  //       OrtDevice.MemType is the device memory type.
   return int32_t(device.Type()) << 24 | int32_t(device.MemType()) << 16 | short_device << 8 | ort_mem_type;
 }
 }  // namespace

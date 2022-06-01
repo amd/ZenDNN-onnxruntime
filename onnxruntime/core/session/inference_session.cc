@@ -474,19 +474,6 @@ InferenceSession::~InferenceSession() {
 #endif
 }
 
-void InferenceSession::RegisterAllocators() {
-  // iterate in reverse order. the reason we do this is that we are currently using this to share a CPU or CUDA
-  // allocator between CPU and XNNPACK or CUDA and TensorRT. The config options for the CPU and CUDA EPs are far
-  // more comprehensive so we want to prefer those and need to call RegisterAllocator for them first.
-  // Long term we should move to defining allocator settings on a device centric basis so EP registration order is
-  // not a factor.
-  std::for_each(std::make_reverse_iterator(execution_providers_.end()),
-                std::make_reverse_iterator(execution_providers_.begin()),
-                [this](auto& iter) {
-                  iter->RegisterAllocator(allocator_manager_);
-                });
-}
-
 common::Status InferenceSession::RegisterExecutionProvider(const std::shared_ptr<IExecutionProvider>& p_exec_provider) {
   if (p_exec_provider == nullptr) {
     return Status(common::ONNXRUNTIME, common::FAIL, "Received nullptr for exec provider");
@@ -1294,6 +1281,19 @@ common::Status InferenceSession::Initialize() {
     }
 #endif
 
+    // Ensure all registered EPs have created their allocators and shared them where possible.
+    // Allocator creation may be delayed until IExecutionProvider::RegisterAllocator is called.
+    //
+    // We iterate EPs in reverse order as we are currently using this mechanism to share a CPU or CUDA
+    // allocator between CPU and XNNPACK, or CUDA and TensorRT. The memory config options for the CPU and CUDA EPs are
+    // more comprehensive so we prefer those, and need to call RegisterAllocator for those EPs first so their
+    // allocators are the ones that get shared.
+    std::for_each(std::make_reverse_iterator(execution_providers_.end()),
+                  std::make_reverse_iterator(execution_providers_.begin()),
+                  [this](auto& iter) {
+                    iter->RegisterAllocator(allocator_manager_);
+                  });
+
     // At this time we know all the providers that will be part of this session.
     // Read shared allocators from the environment and update them in the respective providers.
     //
@@ -1306,15 +1306,15 @@ common::Status InferenceSession::Initialize() {
     // since we've to take into account the per-thread cuda allocators.
     // TODO (contd.) We could also possibly absorb the per-thread logic in a new allocator decorator that derives
     // from IAllocator to keep things clean.
+    //
+    // NOTE: UpdateProvidersWithSharedAllocators is replace-only and will not insert a new allocator into the EP, so
+    // it must be called after RegisterAllocator.
     std::string use_env_allocators = session_options_.config_options.GetConfigOrDefault(kOrtSessionOptionsConfigUseEnvAllocators,
                                                                                         "0");
     if (use_env_allocators == "1") {
       LOGS(*session_logger_, INFO) << "This session will use the allocator registered with the environment.";
       UpdateProvidersWithSharedAllocators();
     }
-
-    // setup any local allocator sharing between the registered EPs
-    RegisterAllocators();
 
 #ifdef ONNXRUNTIME_ENABLE_INSTRUMENT
     TraceLoggingWriteStart(session_activity, "OrtInferenceSessionActivity");
@@ -1537,11 +1537,8 @@ common::Status InferenceSession::Initialize() {
 // This method should be called from within Initialize() only and before the creation of the session state.
 // This ensures all providers have been registered in the session and the session state is consistent with the providers.
 void InferenceSession::UpdateProvidersWithSharedAllocators() {
-  using namespace std;
   const auto& provider_ids = execution_providers_.GetIds();
   for (const auto& one_shared_alloc : environment_.GetRegisteredSharedAllocators()) {
-    allocator_manager_.InsertAllocator(one_shared_alloc);
-
     for (const auto& id : provider_ids) {
       auto* provider_ptr = execution_providers_.Get(id);
       provider_ptr->ReplaceAllocator(one_shared_alloc);
