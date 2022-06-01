@@ -2226,8 +2226,8 @@ ROCMExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph,
 void ROCMExecutionProvider::RegisterAllocator(AllocatorManager& allocator_manager) {
   OrtDevice::DeviceId short_device_id = gsl::narrow<OrtDevice::DeviceId>(info_.device_id);
   OrtDevice gpu_device{OrtDevice::GPU, OrtDevice::MemType::DEFAULT, short_device_id};
-  OrtDevice pinned_device{OrtDevice::CPU, OrtDevice::MemType::CUDA_PINNED, short_device_id};
-  OrtDevice cpu_device{OrtDevice::CPU, OrtDevice::MemType::DEFAULT, 0};
+  OrtDevice pinned_device{OrtDevice::CPU, OrtDevice::MemType::CUDA_PINNED, DEFAULT_CPU_ALLOCATOR_DEVICE_ID};
+  OrtDevice cpu_device{OrtDevice::CPU, OrtDevice::MemType::DEFAULT, DEFAULT_CPU_ALLOCATOR_DEVICE_ID};
 
   // Try to get a ROCM allocator from allocator manager first
   // Used to allocate ROCM device memory
@@ -2249,7 +2249,7 @@ void ROCMExecutionProvider::RegisterAllocator(AllocatorManager& allocator_manage
         [](OrtDevice::DeviceId device_id) {
           return std::make_unique<ROCMPinnedAllocator>(device_id, CUDA_PINNED);
         },
-        info_.device_id);  // TODO: Validate
+        pinned_device.Id());
 
     rocm_pinned_alloc = CreateAllocator(pinned_memory_info);
     allocator_manager.InsertAllocator(rocm_pinned_alloc);
@@ -2266,7 +2266,7 @@ void ROCMExecutionProvider::RegisterAllocator(AllocatorManager& allocator_manage
               OrtMemoryInfo("ROCM_CPU", OrtAllocatorType::OrtDeviceAllocator, OrtDevice(), device_id,
                             OrtMemTypeCPUInput));
         },
-        DEFAULT_CPU_ALLOCATOR_DEVICE_ID);
+        cpu_device.Id());
 
     rocm_cpu_alloc = CreateAllocator(cpu_memory_info);
     allocator_manager.InsertAllocator(rocm_cpu_alloc);

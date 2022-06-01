@@ -2435,8 +2435,8 @@ void CUDAExecutionProvider::RegisterAllocator(AllocatorManager& allocator_manage
   // Try to get a CUDA allocator from allocator manager first
   // Used to allocate CUDA device memory
   OrtDevice cuda_device{OrtDevice::GPU, OrtDevice::MemType::DEFAULT, info_.device_id};
-  OrtDevice pinned_device{OrtDevice::CPU, OrtDevice::MemType::CUDA_PINNED, info_.device_id};
-  OrtDevice cpu_device{OrtDevice::CPU, OrtDevice::MemType::DEFAULT, 0};
+  OrtDevice pinned_device{OrtDevice::CPU, OrtDevice::MemType::CUDA_PINNED, DEFAULT_CPU_ALLOCATOR_DEVICE_ID};
+  OrtDevice cpu_device{OrtDevice::CPU, OrtDevice::MemType::DEFAULT, DEFAULT_CPU_ALLOCATOR_DEVICE_ID};
 
   auto cuda_alloc = allocator_manager.GetAllocator(OrtMemTypeDefault, cuda_device);
   if (nullptr == cuda_alloc) {
@@ -2456,12 +2456,12 @@ void CUDAExecutionProvider::RegisterAllocator(AllocatorManager& allocator_manage
         [](OrtDevice::DeviceId device_id) {
           return std::make_unique<CUDAPinnedAllocator>(device_id, CUDA_PINNED);
         },
-        // TODO: Validate if possible. This was set to 0, but don't we have to allocate pinned memory on the correct GPU?
+        // TODO: should we use info_.device_id instead of DEFAULT_CPU_ALLOCATOR_DEVICE_ID?
         // https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__DEVICE.html#group__CUDART__DEVICE_1g159587909ffa0791bbe4b40187a4c6bb
-        // says the pinned memory allocated by cudaMallocHost is associated with a specific device, so isn't it more
-        // correct to use the device_id unless we wanted to share the pinned memory allocator across devices at the
-        // risk the lifetime isn't managed correctly if one of those devices go away?
-        info_.device_id);
+        // says the pinned memory allocated by cudaMallocHost is associated with a specific device, so it may be more
+        // correct to use the GPU device id, unless we wanted to share the pinned memory allocator across devices,
+        // at the risk the lifetime isn't managed correctly if one of those devices go away.
+        pinned_device.Id());
 
     cuda_pinned_alloc = CreateAllocator(pinned_memory_info);
     allocator_manager.InsertAllocator(cuda_pinned_alloc);
@@ -2480,7 +2480,7 @@ void CUDAExecutionProvider::RegisterAllocator(AllocatorManager& allocator_manage
               OrtMemoryInfo("CUDA_CPU", OrtAllocatorType::OrtDeviceAllocator, OrtDevice(), device_id,
                             OrtMemTypeCPUInput));
         },
-        DEFAULT_CPU_ALLOCATOR_DEVICE_ID);
+        cpu_device.Id());
 
     cuda_cpu_alloc = CreateAllocator(cpu_memory_info);
     allocator_manager.InsertAllocator(cuda_cpu_alloc);

@@ -126,8 +126,8 @@ AllocatorPtr MIGraphXExecutionProvider::GetAllocator(int id, OrtMemType mem_type
 void MIGraphXExecutionProvider::RegisterAllocator(AllocatorManager& allocator_manager) {
   OrtDevice::DeviceId short_device_id = gsl::narrow<OrtDevice::DeviceId>(device_id_);
   OrtDevice gpu_device{OrtDevice::GPU, OrtDevice::MemType::DEFAULT, short_device_id};
-  OrtDevice pinned_device{OrtDevice::CPU, OrtDevice::MemType::CUDA_PINNED, short_device_id};
-  OrtDevice cpu_device{OrtDevice::CPU, OrtDevice::MemType::DEFAULT, 0};
+  OrtDevice pinned_device{OrtDevice::CPU, OrtDevice::MemType::CUDA_PINNED, DEFAULT_CPU_ALLOCATOR_DEVICE_ID};
+  OrtDevice cpu_device{OrtDevice::CPU, OrtDevice::MemType::DEFAULT, DEFAULT_CPU_ALLOCATOR_DEVICE_ID};
   
   // Try to get a HIP allocator from allocator manager first
   // Used to allocate HIP device memory
@@ -151,8 +151,7 @@ void MIGraphXExecutionProvider::RegisterAllocator(AllocatorManager& allocator_ma
         [](OrtDevice::DeviceId device_id) {
           return CreateROCMPinnedAllocator(device_id, onnxruntime::CUDA_PINNED);
         },
-        device_id_);  // TODO: Validate
-
+        pinned_device.Id());
     hip_pinned_alloc = CreateAllocator(pinned_allocator_info);
     allocator_manager.InsertAllocator(hip_pinned_alloc);
   }
@@ -170,7 +169,7 @@ void MIGraphXExecutionProvider::RegisterAllocator(AllocatorManager& allocator_ma
               OrtMemoryInfo("MIP_CPU", OrtAllocatorType::OrtDeviceAllocator, OrtDevice(), device_id,
                             OrtMemTypeCPUInput));
         },
-        DEFAULT_CPU_ALLOCATOR_DEVICE_ID);
+        cpu_device.Id());
 
     hip_cpu_alloc = CreateAllocator(cpu_memory_info);
     allocator_manager.InsertAllocator(hip_cpu_alloc);
