@@ -107,7 +107,7 @@ option(onnxruntime_PREFER_SYSTEM_LIB "Experimental: Build with the preinstalled 
 option(onnxruntime_USE_ROCM "Build with AMD GPU support" OFF)
 option(onnxruntime_USE_TVM "Build with TVM support" OFF)
 option(onnxruntime_TVM_CUDA_RUNTIME "Build TVM with CUDA support" OFF)
-option(onnxruntime_USE_XNNPACK "Build with XNNPACK support. Provides as an alternative math library on ARM, WebAssembly and x86." OFF)
+option(onnxruntime_USE_XNNPACK "Build with XNNPACK support. Provides an alternative math library on ARM, WebAssembly and x86." OFF)
 
 # Options related to reducing the binary size produced by the build
 option(onnxruntime_DISABLE_CONTRIB_OPS "Disable contrib ops" OFF)
@@ -938,7 +938,7 @@ if (CPUINFO_SUPPORTED)
   endif()
   
   # if this is a wasm build with xnnpack (only type of wasm build where cpuinfo is involved) 
-  # we do not use cpuinfo in ORT code, so don't set the.
+  # we do not use cpuinfo in ORT code, so don't define CPUINFO_SUPPORTED.
   if (NOT onnxruntime_BUILD_WEBASSEMBLY)
     string(APPEND CMAKE_CXX_FLAGS " -DCPUINFO_SUPPORTED")
   endif()
@@ -1505,8 +1505,8 @@ endif()
 # XNNPACK EP
 if (onnxruntime_USE_XNNPACK)
   if (onnxruntime_DISABLE_CONTRIB_OPS)
-    message(FATAL_ERROR "XNNPACK EP requires the internal NHWC contrib ops to be available \
-                         but onnxruntime_DISABLE_CONTRIB_OPS is ON")
+    message(FATAL_ERROR "XNNPACK EP requires the internal NHWC contrib ops to be available "
+                         "but onnxruntime_DISABLE_CONTRIB_OPS is ON")
   endif()
 
   set(XNNPACK_DIR external/XNNPACK)
