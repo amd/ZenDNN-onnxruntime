@@ -2227,19 +2227,39 @@ ORT_API_STATUS_IMPL(OrtApis::SessionOptionsSetCustomJoinThreadFn, _Inout_ OrtSes
   API_IMPL_END
 }
 
-#if defined(USE_XNNPACK)
-#include "core/providers/xnnpack/xnnpack_provider_factory.h"
-#endif
+ORT_API_STATUS_IMPL(OrtApis::CreateProviderOptions,
+                    _In_reads_(num_keys) const char* const* provider_options_keys,
+                    _In_reads_(num_keys) const char* const* provider_options_values,
+                    _In_ size_t num_keys,
+                    _Outptr_ OrtProviderOptions** ort_provider_options) {
+  API_IMPL_BEGIN
+  auto provider_options = std::make_unique<onnxruntime::ProviderOptions>();
 
-ORT_API_STATUS_IMPL(OrtApis::SessionOptionsAppendExecutionProvider_Xnnpack,
-                    _In_ OrtSessionOptions* options, _In_ const OrtXnnpackProviderOptions* xnnpack_options) {
-#if defined(USE_XNNPACK)
-  return OrtSessionOptionsAppendExecutionProvider_Xnnpack(options, xnnpack_options);
-#else
-  ORT_UNUSED_PARAMETER(options);
-  ORT_UNUSED_PARAMETER(xnnpack_options);
-  return return OrtApis::CreateStatus(ORT_FAIL, "XNNPACK execution provider is not enabled in this build.");
-#endif
+  for (size_t i = 0; i != num_keys; ++i) {
+    if (provider_options_keys[i] == nullptr || provider_options_keys[i][0] == '\0' ||
+        provider_options_values[i] == nullptr || provider_options_values[i][0] == '\0') {
+      return OrtApis::CreateStatus(ORT_INVALID_ARGUMENT, "key/value cannot be empty");
+    }
+
+    // arbitrary length to validate the key/value. adjust if/when needed.
+    // TODO: are any other input validation checks required here (and in the other functions that process
+    // provider options)?
+    if (strlen(provider_options_keys[i]) > 1024 ||
+        strlen(provider_options_values[i]) > 1024) {
+      return OrtApis::CreateStatus(ORT_INVALID_ARGUMENT, "Maximum string length for key/value is 1024.");
+    }
+
+    (*provider_options)[provider_options_keys[i]] = provider_options_values[i];
+  }
+
+  *ort_provider_options = reinterpret_cast<OrtProviderOptions*>(provider_options.release());
+  return nullptr;
+  API_IMPL_END
+}
+
+ORT_API(void, OrtApis::ReleaseProviderOptions, _Frees_ptr_opt_ OrtProviderOptions* ptr) {
+  onnxruntime::ProviderOptions* provider_options = reinterpret_cast<onnxruntime::ProviderOptions*>(ptr);
+  delete provider_options;
 }
 
 static constexpr OrtApiBase ort_api_base = {
@@ -2543,6 +2563,8 @@ static constexpr OrtApi ort_api_1_to_12 = {
     &OrtApis::CreateOp,
     &OrtApis::InvokeOp,
     &OrtApis::ReleaseOp,
+    &OrtApis::CreateProviderOptions,
+    &OrtApis::ReleaseProviderOptions,
     &OrtApis::SessionOptionsAppendExecutionProvider_Xnnpack,
 };
 

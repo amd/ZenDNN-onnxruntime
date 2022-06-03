@@ -375,7 +375,14 @@ ORT_API_STATUS_IMPL(InvokeOp,
 
 ORT_API(void, ReleaseOp, _Frees_ptr_opt_ OrtOp* op);
 
-ORT_API_STATUS_IMPL(SessionOptionsAppendExecutionProvider_Xnnpack,
-                    _In_ OrtSessionOptions* options, _In_ const OrtXnnpackProviderOptions* migraphx_options);
+ORT_API_STATUS_IMPL(CreateProviderOptions,
+                    _In_reads_(num_keys) const char* const* provider_options_keys,
+                    _In_reads_(num_keys) const char* const* provider_options_values,
+                    _In_ size_t num_keys,
+                    _Outptr_ OrtProviderOptions** provider_options);
 
+ORT_API(void, ReleaseProviderOptions, _Frees_ptr_opt_ OrtProviderOptions* provider_options);
+
+ORT_API_STATUS_IMPL(SessionOptionsAppendExecutionProvider_Xnnpack,
+                    _In_ OrtSessionOptions* options, _In_ const OrtProviderOptions* provider_options);
 }  // namespace OrtApis

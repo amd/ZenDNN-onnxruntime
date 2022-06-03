@@ -384,9 +384,19 @@ namespace Microsoft.ML.OnnxRuntime
             }
 #endif
         }
-#endregion //ExecutionProviderAppends
 
-#region Public Methods
+        /// <summary>
+        /// Use only if you have an onnxruntime package specific that supports the XNNPACK Execution Provider.
+        /// </summary>
+        /// <param name="settings">Optional OrtProviderOptions</param>
+        public void AppendExecutionProvider_Xnnpack(OrtProviderOptions options = null)
+        {
+            IntPtr options_handle = options != null ? options.Handle : IntPtr.Zero;
+            NativeApiStatus.VerifySuccess(NativeMethods.SessionOptionsAppendExecutionProvider_Xnnpack(handle, options_handle));
+        }
+        #endregion //ExecutionProviderAppends
+
+        #region Public Methods
         /// <summary>
         /// (Deprecated) Loads a DLL named 'libraryPath' and looks for this entry point:
         /// OrtStatus* RegisterCustomOps(OrtSessionOptions* options, const OrtApiBase* api);

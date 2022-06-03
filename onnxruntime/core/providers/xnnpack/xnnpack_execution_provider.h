@@ -10,13 +10,9 @@
 #include "core/providers/providers.h"
 
 namespace onnxruntime {
+// placeholder for future use. no options currently
 struct XnnpackExecutionProviderInfo {
-  bool create_arena{true};
-
-  explicit XnnpackExecutionProviderInfo(bool use_arena = true)
-      : create_arena{use_arena} {}
-
-  XnnpackExecutionProviderInfo() = delete;
+  XnnpackExecutionProviderInfo() = default;
 };
 
 class XnnpackExecutionProvider : public IExecutionProvider {

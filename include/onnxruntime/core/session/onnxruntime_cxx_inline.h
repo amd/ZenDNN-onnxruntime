@@ -551,8 +551,13 @@ inline SessionOptions& SessionOptions::AppendExecutionProvider_MIGraphX(const Or
   return *this;
 }
 
-inline SessionOptions& SessionOptions::AppendExecutionProvider_Xnnpack(const OrtXnnpackProviderOptions* provider_options) {
-  ThrowOnError(GetApi().SessionOptionsAppendExecutionProvider_Xnnpack(p_, provider_options));
+inline SessionOptions& SessionOptions::AppendExecutionProvider_Xnnpack(
+    const std::unordered_map<std::string, std::string>& provider_options) {
+  // OrtProviderOptions is the opaque C-API type for onnxruntime::ProviderOptions
+  // onnxruntime::ProviderOptions is an alias for std::unordered_map<std::string, std::string>
+  ThrowOnError(GetApi().SessionOptionsAppendExecutionProvider_Xnnpack(
+      p_, reinterpret_cast<const OrtProviderOptions*>(&provider_options)));
+
   return *this;
 }
 

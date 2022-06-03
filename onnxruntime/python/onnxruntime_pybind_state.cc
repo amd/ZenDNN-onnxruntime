@@ -24,11 +24,11 @@
 #include "core/graph/graph_viewer.h"
 #include "core/platform/env.h"
 #include "core/providers/get_execution_providers.h"
+#include "core/providers/tensorrt/tensorrt_provider_options.h"
 #include "core/session/IOBinding.h"
 #include "core/session/abi_session_options_impl.h"
 #include "core/session/onnxruntime_session_options_config_keys.h"
 #include "core/session/provider_bridge_ort.h"
-#include "core/providers/tensorrt/tensorrt_provider_options.h"
 
 // Explicitly provide a definition for the static const var 'GPU' in the OrtDevice struct,
 // GCC 4.x doesn't seem to define this and it breaks the pipelines based on CentOS as it uses
@@ -744,6 +744,10 @@ std::unique_ptr<IExecutionProvider> CreateExecutionProviderInstance(
 #endif
     return onnxruntime::CreateExecutionProviderFactory_CoreML(0)->CreateProvider();
 #endif
+  } else if (type == kXnnpackExecutionProvider) {
+#if defined(USE_XNNPACK)
+    return onnxruntime::CreateExecutionProviderFactory_Xnnpack()->CreateProvider();
+#endif
   } else {
     // check whether it is a dynamic load EP:
     const auto it = provider_options_map.find(type);
@@ -1236,25 +1240,24 @@ Applies to session load, initialization, etc. Default is 0.)pbdoc")
             const OrtValue* ml_value = ml_value_pyobject.attr(PYTHON_ORTVALUE_NATIVE_OBJECT_ATTR).cast<OrtValue*>();
             ORT_THROW_IF_ERROR(options->AddInitializer(name, ml_value));
           })
-      .def("add_external_initializers", [](PySessionOptions* options, py::list& names, 
-                                                    const py::list& ort_values) -> void {
+      .def("add_external_initializers", [](PySessionOptions* options, py::list& names, const py::list& ort_values) -> void {
 #if !defined(ORT_MINIMAL_BUILD) && !defined(DISABLE_EXTERNAL_INITIALIZERS)
-          const auto init_num = ort_values.size();
-          ORT_ENFORCE(init_num == names.size(), "Expecting names and ort_values lists to have equal length");
-          InlinedVector<std::string> names_ptrs;
-          InlinedVector<OrtValue> values_ptrs;
-          names_ptrs.reserve(init_num);
-          values_ptrs.reserve(init_num);
-          for (size_t i = 0; i < init_num; ++i) {
-            names_ptrs.emplace_back(py::str(names[i]));
-            values_ptrs.emplace_back(*ort_values[i].attr(PYTHON_ORTVALUE_NATIVE_OBJECT_ATTR).cast<const OrtValue*>());
-          }
-          ORT_THROW_IF_ERROR(options->AddExternalInitializers(names_ptrs, values_ptrs));
+        const auto init_num = ort_values.size();
+        ORT_ENFORCE(init_num == names.size(), "Expecting names and ort_values lists to have equal length");
+        InlinedVector<std::string> names_ptrs;
+        InlinedVector<OrtValue> values_ptrs;
+        names_ptrs.reserve(init_num);
+        values_ptrs.reserve(init_num);
+        for (size_t i = 0; i < init_num; ++i) {
+          names_ptrs.emplace_back(py::str(names[i]));
+          values_ptrs.emplace_back(*ort_values[i].attr(PYTHON_ORTVALUE_NATIVE_OBJECT_ATTR).cast<const OrtValue*>());
+        }
+        ORT_THROW_IF_ERROR(options->AddExternalInitializers(names_ptrs, values_ptrs));
 #else
-          ORT_UNUSED_PARAMETER(options);
-          ORT_UNUSED_PARAMETER(names);
-          ORT_UNUSED_PARAMETER(ort_values);
-          ORT_THROW("External initializers are not supported in this build.");
+            ORT_UNUSED_PARAMETER(options);
+            ORT_UNUSED_PARAMETER(names);
+            ORT_UNUSED_PARAMETER(ort_values);
+            ORT_THROW("External initializers are not supported in this build.");
 #endif
       });
 
@@ -1279,7 +1282,7 @@ RunOptions instance. The individual calls will exit gracefully and return an err
       .def(
           "add_run_config_entry",
           [](RunOptions* options, const char* config_key, const char* config_value) -> void {
-            //config_key and config_value will be copied
+            // config_key and config_value will be copied
             const Status status = options->config_options.AddConfigEntry(config_key, config_value);
             if (!status.IsOK())
               throw std::runtime_error(status.ErrorMessage());

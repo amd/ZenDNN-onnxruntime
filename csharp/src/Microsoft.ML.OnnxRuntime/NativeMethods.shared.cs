@@ -14,7 +14,7 @@ namespace Microsoft.ML.OnnxRuntime
     };
 
     // NOTE: The order of the APIs in this struct should match exactly that in
-    // OrtApi ort_api_1_to_4 (onnxruntime_c_api.cc)
+    // OrtApi ort_api_1_to_<latest_version> (onnxruntime/core/session/onnxruntime_c_api.cc)
     [StructLayout(LayoutKind.Sequential)]
     public struct OrtApi
     {
@@ -240,6 +240,16 @@ namespace Microsoft.ML.OnnxRuntime
         public IntPtr UpdateCUDAProviderOptions;
         public IntPtr GetCUDAProviderOptionsAsString;
         public IntPtr ReleaseCUDAProviderOptions;
+        public IntPtr SessionOptionsAppendExecutionProvider_MIGraphX;
+        public IntPtr AddExternalInitializers;
+        public IntPtr CreateOpAttr;
+        public IntPtr ReleaseOpAttr;
+        public IntPtr CreateOp;
+        public IntPtr InvokeOp;
+        public IntPtr ReleaseOp;
+        public IntPtr CreateProviderOptions;
+        public IntPtr ReleaseProviderOptions;
+        public IntPtr SessionOptionsAppendExecutionProvider_Xnnpack;
     }
 
     internal static class NativeMethods
@@ -411,6 +421,13 @@ namespace Microsoft.ML.OnnxRuntime
             OrtUpdateCUDAProviderOptions = (DOrtUpdateCUDAProviderOptions)Marshal.GetDelegateForFunctionPointer(api_.UpdateCUDAProviderOptions, typeof(DOrtUpdateCUDAProviderOptions));
             OrtGetCUDAProviderOptionsAsString = (DOrtGetCUDAProviderOptionsAsString)Marshal.GetDelegateForFunctionPointer(api_.GetCUDAProviderOptionsAsString, typeof(DOrtGetCUDAProviderOptionsAsString));
             OrtReleaseCUDAProviderOptions = (DOrtReleaseCUDAProviderOptions)Marshal.GetDelegateForFunctionPointer(api_.ReleaseCUDAProviderOptions, typeof(DOrtReleaseCUDAProviderOptions));
+            OrtCreateProviderOptions = (DOrtCreateProviderOptions)Marshal.GetDelegateForFunctionPointer(api_.CreateProviderOptions, typeof(DOrtCreateProviderOptions));
+            OrtReleaseProviderOptions = (DOrtReleaseProviderOptions)Marshal.GetDelegateForFunctionPointer(api_.ReleaseProviderOptions, typeof(DOrtReleaseProviderOptions));
+
+            SessionOptionsAppendExecutionProvider_Xnnpack
+                = (DSessionOptionsAppendExecutionProvider_Xnnpack)Marshal.GetDelegateForFunctionPointer(
+                                                 api_.SessionOptionsAppendExecutionProvider_Xnnpack, 
+                                                 typeof(DSessionOptionsAppendExecutionProvider_Xnnpack));
         }
 
         [DllImport(NativeLib.DllName, CharSet = CharSet.Ansi)]
@@ -526,6 +543,30 @@ namespace Microsoft.ML.OnnxRuntime
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
         public delegate void DOrtReleaseCUDAProviderOptions(IntPtr /*(OrtCUDAProviderOptions*)*/ cudaProviderOptionsInstance);
         public static DOrtReleaseCUDAProviderOptions OrtReleaseCUDAProviderOptions;
+
+        /// <summary>
+        /// Creates native OrtProviderOptions instance using given key/value pairs.
+        /// </summary>
+        /// <param name="providerOptionsKeys">configuration keys to add to OrtProviderOptions</param>
+        /// <param name="providerOptionsValues">configuration values to add to OrtProviderOptions</param>
+        /// <param name="numKeys">number of configuration keys</param>
+        /// <param name="providerOptionsInstance">(output) native instance of OrtProviderOptions</param>
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        public delegate IntPtr /* OrtStatus* */DOrtCreateProviderOptions(            
+            IntPtr[] /*(const char* const *)*/ providerOptionsKeys,
+            IntPtr[] /*(const char* const *)*/ providerOptionsValues,
+            UIntPtr /*(size_t)*/ numKeys,
+            out IntPtr /*(OrtProviderOptions*)*/ providerOptionsInstance);
+        public static DOrtCreateProviderOptions OrtCreateProviderOptions;
+
+        /// <summary>
+        /// Releases native OrtProviderOptions instance
+        /// </summary>
+        /// <param name="providerOptionsInstance">native instance of OrtProviderOptions to be released</param>
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        public delegate void DOrtReleaseProviderOptions(IntPtr /*(OrtProviderOptions*)*/ providerOptionsInstance);
+        public static DOrtReleaseProviderOptions OrtReleaseProviderOptions;
+
         #endregion
 
         #region Status API
@@ -806,6 +847,14 @@ namespace Microsoft.ML.OnnxRuntime
                                                                           IntPtr /* const char* */ configValue);
         public static DOrtAddSessionConfigEntry OrtAddSessionConfigEntry;
 
+        //
+        // The below OrtSessionOptionsAppendExecutionProvider_XYZ calls are using a publicly exported symbol from the
+        // ONNX Runtime library for the EP (defined in the EP's provider factory .cc file) and not a function pointer
+        // in OrtApis. This mechanism is being deprecated in favor of using OrtApis, as the latter has the ability to
+        // return a graceful message if the EP is not included in the build.
+        // New EPs should use OrtApis. The XNNPACK setup is a simple example of this.
+        //
+
         ///**
         //  * The order of invocation indicates the preference order as well. In other words call this method
         //  * on your most preferred execution provider first followed by the less preferred ones.
@@ -951,6 +1000,18 @@ namespace Microsoft.ML.OnnxRuntime
                                                                   IntPtr /*(OrtValue*)*/ ortValue);
 
         public static DOrtAddInitializer OrtAddInitializer;
+
+        /// <summary>
+        /// Append a XNNPACK EP instance to the native OrtSessionOptions instance
+        /// </summary>
+        /// <param name="options">Native OrtSessionOptions instance</param>
+        /// <param name="providerOptions">Optional OrtProviderOptions instance.</param>
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        public delegate IntPtr /*(OrtStatus*)*/DSessionOptionsAppendExecutionProvider_Xnnpack(
+                                               IntPtr /*(OrtSessionOptions*)*/ options,
+                                               IntPtr /*(const OrtProviderOptions*)*/ providerOptions);
+
+        public static DSessionOptionsAppendExecutionProvider_Xnnpack SessionOptionsAppendExecutionProvider_Xnnpack;
 
         #endregion
 

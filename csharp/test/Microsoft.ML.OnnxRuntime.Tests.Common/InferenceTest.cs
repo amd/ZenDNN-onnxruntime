@@ -120,7 +120,7 @@ namespace Microsoft.ML.OnnxRuntime.Tests
 
 #if USE_TVM
                 opt.AppendExecutionProvider_Tvm("Vulkan -device=amd_apu");
-#endif                
+#endif
 
 #if USE_NUPHAR
                 opt.AppendExecutionProvider_Nuphar();
@@ -137,7 +137,13 @@ namespace Microsoft.ML.OnnxRuntime.Tests
 #if USE_TENSORRT
                 opt.AppendExecutionProvider_Tensorrt(0);
 #endif
+#if USE_XNNPACK
+                opt.AppendExecutionProvider_Xnnpack();
+#else
+                var ex = Assert.Throws<OnnxRuntimeException>(() => { opt.AppendExecutionProvider_Xnnpack(); });
+                Assert.Contains("execution provider is not enabled in this build", ex.Message);
 
+#endif
                 opt.AppendExecutionProvider_CPU(1);
             }
         }

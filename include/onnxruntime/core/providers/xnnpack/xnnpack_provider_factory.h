@@ -9,8 +9,7 @@ extern "C" {
 
 ORT_EXPORT ORT_API_STATUS(OrtSessionOptionsAppendExecutionProvider_Xnnpack,
                           _In_ OrtSessionOptions* options,
-                          _In_ const OrtXnnpackProviderOptions* xnnpack_options)
-    ORT_ALL_ARGS_NONNULL;
+                          _In_ const OrtProviderOptions* provider_options);  // provider_options may be nullptr
 
 #ifdef __cplusplus
 }
