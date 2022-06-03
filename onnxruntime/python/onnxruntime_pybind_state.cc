@@ -365,8 +365,10 @@ std::unique_ptr<IExecutionProvider> CreateExecutionProviderInstance(
     const std::string& type,
     const ProviderOptionsMap& provider_options_map) {
   if (type == kCpuExecutionProvider) {
+      const bool use_fixed_point_requant_on_arm64 =
+      session_options.config_options.GetConfigOrDefault(kOrtSessionOptionsConfigFixedPointRequantOnARM64, "0") == "1";
     return onnxruntime::CreateExecutionProviderFactory_CPU(
-               session_options.enable_cpu_mem_arena)
+               onnxruntime::CPUExecutionProviderInfo(session_options.enable_cpu_mem_arena, use_fixed_point_requant_on_arm64))
         ->CreateProvider();
   } else if (type == kTensorrtExecutionProvider) {
 #ifdef USE_TENSORRT
