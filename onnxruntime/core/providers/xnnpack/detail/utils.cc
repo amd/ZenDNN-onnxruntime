@@ -16,21 +16,22 @@ bool IsPaddingTypeSupported(AutoPadType auto_pad) {
          auto_pad == AutoPadType::SAME_UPPER;
 }
 
-std::unique_ptr<IndexedSubGraph::MetaDef> FuseActivation(const Node& conv, const Node& activation,
+// Fuse activation with node. Currently Conv and MaxPool are supported.
+std::unique_ptr<IndexedSubGraph::MetaDef> FuseActivation(const Node& node, const Node& activation,
                                                          const GraphViewer& graph) {
   std::unique_ptr<IndexedSubGraph::MetaDef> metadef = std::make_unique<IndexedSubGraph::MetaDef>();
   IndexedSubGraph::MetaDef& def = *metadef;
 
   // we use the op type/domain to match the static xnnpack Conv or MaxPool kernel
   // registration
-  def.name = conv.OpType();
-  def.domain = conv.Domain();  // should always be kMSInternalNHWCDomain
-  def.since_version = conv.SinceVersion();
+  def.name = node.OpType();
+  def.domain = node.Domain();  // should always be kMSInternalNHWCDomain
+  def.since_version = node.SinceVersion();
 
   // inputs
-  const auto& conv_inputs = conv.InputDefs();
-  def.inputs.reserve(conv_inputs.size());
-  std::for_each(conv_inputs.cbegin(), conv_inputs.cend(),
+  const auto& inputs = node.InputDefs();
+  def.inputs.reserve(inputs.size());
+  std::for_each(inputs.cbegin(), inputs.cend(),
                 [&def](const NodeArg* arg) {
                   // keep the number of inputs the same by inserting an empty string for a missing optional input
                   def.inputs.push_back(arg ? arg->Name() : "");
@@ -41,7 +42,7 @@ std::unique_ptr<IndexedSubGraph::MetaDef> FuseActivation(const Node& conv, const
 
   // attributes
   // copy existing and add the activation info
-  def.attributes = conv.GetAttributes();
+  def.attributes = node.GetAttributes();
 
   // use infinity as the default as that's what xnnpack uses if min/max are not set
   float min = -INFINITY;
@@ -84,7 +85,7 @@ std::unique_ptr<IndexedSubGraph::MetaDef> FuseActivation(const Node& conv, const
   } else if (activation_type == "Relu") {
     min = 0.f;
   } else {
-    ORT_NOT_IMPLEMENTED("No support for fusion of Conv with ", activation_type);
+    ORT_NOT_IMPLEMENTED("No support for fusion of ", node.OpType(), " with ", activation_type);
   }
 
   InlinedVector<float> activation_params{min, max};

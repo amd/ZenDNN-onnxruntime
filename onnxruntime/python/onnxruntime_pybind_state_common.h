@@ -171,6 +171,9 @@ extern std::string nuphar_settings;
 #ifdef USE_DML
 #include "core/providers/dml/dml_provider_factory.h"
 #endif
+#ifdef USE_DNNL
+#include "core/providers/dnnl/dnnl_provider_factory.h"
+#endif
 
 #ifdef USE_CUDA
 namespace onnxruntime {
@@ -202,7 +205,6 @@ extern onnxruntime::ArenaExtendStrategy arena_extend_strategy;
 }  // namespace onnxruntime
 #endif
 
-#include "core/providers/dnnl/dnnl_provider_factory.h"
 #include "core/providers/shared_library/provider_host_api.h"
 
 namespace onnxruntime {
@@ -381,8 +383,8 @@ class PySparseTensor {
 
  private:
   // instance_ represents data that comes as input. Thus we depend on numpy
-  //arrays that own the underlying memory to stay around. We store copies
-  //of py::objects for those arrays in backing_storage_ as an extra ref-count.
+  // arrays that own the underlying memory to stay around. We store copies
+  // of py::objects for those arrays in backing_storage_ as an extra ref-count.
 
   // If we have and are able to copy from the OrtValue returned by run() to CPU, then this owns the data
   // and backing_storage_ is empty.
@@ -396,7 +398,7 @@ class PySparseTensor {
 
 #if defined(_MSC_VER) && !defined(__clang__)
 #pragma warning(push)
-//You can attempt to make 'onnxruntime::python::SessionObjectInitializer::Get' constexpr
+// You can attempt to make 'onnxruntime::python::SessionObjectInitializer::Get' constexpr
 #pragma warning(disable : 26497)
 #endif
 class SessionObjectInitializer {
@@ -500,6 +502,7 @@ std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_Nnapi(
     uint32_t flags, const optional<std::string>& partitioning_stop_ops_list);
 std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_Rknpu();
 std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_CoreML(uint32_t flags);
+std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_Xnnpack();
 
 constexpr const char* kDefaultExecutionProviderEntry = "GetProvider";
 }  // namespace onnxruntime

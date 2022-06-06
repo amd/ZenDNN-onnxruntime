@@ -2,11 +2,11 @@
 // Licensed under the MIT License.
 #pragma once
 #include "core/common/optional.h"
-#include "core/providers/providers.h"
 #include "core/framework/execution_provider.h"
+#include "core/providers/cpu/cpu_execution_provider.h"
+#include "core/providers/providers.h"
 
 namespace onnxruntime {
-struct SessionOptions;
 
 std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_ACL(int use_arena);
 std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_ArmNN(int use_arena);
@@ -34,7 +34,8 @@ std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_Intern
 namespace test {
 
 // unique_ptr providers with default values for session registration
-std::unique_ptr<IExecutionProvider> DefaultCpuExecutionProvider(bool enable_arena = true);
+std::unique_ptr<IExecutionProvider> DefaultCpuExecutionProvider(const CPUExecutionProviderInfo& info =
+                                                                    CPUExecutionProviderInfo(true, false));
 std::unique_ptr<IExecutionProvider> DefaultCudaExecutionProvider();
 std::unique_ptr<IExecutionProvider> DefaultDnnlExecutionProvider(bool enable_arena = true);
 std::unique_ptr<IExecutionProvider> DefaultNupharExecutionProvider(bool allow_unaligned_buffers = true);

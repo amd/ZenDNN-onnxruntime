@@ -10,6 +10,7 @@
 #include "core/session/onnxruntime_cxx_api.h"
 #include "core/session/inference_session.h"
 
+#include "test/common/tensor_op_test_utils.h"
 #include "test/framework/test_utils.h"
 #include "test/util/include/asserts.h"
 #include "test/util/include/default_providers.h"
@@ -39,14 +40,9 @@ namespace test {
 TEST(XnnpackEP, TestNhwcConvReluClipFusion) {
   const ORTCHAR_T* ort_model_path = ORT_MODEL_FOLDER "nhwc_conv_clip_relu.onnx";
 
+  RandomValueGenerator generator;
   TensorShape input_shape_x{1, 16, 16, 192};
-  auto num_elements = input_shape_x.Size();
-  std::vector<float> input_x;
-  input_x.reserve(num_elements);
-  std::uniform_real_distribution<float> uniform_dist(-128, 128);
-  std::random_device r;
-  std::default_random_engine rd{r()};
-  std::generate_n(std::back_inserter(input_x), input_shape_x.Size(), [&]() -> float { return uniform_dist(rd); });
+  std::vector<float> input_x = generator.Uniform<float>(input_shape_x.GetDims(), -128, 128);
 
   OrtValue ml_value_x;
   OrtValue ml_value_w;
@@ -85,26 +81,59 @@ TEST(XnnpackEP, TestNhwcConvReluClipFusion) {
 }
 
 TEST(XnnpackEP, TestAddEpUsingPublicApi) {
-  Ort::SessionOptions so;
-  so.AppendExecutionProvider_Xnnpack(nullptr);
+  {
+    // C++ API test
+    Ort::SessionOptions so;
+    onnxruntime::ProviderOptions options;
+    // no real options currently but set a value to make sure it's passed through. requires manual validation.
+    options["one"] = "two";
+    so.AppendExecutionProvider_Xnnpack(options);
 
-  const ORTCHAR_T* ort_model_path = ORT_MODEL_FOLDER "nhwc_conv_clip_relu.onnx";
-  Ort::Session session(*ort_env, ort_model_path, so);
+    const ORTCHAR_T* ort_model_path = ORT_MODEL_FOLDER "nhwc_conv_clip_relu.onnx";
+    Ort::Session session(*ort_env, ort_model_path, so);
 
-  // dirty hack to access the underlying InferenceSession but don't know a better way.
-  const OrtSession* ort_session = session;
-  const InferenceSession* s = reinterpret_cast<const InferenceSession*>(ort_session);
+    // dirty hack to access the underlying InferenceSession but don't know a better way.
+    const OrtSession* ort_session = session;
+    const InferenceSession* s = reinterpret_cast<const InferenceSession*>(ort_session);
 
-  bool have_xnnpack_ep = false;
+    bool have_xnnpack_ep = false;
 
-  for (const auto& provider : s->GetRegisteredProviderTypes()) {
-    if (provider == kXnnpackExecutionProvider) {
-      have_xnnpack_ep = true;
-      break;
+    for (const auto& provider : s->GetRegisteredProviderTypes()) {
+      if (provider == kXnnpackExecutionProvider) {
+        have_xnnpack_ep = true;
+        break;
+      }
     }
+
+    ASSERT_TRUE(have_xnnpack_ep) << "Xnnpack EP was not found in registered providers for session.";
   }
 
-  ASSERT_TRUE(have_xnnpack_ep) << "Xnnpack EP was not found in registered providers for session.";
+  {
+    // C API test to validate adding XNNPACK both with and without provider options works, as the calls are slightly
+    // different to the C++ API where we can use an unordered_map directly.
+    // As there are no actual provider options supported currently there's no way to validate anything other than
+    // there being no crashes. Manually validate the calls reach the XNNPACK provider factory as expected.
+    // The above test with the C++ API has already validated everything else works once you reach
+    // OrtSessionOptionsAppendExecutionProvider_Xnnpack.
+    const OrtApi* api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
+    OrtSessionOptions* so{nullptr};
+    api->CreateSessionOptions(&so);
+
+    // add with provider options. manually check the ProviderOptions instance passed through to
+    // OrtSessionOptionsAppendExecutionProvider_Xnnpack is correct.
+    OrtProviderOptions* po{nullptr};
+    const char* keys[1] = {"one"};
+    const char* values[1] = {"two"};
+    api->CreateProviderOptions(keys, values, 1, &po);
+    api->SessionOptionsAppendExecutionProvider_Xnnpack(so, po);
+    api->ReleaseProviderOptions(po);
+    api->ReleaseSessionOptions(so);
+
+    // add with no provider options. checking the nullptr doesn't break anything.
+    api->CreateSessionOptions(&so);
+    api->SessionOptionsAppendExecutionProvider_Xnnpack(so, nullptr);
+    api->ReleaseSessionOptions(so);
+  }
 }
 #endif
 

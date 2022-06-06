@@ -217,7 +217,91 @@ namespace Microsoft.ML.OnnxRuntime
         #endregion
     }
 
+    /// <summary>
+    /// Holds the options for configuring execution providers that use the generic OrtProviderOptions struct.
+    /// </summary>
+    public class OrtProviderOptions : SafeHandle
+    {
+        internal IntPtr Handle
+        {
+            get
+            {
+                return handle;
+            }
+        }
 
+
+        /// <summary>
+        /// Constructs an empty OrtCUDAroviderOptions instance
+        /// </summary>
+        public OrtProviderOptions() : base(IntPtr.Zero, true)
+        {
+            //IntPtr[] empty = new IntPtr[0];
+            //NativeApiStatus.VerifySuccess(NativeMethods.OrtCreateProviderOptions(empty, empty, (UIntPtr)0, out handle));
+        }
+
+        #region Public Methods
+
+        /// <summary>
+        /// Updates  the configuration knobs of OrtCUDAProviderOptions that will eventually be used to configure a CUDA EP
+        /// Please refer to the following on different key/value pairs to configure a CUDA EP and their meaning:
+        /// https://www.onnxruntime.ai/docs/reference/execution-providers/CUDA-ExecutionProvider.html
+        /// </summary>
+        /// <param name="providerOptions">key/value pairs used to configure a CUDA Execution Provider</param>
+        public void SetOptions(Dictionary<string, string> providerOptions)
+        {
+            // release previous options in needed, and create new instance
+            ReleaseHandle();
+
+            using (var cleanupList = new DisposableList<IDisposable>())
+            {
+                var keysArray = NativeOnnxValueHelper.ConvertNamesToUtf8(
+                    providerOptions.Keys.ToArray(), n => n, cleanupList);
+                
+                var valuesArray = NativeOnnxValueHelper.ConvertNamesToUtf8(
+                    providerOptions.Values.ToArray(), n => n, cleanupList);
+
+                NativeApiStatus.VerifySuccess(NativeMethods.OrtCreateProviderOptions(
+                    keysArray, valuesArray, (UIntPtr)providerOptions.Count, out handle));
+            }
+        }
+
+        #endregion
+
+        #region Public Properties
+
+        /// <summary>
+        /// Overrides SafeHandle.IsInvalid
+        /// </summary>
+        /// <value>returns true if handle is equal to Zero</value>
+        public override bool IsInvalid { get { return handle == IntPtr.Zero; } }
+
+        #endregion
+
+        #region Private Methods
+
+
+        #endregion
+
+        #region SafeHandle
+        /// <summary>
+        /// Overrides SafeHandle.ReleaseHandle() to properly dispose of
+        /// the native instance of OrtCUDAProviderOptions
+        /// </summary>
+        /// <returns>always returns true</returns>
+        protected override bool ReleaseHandle()
+        {
+            if (handle != IntPtr.Zero)
+            {
+                NativeMethods.OrtReleaseProviderOptions(handle);
+                handle = IntPtr.Zero;
+            }
+            
+            return true;
+        }
+
+        #endregion
+    }
     /// <summary>
     /// This helper class contains methods to handle values of provider options
     /// </summary>

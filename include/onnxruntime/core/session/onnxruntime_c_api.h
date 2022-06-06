@@ -121,7 +121,8 @@ extern "C" {
 #define ORT_API(RETURN_TYPE, NAME, ...) RETURN_TYPE ORT_API_CALL NAME(__VA_ARGS__) NO_EXCEPTION
 
 #define ORT_API_STATUS(NAME, ...)                                                                   \
-  _Success_(return == 0) _Check_return_ _Ret_maybenull_ OrtStatusPtr ORT_API_CALL NAME(__VA_ARGS__) NO_EXCEPTION ORT_MUST_USE_RESULT
+  _Success_(return == 0) _Check_return_ _Ret_maybenull_ OrtStatusPtr ORT_API_CALL NAME(__VA_ARGS__) \
+  NO_EXCEPTION ORT_MUST_USE_RESULT
 
 // XXX: Unfortunately, SAL annotations are known to not work with function pointers
 #define ORT_API2_STATUS(NAME, ...) \
@@ -269,6 +270,7 @@ ORT_RUNTIME_CLASS(TensorRTProviderOptionsV2);
 ORT_RUNTIME_CLASS(CUDAProviderOptionsV2);
 ORT_RUNTIME_CLASS(Op);
 ORT_RUNTIME_CLASS(OpAttr);
+ORT_RUNTIME_CLASS(ProviderOptions);
 
 #ifdef _WIN32
 typedef _Return_type_success_(return == 0) OrtStatus* OrtStatusPtr;
@@ -360,7 +362,14 @@ typedef enum OrtCudnnConvAlgoSearch {
  */
 typedef struct OrtCUDAProviderOptions {
 #ifdef __cplusplus
-  OrtCUDAProviderOptions() : device_id{}, cudnn_conv_algo_search{OrtCudnnConvAlgoSearchExhaustive}, gpu_mem_limit{SIZE_MAX}, arena_extend_strategy{}, do_copy_in_default_stream{1}, has_user_compute_stream{}, user_compute_stream{}, default_memory_arena_cfg{} {}
+  OrtCUDAProviderOptions() : device_id{},
+                             cudnn_conv_algo_search{OrtCudnnConvAlgoSearchExhaustive},
+                             gpu_mem_limit{SIZE_MAX},
+                             arena_extend_strategy{},
+                             do_copy_in_default_stream{1},
+                             has_user_compute_stream{},
+                             user_compute_stream{},
+                             default_memory_arena_cfg{} {}
 #endif
 
   /** \brief CUDA device Id
@@ -419,7 +428,14 @@ typedef struct OrtCUDAProviderOptions {
  */
 typedef struct OrtROCMProviderOptions {
 #ifdef __cplusplus
-  OrtROCMProviderOptions() : device_id{}, miopen_conv_exhaustive_search{0}, gpu_mem_limit{SIZE_MAX}, arena_extend_strategy{}, do_copy_in_default_stream{1}, has_user_compute_stream{}, user_compute_stream{}, default_memory_arena_cfg{} {}
+  OrtROCMProviderOptions() : device_id{},
+                             miopen_conv_exhaustive_search{0},
+                             gpu_mem_limit{SIZE_MAX},
+                             arena_extend_strategy{},
+                             do_copy_in_default_stream{1},
+                             has_user_compute_stream{},
+                             user_compute_stream{},
+                             default_memory_arena_cfg{} {}
 #endif
 
   /** \brief ROCM device Id
@@ -515,7 +531,14 @@ typedef struct OrtMIGraphXProviderOptions {
  */
 typedef struct OrtOpenVINOProviderOptions {
 #ifdef __cplusplus
-  OrtOpenVINOProviderOptions() : device_type{}, enable_vpu_fast_compile{}, device_id{}, num_of_threads{}, use_compiled_network{}, blob_dump_path{}, context{}, enable_opencl_throttling{} {}
+  OrtOpenVINOProviderOptions() : device_type{},
+                                 enable_vpu_fast_compile{},
+                                 device_id{},
+                                 num_of_threads{},
+                                 use_compiled_network{},
+                                 blob_dump_path{},
+                                 context{},
+                                 enable_opencl_throttling{} {}
 #endif
   /** \brief Device type string
    *
@@ -530,15 +553,6 @@ typedef struct OrtOpenVINOProviderOptions {
   void* context;
   unsigned char enable_opencl_throttling;  ///< 0 = disabled, nonzero = enabled
 } OrtOpenVINOProviderOptions;
-
-/** \brief Xnnpack Provider Options
- *
- * \see OrtApi::SessionOptionsAppendExecutionProvider_Xnnpack
- */
-typedef struct OrtXnnpackProviderOptions {
-  // placeholder for future options so API is stable
-} OrtXnnpackProviderOptions;
-
 
 struct OrtApi;
 typedef struct OrtApi OrtApi;
@@ -3431,19 +3445,50 @@ struct OrtApi {
    */
   ORT_CLASS_RELEASE(Op);
 
-  /** \brief Append Xnnpack provider to session options
+  /** \brief Create an OrtProviderOptions instance with the given keys and values.
    *
-   * If Xnnpack is not available in this build this function will return failure.
+   * Please refer to the EP specific documentation to know the available keys and values.
+   * https://onnxruntime.ai/docs/execution-providers
    *
-   * \param[in] options
-   * \param[in] xnnpack_options
+   * Current EP's that can be configured directly using OrtProviderOptions API are:
+   *   XNNPACK
+   *
+   * \param[in] provider_options_keys Array of UTF-8 null-terminated string for provider options keys
+   * \param[in] provider_options_values Array of UTF-8 null-terminated string for provider options values
+   * \param[in] num_keys Number of elements in the `provider_option_keys` and `provider_options_values` arrays
    *
    * \snippet{doc} snippets.dox OrtStatus Return Value
    *
    * \since Version 1.12.
    */
-  ORT_API2_STATUS(SessionOptionsAppendExecutionProvider_Xnnpack, _In_ OrtSessionOptions* options,
-                  _In_ const OrtXnnpackProviderOptions* xnnpack_options);
+  ORT_API2_STATUS(CreateProviderOptions,
+                  _In_reads_(num_keys) const char* const* provider_options_keys,
+                  _In_reads_(num_keys) const char* const* provider_options_values,
+                  _In_ size_t num_keys,
+                  _Outptr_ OrtProviderOptions** provider_options);
+
+  /** \brief Release an OrtProviderOptions instance.
+   *
+   * \param[in] OrtProviderOptions created by OrtApi::CreateProviderOptions
+   *
+   * \since Version 1.12.
+   */
+  ORT_CLASS_RELEASE(ProviderOptions);
+
+  /** \brief Append Xnnpack provider to session options.
+   *
+   * If Xnnpack is not available in this build this function will return failure.
+   *
+   * \param[in] options OrtSessionOptions to append the provider to.
+   * \param[in] provider_options OrtProviderOptions to use for the provider.
+   *
+   * \snippet{doc} snippets.dox OrtStatus Return Value
+   *
+   * \since Version 1.12.
+   */
+  ORT_API2_STATUS(SessionOptionsAppendExecutionProvider_Xnnpack,
+                  _In_ OrtSessionOptions* options,
+                  _In_ const OrtProviderOptions* provider_options);
 };
 
 /*
