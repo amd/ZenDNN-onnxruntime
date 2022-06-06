@@ -2563,6 +2563,7 @@ static constexpr OrtApi ort_api_1_to_12 = {
     &OrtApis::CreateOp,
     &OrtApis::InvokeOp,
     &OrtApis::ReleaseOp,
+    &OrtApis::SessionOptionsAppendExecutionProvider_SNPE,
     &OrtApis::CreateProviderOptions,
     &OrtApis::ReleaseProviderOptions,
     &OrtApis::SessionOptionsAppendExecutionProvider_Xnnpack,
