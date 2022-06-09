@@ -217,6 +217,33 @@ namespace Microsoft.ML.OnnxRuntime
         #endregion
     }
 
+
+    /// <summary>
+    /// This helper class contains methods to handle values of provider options
+    /// </summary>
+    public class ProviderOptionsValueHelper
+    {
+        /// <summary>
+        /// Parse from string and save to dictionary
+        /// </summary>
+        /// <param name="s">C# string</param>
+        /// <param name="dict">Dictionary instance to store the parsing result of s</param>
+        public static void StringToDict(string s, Dictionary<string, string> dict)
+        {
+            string[] paris = s.Split(';');
+
+            foreach (var p in paris)
+            {
+                string[] keyValue = p.Split('=');
+                if (keyValue.Length != 2)
+                {
+                    throw new ArgumentException("Make sure input string contains key-value paris, e.g. key1=value1;key2=value2...", "s");
+                }
+                dict.Add(keyValue[0], keyValue[1]);
+            }
+        }
+    }
+
     /// <summary>
     /// CoreML flags for use with SessionOptions
     /// </summary>

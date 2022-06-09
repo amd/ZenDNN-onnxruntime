@@ -4,7 +4,6 @@
 #include "core/providers/shared_library/provider_api.h"
 #include "core/providers/openvino/openvino_provider_factory.h"
 #include "openvino_execution_provider.h"
-#include "openvino_provider_factory_creator.h"
 
 namespace onnxruntime {
 struct OpenVINOProviderFactory : IExecutionProviderFactory {

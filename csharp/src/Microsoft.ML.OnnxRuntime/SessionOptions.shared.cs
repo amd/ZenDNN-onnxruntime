@@ -389,7 +389,7 @@ namespace Microsoft.ML.OnnxRuntime
         /// <summary>
         /// Append SNPE or XNNPACK execution provider
         /// </summary>
-        /// <param name="settings">Optional provider option key/value pairs.</param>
+        /// <param name="settings">Optional key/value pairs to specify execution provider options.</param>
         public void AppendExecutionProvider(string providerName, Dictionary<string, string> providerOptions = null)
         {
             if (providerName != "SNPE" && providerName != "XNNPACK")

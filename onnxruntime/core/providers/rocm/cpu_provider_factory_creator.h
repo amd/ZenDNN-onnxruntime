@@ -9,6 +9,6 @@
 
 namespace onnxruntime {
 
-// std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_CPU(int use_arena);
+std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_CPU(int use_arena);
 
 }  // namespace onnxruntime

@@ -7,7 +7,6 @@
 #include "core/framework/execution_provider.h"
 
 namespace onnxruntime {
-
 // EP for internal testing
 std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_InternalTesting(
     const std::unordered_set<std::string>& supported_ops);

@@ -538,7 +538,6 @@ namespace Microsoft.ML.OnnxRuntime
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
         public delegate void DOrtReleaseCUDAProviderOptions(IntPtr /*(OrtCUDAProviderOptions*)*/ cudaProviderOptionsInstance);
         public static DOrtReleaseCUDAProviderOptions OrtReleaseCUDAProviderOptions;
-
         #endregion
 
         #region Status API
@@ -824,7 +823,7 @@ namespace Microsoft.ML.OnnxRuntime
         // ONNX Runtime library for the EP (defined in the EP's provider factory .cc file) and not a function pointer
         // in OrtApis. This mechanism is being deprecated in favor of using OrtApis, as the latter has the ability to
         // return a graceful message if the EP is not included in the build.
-        // New EPs should use OrtApis, preferably leveraging the generic OrtSessionOptionsAppendExecutionProvider
+        // New EPs should use OrtApis, preferably leveraging the generic SessionOptionsAppendExecutionProvider
         // entry point where optional provider configuration key/value pairs can be passed in.
 
         ///**
@@ -974,14 +973,14 @@ namespace Microsoft.ML.OnnxRuntime
         public static DOrtAddInitializer OrtAddInitializer;
 
         /// <summary>
-        /// Append a EP instance to the native OrtSessionOptions instance.
+        /// Append an execution provider instance to the native OrtSessionOptions instance.
         /// 
-        /// 'SNPE' and 'XNNPACK' are currently supported for providerName values.
+        /// 'SNPE' and 'XNNPACK' are currently supported as providerName values.
         /// 
         /// The number of providerOptionsKeys must match the number of providerOptionsValues and equal numKeys.
         /// </summary>
         /// <param name="options">Native OrtSessionOptions instance</param>
-        /// <param name="providerName">Execution Provider to add.</param>
+        /// <param name="providerName">Execution provider to add.</param>
         /// <param name="providerOptionsKeys">Configuration keys to add</param>
         /// <param name="providerOptionsValues">Configuration values to add</param>
         /// <param name="numKeys">Number of configuration keys</param>

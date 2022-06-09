@@ -4,7 +4,6 @@
 
 #include "core/providers/armnn/armnn_provider_factory.h"
 #include "armnn_execution_provider.h"
-#include "armnn_provider_factory_creator.h"
 #include "core/session/abi_session_options_impl.h"
 
 namespace onnxruntime {

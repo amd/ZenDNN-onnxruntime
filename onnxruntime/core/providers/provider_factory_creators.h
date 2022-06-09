@@ -3,7 +3,9 @@
 
 #pragma once
 
-// The below are declarations for static public functions to create each execution provider's factory.
+// Include header with declaration of the function to create the execution provider factory for all enabled
+// execution providers.
+//
 // The functions are typically implemented in
 // onnxruntime/core/providers/<provider name>/<provider name>_provider_factory.cc.
 //
@@ -73,6 +75,7 @@
 #endif
 
 #if defined(USE_VITISAI)
+#include "core/providers/vitisai/vitisai_provider_factory_creator.h"
 #endif
 
 #if defined(USE_XNNPACK)

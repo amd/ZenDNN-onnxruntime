@@ -6,7 +6,6 @@
 #include <atomic>
 #include <cassert>
 #include "dnnl_execution_provider.h"
-#include "dnnl_provider_factory_creator.h"
 
 using namespace onnxruntime;
 
