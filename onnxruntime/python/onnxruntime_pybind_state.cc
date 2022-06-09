@@ -571,9 +571,7 @@ std::unique_ptr<IExecutionProvider> CreateExecutionProviderInstance(
 #endif
   } else if (type == kDnnlExecutionProvider) {
 #ifdef USE_DNNL
-    return onnxruntime::DnnlProviderFactoryCreator::Create(
-               session_options.enable_cpu_mem_arena)
-        ->CreateProvider();
+    return onnxruntime::DnnlProviderFactoryCreator::Create(session_options.enable_cpu_mem_arena)->CreateProvider();
 #endif
   } else if (type == kOpenVINOExecutionProvider) {
 #ifdef USE_OPENVINO
@@ -692,7 +690,7 @@ std::unique_ptr<IExecutionProvider> CreateExecutionProviderInstance(
         load_runtime_module = vai_options_it->second;
       }
     }
-    return onnxruntime::VITISAIProviderFactoryCreator::Create(target.c_str(), 0,
+    return onnxruntime::VitisAIProviderFactoryCreator::Create(target.c_str(), 0,
                                                               export_runtime_module.c_str(),
                                                               load_runtime_module.c_str())
         ->CreateProvider();

@@ -157,7 +157,7 @@ ORT_API_STATUS_IMPL(OrtSessionOptionsAppendExecutionProvider_Tvm,
 #endif  // __APPLE__
 
 /**
- * Stubs EP functions from OrtApis that are implemented in provider_bridge_ort.cc in a full build.
+ * Stubs for EP functions from OrtApis that are implemented in provider_bridge_ort.cc in a full build.
  * That file is not included in a minimal build.
  */
 #if defined(ORT_MINIMAL_BUILD)
@@ -278,18 +278,5 @@ ORT_API_STATUS_IMPL(OrtApis::SessionOptionsAppendExecutionProvider_MIGraphX,
   ORT_UNUSED_PARAMETER(options);
   ORT_UNUSED_PARAMETER(migraphx_options);
   return CreateNotEnabledStatus("MIGraphX");
-}
-
-ORT_API_STATUS_IMPL(OrtApis::SessionOptionsAppendExecutionProvider,
-                    _In_ OrtSessionOptions* options,
-                    _In_ const char* provider_name,
-                    _In_reads_(num_keys) const char* const* provider_options_keys,
-                    _In_reads_(num_keys) const char* const* provider_options_values,
-                    _In_ size_t num_keys) {
-  ORT_UNUSED_PARAMETER(options);
-  ORT_UNUSED_PARAMETER(provider_options_keys);
-  ORT_UNUSED_PARAMETER(provider_options_values);
-  ORT_UNUSED_PARAMETER(num_keys);
-  return CreateNotEnabledStatus(provider_name);
 }
 #endif

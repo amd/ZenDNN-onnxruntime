@@ -50,14 +50,10 @@ void addGlobalSchemaFunctions(pybind11::module& m) {
             onnxruntime::TensorrtProviderFactoryCreator::Create(0),
 #endif
 #ifdef USE_MIGRAPHX
-            onnxruntime::MIGraphXProviderFactoryCreator::Create(
-                [&]() {
-                  MIGraphXExecutionProviderInfo info{};
-                  return info;
-                }()),
+            onnxruntime::MIGraphXProviderFactoryCreator::Create(0),
 #endif
 #ifdef USE_VITISAI
-            onnxruntime::VITISAIProviderFactoryCreator::Create("DPUCADX8G", 0, "", ""),
+            onnxruntime::VitisAIProviderFactoryCreator::Create("DPUCADX8G", 0, "", ""),
 #endif
 #ifdef USE_ACL
             onnxruntime::ACLProviderFactoryCreator::Create(0),

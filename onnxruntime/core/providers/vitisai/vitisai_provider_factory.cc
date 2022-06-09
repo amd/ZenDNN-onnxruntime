@@ -41,7 +41,7 @@ std::unique_ptr<IExecutionProvider> VitisAIProviderFactory::CreateProvider() {
   return std::make_unique<VitisAIExecutionProvider>(info);
 }
 
-std::shared_ptr<IExecutionProviderFactory> VITISAIProviderFactoryCreator::Create(
+std::shared_ptr<IExecutionProviderFactory> VitisAIProviderFactoryCreator::Create(
     const char* backend_type, int device_id, const char* export_runtime_module,
     const char* load_runtime_module) {
   return std::make_shared<onnxruntime::VitisAIProviderFactory>(
@@ -52,7 +52,7 @@ std::shared_ptr<IExecutionProviderFactory> VITISAIProviderFactoryCreator::Create
 ORT_API_STATUS_IMPL(OrtSessionOptionsAppendExecutionProvider_VITISAI,
                     _In_ OrtSessionOptions* options, _In_ const char* backend_type, int device_id,
                     const char* export_runtime_module, const char* load_runtime_module) {
-  options->provider_factories.push_back(onnxruntime::VITISAIProviderFactoryCreator::Create(
+  options->provider_factories.push_back(onnxruntime::VitisAIProviderFactoryCreator::Create(
       backend_type, device_id, export_runtime_module, load_runtime_module));
   return nullptr;
 }

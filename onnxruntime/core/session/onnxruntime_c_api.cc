@@ -2227,36 +2227,6 @@ ORT_API_STATUS_IMPL(OrtApis::SessionOptionsSetCustomJoinThreadFn, _Inout_ OrtSes
   API_IMPL_END
 }
 
-// ORT_API_STATUS_IMPL(OrtApis::CreateProviderOptions,
-//                     _In_reads_(num_keys) const char* const* provider_options_keys,
-//                     _In_reads_(num_keys) const char* const* provider_options_values,
-//                     _In_ size_t num_keys,
-//                     _Outptr_ OrtProviderOptions** ort_provider_options) {
-//   API_IMPL_BEGIN
-//   auto provider_options = std::make_unique<onnxruntime::ProviderOptions>();
-//
-//   for (size_t i = 0; i != num_keys; ++i) {
-//     if (provider_options_keys[i] == nullptr || provider_options_keys[i][0] == '\0' ||
-//         provider_options_values[i] == nullptr || provider_options_values[i][0] == '\0') {
-//       return OrtApis::CreateStatus(ORT_INVALID_ARGUMENT, "key/value cannot be empty");
-//     }
-//
-//     // arbitrary length to validate the key/value. adjust if/when needed.
-//     // TODO: are any other input validation checks required here (and in the other functions that process
-//     // provider options)?
-//     if (strlen(provider_options_keys[i]) > 1024 ||
-//         strlen(provider_options_values[i]) > 1024) {
-//       return OrtApis::CreateStatus(ORT_INVALID_ARGUMENT, "Maximum string length for key/value is 1024.");
-//     }
-//
-//     (*provider_options)[provider_options_keys[i]] = provider_options_values[i];
-//   }
-//
-//   *ort_provider_options = reinterpret_cast<OrtProviderOptions*>(provider_options.release());
-//   return nullptr;
-//   API_IMPL_END
-// }
-
 static constexpr OrtApiBase ort_api_base = {
     &OrtApis::GetApi,
     &OrtApis::GetVersionString,
