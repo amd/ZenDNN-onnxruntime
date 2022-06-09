@@ -9,6 +9,7 @@
 #include "gsl/gsl"
 
 #include "core/providers/rocm/rocm_execution_provider.h"
+#include "core/providers/rocm/rocm_execution_provider_info.h"
 #include "core/providers/rocm/rocm_allocator.h"
 #include "core/providers/rocm/rocm_provider_factory_creator.h"
 #include "core/providers/rocm/gpu_data_transfer.h"
@@ -46,7 +47,7 @@ std::unique_ptr<IExecutionProvider> ROCMProviderFactory::CreateProvider() {
   return std::make_unique<ROCMExecutionProvider>(info_);
 }
 
-std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_ROCM(const ROCMExecutionProviderInfo& info) {
+std::shared_ptr<IExecutionProviderFactory> RocmProviderFactoryCreator::Create(const ROCMExecutionProviderInfo& info) {
   return std::make_shared<onnxruntime::ROCMProviderFactory>(info);
 }
 

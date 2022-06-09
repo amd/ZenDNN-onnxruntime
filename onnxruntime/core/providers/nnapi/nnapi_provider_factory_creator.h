@@ -10,8 +10,8 @@
 #include "core/providers/providers.h"
 
 namespace onnxruntime {
-
-std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_Nnapi(
-    uint32_t nnapi_flags, const optional<std::string>& partitioning_stop_ops_list);
-
+struct NnapiProviderFactoryCreator {
+  static std::shared_ptr<IExecutionProviderFactory> Create(
+      uint32_t nnapi_flags, const optional<std::string>& partitioning_stop_ops_list);
+};
 }  // namespace onnxruntime

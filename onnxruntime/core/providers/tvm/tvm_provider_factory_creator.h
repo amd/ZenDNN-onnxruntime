@@ -8,11 +8,12 @@
 #include "core/providers/providers.h"
 
 namespace onnxruntime {
-namespace tvm{
-  struct TvmEPOptions;
+namespace tvm {
+struct TvmEPOptions;
 }
 
-std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_Tvm(const tvm::TvmEPOptions& info);
-std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_Tvm(const char* params);
-
+struct TvmProviderFactoryCreator {
+  static std::shared_ptr<IExecutionProviderFactory> Create(const tvm::TvmEPOptions& options);
+  static std::shared_ptr<IExecutionProviderFactory> Create(const char* params);
+};
 }  // namespace onnxruntime

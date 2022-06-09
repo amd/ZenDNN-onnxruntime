@@ -8,7 +8,7 @@
 #include "core/providers/providers.h"
 
 namespace onnxruntime {
-
-std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_DML(int device_id);
-
+struct DMLProviderFactoryCreator {
+  static std::shared_ptr<IExecutionProviderFactory> Create(int device_id);
+};
 }  // namespace onnxruntime

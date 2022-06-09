@@ -68,13 +68,13 @@ ORT_API_STATUS_IMPL(OrtApis::SessionOptionsAppendExecutionProvider,
 
   if (strcmp(provider_name, "SNPE") == 0) {
 #if defined(USE_SNPE)
-    options->provider_factories.push_back(CreateExecutionProviderFactory_SNPE(provider_options));
+    options->provider_factories.push_back(SNPEProviderFactoryCreator::Create(provider_options));
 #else
     status = create_not_supported_status();
 #endif
   } else if (strcmp(provider_name, "XNNPACK") == 0) {
 #if defined(USE_XNNPACK)
-    options->provider_factories.push_back(CreateExecutionProviderFactory_Xnnpack(provider_options));
+    options->provider_factories.push_back(XnnpackProviderFactoryCreator::Create(provider_options));
 #else
     status = create_not_supported_status();
 #endif

@@ -9,6 +9,8 @@
 
 namespace onnxruntime {
 
-std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_ACL(int use_arena);
+struct ACLProviderFactoryCreator {
+  static std::shared_ptr<IExecutionProviderFactory> Create(int use_arena);
+};
 
 }  // namespace onnxruntime

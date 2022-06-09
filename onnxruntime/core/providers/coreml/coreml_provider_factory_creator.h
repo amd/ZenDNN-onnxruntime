@@ -8,7 +8,7 @@
 #include "core/providers/providers.h"
 
 namespace onnxruntime {
-
-std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_CoreML(uint32_t coreml_flags);
-
+struct CoreMLProviderFactoryCreator {
+  static std::shared_ptr<IExecutionProviderFactory> Create(uint32_t coreml_flags);
+};
 }  // namespace onnxruntime

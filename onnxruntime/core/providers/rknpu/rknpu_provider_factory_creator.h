@@ -8,7 +8,7 @@
 #include "core/providers/providers.h"
 
 namespace onnxruntime {
-
-std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_Rknpu();
-
+struct RknpuProviderFactoryCreator {
+  static std::shared_ptr<IExecutionProviderFactory> Create();
+};
 }  // namespace onnxruntime

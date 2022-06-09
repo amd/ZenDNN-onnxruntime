@@ -9,8 +9,7 @@
 #include "core/providers/providers.h"
 
 namespace onnxruntime {
-
-std::shared_ptr<IExecutionProviderFactory>
-CreateExecutionProviderFactory_SNPE(const ProviderOptions& provider_options_map);
-
+struct SNPEProviderFactoryCreator {
+  static std::shared_ptr<IExecutionProviderFactory> Create(const ProviderOptions& provider_options_map);
+};
 }  // namespace onnxruntime

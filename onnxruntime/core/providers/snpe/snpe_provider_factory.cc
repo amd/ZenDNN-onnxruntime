@@ -24,7 +24,7 @@ struct SNPEProviderFactory : IExecutionProviderFactory {
 };
 
 std::shared_ptr<IExecutionProviderFactory>
-CreateExecutionProviderFactory_SNPE(const ProviderOptions& provider_options_map) {
+SNPEProviderFactoryCreator::Create(const ProviderOptions& provider_options_map) {
   return std::make_shared<onnxruntime::SNPEProviderFactory>(provider_options_map);
 }
 

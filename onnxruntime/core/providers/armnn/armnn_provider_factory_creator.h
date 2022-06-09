@@ -9,6 +9,8 @@
 
 namespace onnxruntime {
 
-std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_ArmNN(int use_arena);
+struct ArmNNProviderFactoryCreator {
+  static std::shared_ptr<IExecutionProviderFactory> Create(int use_arena);
+};
 
 }  // namespace onnxruntime

@@ -7,17 +7,14 @@
 
 #include "core/providers/providers.h"
 
-namespace onnxruntime {
 struct OrtTensorRTProviderOptions;
 struct OrtTensorRTProviderOptionsV2;
 
+namespace onnxruntime {
 // defined in provider_bridge_ort.cc
-std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_Tensorrt(int device_id);
-
-std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_Tensorrt(
-    const OrtTensorRTProviderOptions* params);
-
-std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_Tensorrt(
-    const OrtTensorRTProviderOptionsV2* params);
-
+struct TensorrtProviderFactoryCreator {
+  static std::shared_ptr<IExecutionProviderFactory> Create(int device_id);
+  static std::shared_ptr<IExecutionProviderFactory> Create(const OrtTensorRTProviderOptions* provider_options);
+  static std::shared_ptr<IExecutionProviderFactory> Create(const OrtTensorRTProviderOptionsV2* provider_options);
+};
 }  // namespace onnxruntime

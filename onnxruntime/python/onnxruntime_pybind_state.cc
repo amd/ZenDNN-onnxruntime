@@ -365,7 +365,7 @@ std::unique_ptr<IExecutionProvider> CreateExecutionProviderInstance(
     const std::string& type,
     const ProviderOptionsMap& provider_options_map) {
   if (type == kCpuExecutionProvider) {
-    return onnxruntime::CreateExecutionProviderFactory_CPU(
+    return onnxruntime::CPUProviderFactoryCreator::Create(
                session_options.enable_cpu_mem_arena)
         ->CreateProvider();
   } else if (type == kTensorrtExecutionProvider) {
@@ -515,11 +515,11 @@ std::unique_ptr<IExecutionProvider> CreateExecutionProviderInstance(
             ORT_THROW("Invalid TensorRT EP option: ", option.first);
           }
         }
-        if (std::shared_ptr<IExecutionProviderFactory> tensorrt_provider_factory = onnxruntime::CreateExecutionProviderFactory_Tensorrt(&params)) {
+        if (std::shared_ptr<IExecutionProviderFactory> tensorrt_provider_factory = onnxruntime::TensorrtProviderFactoryCreator::Create(&params)) {
           return tensorrt_provider_factory->CreateProvider();
         }
       } else {
-        if (std::shared_ptr<IExecutionProviderFactory> tensorrt_provider_factory = onnxruntime::CreateExecutionProviderFactory_Tensorrt(cuda_device_id)) {
+        if (std::shared_ptr<IExecutionProviderFactory> tensorrt_provider_factory = onnxruntime::TensorrtProviderFactoryCreator::Create(cuda_device_id)) {
           return tensorrt_provider_factory->CreateProvider();
         }
       }
@@ -528,7 +528,7 @@ std::unique_ptr<IExecutionProvider> CreateExecutionProviderInstance(
 #endif
   } else if (type == kMIGraphXExecutionProvider) {
 #ifdef USE_MIGRAPHX
-    return onnxruntime::CreateExecutionProviderFactory_MIGraphX(0)->CreateProvider();
+    return onnxruntime::MIGraphXProviderFactoryCreator::Create(0)->CreateProvider();
 #endif
   } else if (type == kCudaExecutionProvider) {
 #ifdef USE_CUDA
@@ -571,7 +571,7 @@ std::unique_ptr<IExecutionProvider> CreateExecutionProviderInstance(
 #endif
   } else if (type == kDnnlExecutionProvider) {
 #ifdef USE_DNNL
-    return onnxruntime::CreateExecutionProviderFactory_Dnnl(
+    return onnxruntime::DnnlProviderFactoryCreator::Create(
                session_options.enable_cpu_mem_arena)
         ->CreateProvider();
 #endif
@@ -627,7 +627,7 @@ std::unique_ptr<IExecutionProvider> CreateExecutionProviderInstance(
         }
       }
     }
-    if (std::shared_ptr<IExecutionProviderFactory> openvino_provider_factory = onnxruntime::CreateExecutionProviderFactory_OpenVINO(&params)) {
+    if (std::shared_ptr<IExecutionProviderFactory> openvino_provider_factory = onnxruntime::OpenVINOProviderFactoryCreator::Create(&params)) {
       auto p = openvino_provider_factory->CreateProvider();
       // Reset global variables config to avoid it being accidentally passed on to the next session
       openvino_device_type.clear();
@@ -650,7 +650,7 @@ std::unique_ptr<IExecutionProvider> CreateExecutionProviderInstance(
               .Parse(it->second));
     }
 
-    auto p = onnxruntime::CreateExecutionProviderFactory_Nuphar(true, nuphar_settings.c_str())->CreateProvider();
+    auto p = onnxruntime::NupharProviderFactoryCreator::Create(true, nuphar_settings.c_str())->CreateProvider();
 
     // clear nuphar_settings after use to avoid it being accidentally passed on to next session
     nuphar_settings.clear();
@@ -664,7 +664,7 @@ std::unique_ptr<IExecutionProvider> CreateExecutionProviderInstance(
       info = onnxruntime::tvm::TvmEPOptionsHelper::FromProviderOptions(it->second);
     }
 
-    return onnxruntime::CreateExecutionProviderFactory_Tvm(info)->CreateProvider();
+    return onnxruntime::TVMProviderFactoryCreator::Create(info)->CreateProvider();
 #endif
   } else if (type == kVitisAIExecutionProvider) {
 #if USE_VITISAI
@@ -692,20 +692,20 @@ std::unique_ptr<IExecutionProvider> CreateExecutionProviderInstance(
         load_runtime_module = vai_options_it->second;
       }
     }
-    return onnxruntime::CreateExecutionProviderFactory_VITISAI(target.c_str(), 0,
-                                                               export_runtime_module.c_str(),
-                                                               load_runtime_module.c_str())
+    return onnxruntime::VITISAIProviderFactoryCreator::Create(target.c_str(), 0,
+                                                              export_runtime_module.c_str(),
+                                                              load_runtime_module.c_str())
         ->CreateProvider();
 #endif
   } else if (type == kAclExecutionProvider) {
 #ifdef USE_ACL
-    return onnxruntime::CreateExecutionProviderFactory_ACL(
+    return onnxruntime::ACLProviderFactoryCreator::Create(
                session_options.enable_cpu_mem_arena)
         ->CreateProvider();
 #endif
   } else if (type == kArmNNExecutionProvider) {
 #ifdef USE_ARMNN
-    return onnxruntime::CreateExecutionProviderFactory_ArmNN(
+    return onnxruntime::ArmNNProviderFactoryCreator::Create(
                session_options.enable_cpu_mem_arena)
         ->CreateProvider();
 #endif
@@ -722,7 +722,7 @@ std::unique_ptr<IExecutionProvider> CreateExecutionProviderInstance(
         }
       }
     }
-    return onnxruntime::CreateExecutionProviderFactory_DML(device_id)->CreateProvider();
+    return onnxruntime::DMLProviderFactoryCreator::Create(device_id)->CreateProvider();
 #endif
   } else if (type == kNnapiExecutionProvider) {
 #if defined(USE_NNAPI)
@@ -731,22 +731,22 @@ std::unique_ptr<IExecutionProvider> CreateExecutionProviderInstance(
 #endif
     const auto partitioning_stop_ops_list = session_options.config_options.GetConfigEntry(
         kOrtSessionOptionsConfigNnapiEpPartitioningStopOps);
-    return onnxruntime::CreateExecutionProviderFactory_Nnapi(0, partitioning_stop_ops_list)->CreateProvider();
+    return onnxruntime::NnapiProviderFactoryCreator::Create(0, partitioning_stop_ops_list)->CreateProvider();
 #endif
   } else if (type == kRknpuExecutionProvider) {
 #ifdef USE_RKNPU
-    return onnxruntime::CreateExecutionProviderFactory_Rknpu()->CreateProvider();
+    return onnxruntime::RknpuProviderFactoryCreator::Create()->CreateProvider();
 #endif
   } else if (type == kCoreMLExecutionProvider) {
 #if defined(USE_COREML)
 #if !defined(__APPLE__)
     LOGS_DEFAULT(WARNING) << "CoreML execution provider can only be used to generate ORT format model in this build.";
 #endif
-    return onnxruntime::CreateExecutionProviderFactory_CoreML(0)->CreateProvider();
+    return onnxruntime::CoreMLProviderFactoryCreator::Create(0)->CreateProvider();
 #endif
   } else if (type == kXnnpackExecutionProvider) {
 #if defined(USE_XNNPACK)
-    return onnxruntime::CreateExecutionProviderFactory_Xnnpack(ProviderOptions{})->CreateProvider();
+    return onnxruntime::XnnpackProviderFactoryCreator::Create(ProviderOptions{})->CreateProvider();
 #endif
   } else {
     // check whether it is a dynamic load EP:

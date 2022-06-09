@@ -8,8 +8,7 @@
 #include "core/providers/providers.h"
 
 namespace onnxruntime {
-
-std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_Nuphar(bool allow_unaligned_buffers, 
-                                                                                 const char* settings);
-
+struct NupharProviderFactoryCreator {
+  static std::shared_ptr<IExecutionProviderFactory> Create(bool allow_unaligned_buffers, const char* settings);
+};
 }  // namespace onnxruntime

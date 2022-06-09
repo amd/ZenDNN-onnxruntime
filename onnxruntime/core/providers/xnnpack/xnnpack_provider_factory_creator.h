@@ -10,7 +10,8 @@
 
 namespace onnxruntime {
 
-std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_Xnnpack(
-    const ProviderOptions& provider_options);
+struct XnnpackProviderFactoryCreator {
+  static std::shared_ptr<IExecutionProviderFactory> Create(const ProviderOptions& provider_options);
+};
 
 }  // namespace onnxruntime

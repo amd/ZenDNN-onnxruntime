@@ -102,7 +102,7 @@ TEST(XnnpackEP, TestAllocatorSharing) {
 
   // and use the same EP instances in both
   std::vector<std::shared_ptr<IExecutionProvider>> eps{
-      std::make_shared<XnnpackExecutionProvider>(XnnpackExecutionProviderInfo{true}),
+      std::make_shared<XnnpackExecutionProvider>(XnnpackExecutionProviderInfo{}),
       std::make_shared<CPUExecutionProvider>(CPUExecutionProviderInfo{})};
 
   // check RegisterAllocator is implemented properly and supports calls from multiple inference sessions
