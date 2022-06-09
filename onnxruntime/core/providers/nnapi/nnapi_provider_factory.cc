@@ -4,6 +4,7 @@
 
 #include "core/common/optional.h"
 #include "core/providers/nnapi/nnapi_builtin/nnapi_execution_provider.h"
+#include "core/providers/nnapi/nnapi_provider_factory_creator.h"
 #include "core/session/abi_session_options_impl.h"
 #include "core/session/onnxruntime_session_options_config_keys.h"
 

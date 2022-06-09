@@ -4,6 +4,7 @@
 #include "core/providers/nuphar/nuphar_provider_factory.h"
 #include <atomic>
 #include "nuphar_execution_provider.h"
+#include "nuphar_provider_factory_creator.h"
 #include "core/session/abi_session_options_impl.h"
 //#include "core/codegen/passes/utils/codegen_context.h"  // TODO: remove it
 

@@ -7,13 +7,9 @@
 
 #include "core/providers/providers.h"
 
-#include "core/providers/rocm/rocm_execution_provider_info.h"
-
 namespace onnxruntime {
-struct OrtROCMProviderOptions;
 
 // defined in provider_bridge_ort.cc
-std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_Rocm(
-    const OrtROCMProviderOptions* provider_options);
+std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_Dnnl(int use_arena);
 
 }  // namespace onnxruntime

@@ -138,12 +138,18 @@ namespace Microsoft.ML.OnnxRuntime.Tests
                 opt.AppendExecutionProvider_Tensorrt(0);
 #endif
 #if USE_XNNPACK
-                opt.AppendExecutionProvider_Xnnpack();
+                opt.AppendExecutionProvider("XNNPACK");
 #else
-                var ex = Assert.Throws<OnnxRuntimeException>(() => { opt.AppendExecutionProvider_Xnnpack(); });
-                Assert.Contains("execution provider is not enabled in this build", ex.Message);
-
+                ex = Assert.Throws<OnnxRuntimeException>(() => { opt.AppendExecutionProvider("XNNPACK"); });
+                Assert.Contains("XNNPACK execution provider is not supported in this build", ex.Message);
 #endif
+#if USE_SNPE
+                opt.AppendExecutionProvider("SNPE");
+#else
+                ex = Assert.Throws<OnnxRuntimeException>(() => { opt.AppendExecutionProvider("SNPE"); });
+                Assert.Contains("SNPE execution provider is not supported in this build", ex.Message);
+#endif
+
                 opt.AppendExecutionProvider_CPU(1);
             }
         }

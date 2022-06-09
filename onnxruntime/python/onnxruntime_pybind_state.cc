@@ -746,7 +746,7 @@ std::unique_ptr<IExecutionProvider> CreateExecutionProviderInstance(
 #endif
   } else if (type == kXnnpackExecutionProvider) {
 #if defined(USE_XNNPACK)
-    return onnxruntime::CreateExecutionProviderFactory_Xnnpack()->CreateProvider();
+    return onnxruntime::CreateExecutionProviderFactory_Xnnpack(ProviderOptions{})->CreateProvider();
 #endif
   } else {
     // check whether it is a dynamic load EP:

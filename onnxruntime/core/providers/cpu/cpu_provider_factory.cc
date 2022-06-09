@@ -1,12 +1,12 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-#include "core/providers/cpu/cpu_provider_factory_creator.h"
 #include "core/providers/cpu/cpu_provider_factory.h"
 
 #include <memory>
 
 #include "core/providers/cpu/cpu_execution_provider.h"
+#include "core/providers/cpu/cpu_provider_factory_creator.h"
 #include "core/session/abi_session_options_impl.h"
 #include "core/session/ort_apis.h"
 

@@ -44,17 +44,13 @@ void addGlobalSchemaFunctions(pybind11::module& m) {
             onnxruntime::CreateExecutionProviderFactory_Dnnl(1),
 #endif
 #ifdef USE_OPENVINO
-            onnxruntime::CreateExecutionProviderFactory_OpenVINO(openvino_device_type, false, "", 8, false, ""),
+            onnxruntime::CreateExecutionProviderFactory_OpenVINO(OrtOpenVINOProviderOptions()),
 #endif
 #ifdef USE_TENSORRT
-            onnxruntime::CreateExecutionProviderFactory_Tensorrt(
-                [&]() {
-                  TensorrtExecutionProviderInfo info{};
-                  return info;
-                }()),
+            onnxruntime::CreateExecutionProviderFactory_Tensorrt(0),
 #endif
 #ifdef USE_MIGRAPHX
-             onnxruntime::CreateExecutionProviderFactory_MIGraphX(
+            onnxruntime::CreateExecutionProviderFactory_MIGraphX(
                 [&]() {
                   MIGraphXExecutionProviderInfo info{};
                   return info;
@@ -212,5 +208,5 @@ void addOpSchemaSubmodule(py::module& m) {
       .value("COMMON", ONNX_NAMESPACE::OpSchema::SupportType::COMMON)
       .value("EXPERIMENTAL", ONNX_NAMESPACE::OpSchema::SupportType::EXPERIMENTAL);
 }
-}
+}  // namespace python
 }  // namespace onnxruntime

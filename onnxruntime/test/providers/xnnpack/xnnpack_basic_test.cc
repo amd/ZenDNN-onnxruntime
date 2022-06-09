@@ -87,7 +87,7 @@ TEST(XnnpackEP, TestAddEpUsingPublicApi) {
     onnxruntime::ProviderOptions options;
     // no real options currently but set a value to make sure it's passed through. requires manual validation.
     options["one"] = "two";
-    so.AppendExecutionProvider_Xnnpack(options);
+    so.AppendExecutionProvider("XNNPACK", options);
 
     const ORTCHAR_T* ort_model_path = ORT_MODEL_FOLDER "nhwc_conv_clip_relu.onnx";
     Ort::Session session(*ort_env, ort_model_path, so);
@@ -109,29 +109,16 @@ TEST(XnnpackEP, TestAddEpUsingPublicApi) {
   }
 
   {
-    // C API test to validate adding XNNPACK both with and without provider options works, as the calls are slightly
-    // different to the C++ API where we can use an unordered_map directly.
-    // As there are no actual provider options supported currently there's no way to validate anything other than
-    // there being no crashes. Manually validate the calls reach the XNNPACK provider factory as expected.
-    // The above test with the C++ API has already validated everything else works once you reach
-    // OrtSessionOptionsAppendExecutionProvider_Xnnpack.
+    // C API test
     const OrtApi* api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
     OrtSessionOptions* so{nullptr};
     api->CreateSessionOptions(&so);
 
     // add with provider options. manually check the ProviderOptions instance passed through to
     // OrtSessionOptionsAppendExecutionProvider_Xnnpack is correct.
-    OrtProviderOptions* po{nullptr};
     const char* keys[1] = {"one"};
     const char* values[1] = {"two"};
-    api->CreateProviderOptions(keys, values, 1, &po);
-    api->SessionOptionsAppendExecutionProvider_Xnnpack(so, po);
-    api->ReleaseProviderOptions(po);
-    api->ReleaseSessionOptions(so);
-
-    // add with no provider options. checking the nullptr doesn't break anything.
-    api->CreateSessionOptions(&so);
-    api->SessionOptionsAppendExecutionProvider_Xnnpack(so, nullptr);
+    api->SessionOptionsAppendExecutionProvider(so, "XNNPACK", keys, values, 1);
     api->ReleaseSessionOptions(so);
   }
 }

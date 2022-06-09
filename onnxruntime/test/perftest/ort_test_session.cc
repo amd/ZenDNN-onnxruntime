@@ -341,10 +341,7 @@ OnnxRuntimeTestSession::OnnxRuntimeTestSession(Ort::Env& env, std::random_device
 #endif
     std::istringstream ss(option_string);
     std::string token;
-
-    std::vector<const char*> snpe_option_keys;
-    std::vector<const char*> snpe_option_values;
-    std::vector<std::string> values;
+    std::unordered_map<std::string, std::string> snpe_options;
 
     while (ss >> token) {
       if (token == "") {
@@ -360,35 +357,26 @@ OnnxRuntimeTestSession::OnnxRuntimeTestSession(Ort::Env& env, std::random_device
 
       if (key == "runtime") {
         std::set<std::string> supported_runtime = {"CPU", "GPU_FP32", "GPU", "GPU_FLOAT16", "DSP", "AIP_FIXED_TF"};
-        if (supported_runtime.find(value) != supported_runtime.end()) {
-          snpe_option_keys.push_back("runtime");
-          values.push_back(value);
-        } else {
+        if (supported_runtime.find(value) == supported_runtime.end()) {
           ORT_THROW(R"(Wrong configuration value for the key 'runtime'. 
 select from 'CPU', 'GPU_FP32', 'GPU', 'GPU_FLOAT16', 'DSP', 'AIP_FIXED_TF'. \n)");
         }
       } else if (key == "priority") {
-        snpe_option_keys.push_back("priority");
-        values.push_back(value);
+        // no validation
       } else if (key == "buffer_type") {
         std::set<std::string> supported_buffer_type = {"TF8", "TF16", "UINT8", "FLOAT", "ITENSOR"};
-        if (supported_buffer_type.find(value) != supported_buffer_type.end()) {
-          snpe_option_keys.push_back("buffer_type");
-          values.push_back(value);
-        } else {
+        if (supported_buffer_type.find(value) == supported_buffer_type.end()) {
           ORT_THROW(R"(Wrong configuration value for the key 'buffer_type'. 
 select from 'TF8', 'TF16', 'UINT8', 'FLOAT', 'ITENSOR'. \n)");
         }
       } else {
         ORT_THROW("Wrong key type entered. Choose from options: ['runtime', 'priority', 'buffer_type'] \n");
       }
+
+      snpe_options[key] = value;
     }
-    for (auto& it : values) {
-      snpe_option_values.push_back(it.c_str());
-    }
-    session_options.AppendExecutionProvider_SNPE(snpe_option_keys.data(),
-                                                 snpe_option_values.data(),
-                                                 snpe_option_keys.size());
+
+    session_options.AppendExecutionProvider("SNPE", snpe_options);
 #else
     ORT_THROW("SNPE is not supported in this build\n");
 #endif
@@ -465,7 +453,7 @@ select from 'TF8', 'TF16', 'UINT8', 'FLOAT', 'ITENSOR'. \n)");
 #endif
   } else if (provider_name == onnxruntime::kXnnpackExecutionProvider) {
 #ifdef USE_XNNPACK
-    Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_Xnnpack(session_options, nullptr));
+    session_options.AppendExecutionProvider("XNNPACK", {});
 #else
     ORT_THROW("Xnnpack is not supported in this build\n");
 #endif

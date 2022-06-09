@@ -5,25 +5,87 @@
 
 #include "core/common/common.h"
 #include "core/framework/error_code_helper.h"
+#include "core/framework/provider_options.h"
+#include "core/providers/provider_factory_creators.h"
+#include "core/session/abi_session_options_impl.h"
 #include "core/session/onnxruntime_c_api.h"
 #include "core/session/ort_apis.h"
 
+using namespace onnxruntime;
+
+namespace {
+
+OrtStatus* ParseProviderOptions(_In_reads_(num_keys) const char* const* provider_options_keys,
+                                _In_reads_(num_keys) const char* const* provider_options_values,
+                                _In_ size_t num_keys,
+                                ProviderOptions& provider_options) {
+  for (size_t i = 0; i != num_keys; ++i) {
+    if (provider_options_keys[i] == nullptr || provider_options_keys[i][0] == '\0' ||
+        provider_options_values[i] == nullptr || provider_options_values[i][0] == '\0') {
+      return OrtApis::CreateStatus(ORT_INVALID_ARGUMENT, "Provider options key/value cannot be empty");
+    }
+
+    // arbitrary length to validate the key/value. adjust if/when needed.
+    // TODO: are any other input validation checks required here (and in the other functions that process
+    // provider options)?
+    if (strlen(provider_options_keys[i]) > 1024 || strlen(provider_options_values[i]) > 1024) {
+      return OrtApis::CreateStatus(ORT_INVALID_ARGUMENT,
+                                   "Maximum string length for a provider options key/value is 1024.");
+    }
+
+    provider_options[provider_options_keys[i]] = provider_options_values[i];
+  }
+
+  return nullptr;
+}
+}  // namespace
 /**
  * Implementation of OrtApis functions for provider registration.
  *
  * EPs that use the provider bridge are handled in provider_bridge_ort.cc
  */
-#if defined(USE_XNNPACK)
-#include "core/providers/xnnpack/xnnpack_provider_factory.h"
 
-ORT_API_STATUS_IMPL(OrtApis::SessionOptionsAppendExecutionProvider_Xnnpack,
+ORT_API_STATUS_IMPL(OrtApis::SessionOptionsAppendExecutionProvider,
                     _In_ OrtSessionOptions* options,
-                    _In_ const OrtProviderOptions* provider_options) {
+                    _In_ const char* provider_name,
+                    _In_reads_(num_keys) const char* const* provider_options_keys,
+                    _In_reads_(num_keys) const char* const* provider_options_values,
+                    _In_ size_t num_keys) {
   API_IMPL_BEGIN
-  return OrtSessionOptionsAppendExecutionProvider_Xnnpack(options, provider_options);
+  ProviderOptions provider_options;
+  OrtStatus* status = ParseProviderOptions(provider_options_keys,
+                                           provider_options_values,
+                                           num_keys,
+                                           provider_options);
+  if (status != nullptr) {
+    return status;
+  }
+
+  auto create_not_supported_status = [&provider_name]() {
+    return OrtApis::CreateStatus(ORT_INVALID_ARGUMENT,
+                                 (std::string(provider_name) + " execution provider is not supported in this build. ").c_str());
+  };
+
+  if (strcmp(provider_name, "SNPE") == 0) {
+#if defined(USE_SNPE)
+    options->provider_factories.push_back(CreateExecutionProviderFactory_SNPE(provider_options));
+#else
+    status = create_not_supported_status();
+#endif
+  } else if (strcmp(provider_name, "XNNPACK") == 0) {
+#if defined(USE_XNNPACK)
+    options->provider_factories.push_back(CreateExecutionProviderFactory_Xnnpack(provider_options));
+#else
+    status = create_not_supported_status();
+#endif
+  } else {
+    status = OrtApis::CreateStatus(ORT_INVALID_ARGUMENT,
+                                   "Unknown provider name. Currently supported values are 'SNPE' and 'XNNPACK'");
+  }
+
+  return status;
   API_IMPL_END
 }
-#endif
 
 /**
  * Stubs for the publicly exported static registration functions for EPs that are referenced in the C# bindings.
@@ -218,9 +280,9 @@ ORT_API_STATUS_IMPL(OrtApis::SessionOptionsAppendExecutionProvider_MIGraphX,
   return CreateNotEnabledStatus("MIGraphX");
 }
 
-#ifndef USE_SNPE
-ORT_API_STATUS_IMPL(OrtApis::SessionOptionsAppendExecutionProvider_SNPE,
+ORT_API_STATUS_IMPL(OrtApis::SessionOptionsAppendExecutionProvider,
                     _In_ OrtSessionOptions* options,
+                    _In_ const char* provider_name,
                     _In_reads_(num_keys) const char* const* provider_options_keys,
                     _In_reads_(num_keys) const char* const* provider_options_values,
                     _In_ size_t num_keys) {
@@ -228,14 +290,6 @@ ORT_API_STATUS_IMPL(OrtApis::SessionOptionsAppendExecutionProvider_SNPE,
   ORT_UNUSED_PARAMETER(provider_options_keys);
   ORT_UNUSED_PARAMETER(provider_options_values);
   ORT_UNUSED_PARAMETER(num_keys);
-  return CreateNotEnabledStatus("SNPE");
-}
-#endif
-
-ORT_API_STATUS_IMPL(OrtApis::SessionOptionsAppendExecutionProvider_Xnnpack,
-                    _In_ OrtSessionOptions* options, _In_ const OrtProviderOptions* xnnpack_options) {
-  ORT_UNUSED_PARAMETER(options);
-  ORT_UNUSED_PARAMETER(xnnpack_options);
-  return CreateNotEnabledStatus("XNNPACK");
+  return CreateNotEnabledStatus(provider_name);
 }
 #endif

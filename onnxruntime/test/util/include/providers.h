@@ -37,6 +37,3 @@
 #ifdef USE_MIGRAPHX
 #include "core/providers/migraphx/migraphx_provider_factory.h"
 #endif
-#ifdef USE_XNNPACK
-#include "core/providers/xnnpack/xnnpack_provider_factory.h"
-#endif

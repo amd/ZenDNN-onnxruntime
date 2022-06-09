@@ -5,6 +5,7 @@
 #include "core/providers/acl/acl_provider_factory.h"
 #include <atomic>
 #include "acl_execution_provider.h"
+#include "acl_provider_factory_creator.h"
 #include "core/session/abi_session_options_impl.h"
 
 namespace onnxruntime {

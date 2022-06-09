@@ -13,6 +13,10 @@ namespace onnxruntime {
 // placeholder for future use. no options currently
 struct XnnpackExecutionProviderInfo {
   XnnpackExecutionProviderInfo() = default;
+
+  XnnpackExecutionProviderInfo(const ProviderOptions&) {
+    // future: parse ProviderOptions
+  }
 };
 
 class XnnpackExecutionProvider : public IExecutionProvider {
