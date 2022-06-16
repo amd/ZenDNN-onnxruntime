@@ -17,7 +17,37 @@ limitations under the License.
 #include "core/platform/env.h"
 #include "gsl/gsl"
 
+#include <Windows.h>
+#include <avrt.h>
+
 namespace onnxruntime {
+
+const char* const mm_task_name = "Audio";
+
+void threadSetMmCharacteristics(HANDLE& mm_handle) {
+  DWORD mmcssTaskIndex = 0;
+  mm_handle = ::AvSetMmThreadCharacteristics(mm_task_name, &mmcssTaskIndex);
+  if (!mm_handle) {
+    auto error_code = ::GetLastError();
+    ORT_THROW("AvSetMmThreadCharacteristicsA failed: ", std::system_category().message(error_code));
+  }
+}
+
+void threadSetMmPriority(HANDLE mm_handle, int priority) {
+  BOOL success = ::AvSetMmThreadPriority(mm_handle, static_cast<AVRT_PRIORITY>(priority));
+  if (!success) {
+    auto error_code = ::GetLastError();
+    ORT_THROW("AvSetMmThreadPriority failed: ", std::system_category().message(error_code));
+  }
+}
+
+void threadRevokeMmCharacteristics(HANDLE mm_handle) {
+  BOOL ok = ::AvRevertMmThreadCharacteristics(mm_handle);
+  if (!ok) {
+    auto error_code = ::GetLastError();
+    ORT_THROW("AvSetMmThreadPriority failed: ", std::system_category().message(error_code));
+  }
+}
 
 Env::Env() = default;
 

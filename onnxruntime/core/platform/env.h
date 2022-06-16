@@ -253,4 +253,10 @@ class Env {
   EnvTime* env_time_ = EnvTime::Default();
 };
 
+void threadSetMmCharacteristics(void*& mm_handle);
+
+void threadSetMmPriority(void* mm_handle, int priority);
+
+void threadRevokeMmCharacteristics(void* mm_handle);
+
 }  // namespace onnxruntime

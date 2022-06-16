@@ -16,6 +16,21 @@
 #include "core/framework/utils.h"
 #include "core/platform/threadpool.h"
 
+#include <Windows.h>
+#include "core/platform/tracing.h"
+
+namespace {
+LARGE_INTEGER OrtGetPerformanceFrequency() {
+  LARGE_INTEGER v;
+  // On systems that run Windows XP or later, the QueryPerformanceFrequency function will always succeed
+  // and will thus never return zero.
+  (void)QueryPerformanceFrequency(&v);
+  return v;
+}
+
+LARGE_INTEGER perf_freq = OrtGetPerformanceFrequency();
+}  // namespace
+
 namespace onnxruntime {
 
 ParallelExecutor::ParallelExecutor(const SessionState& session_state, const bool& terminate_flag)
@@ -23,7 +38,7 @@ ParallelExecutor::ParallelExecutor(const SessionState& session_state, const bool
   const auto& graph_viewer = session_state.GetGraphViewer();
   node_refs_.resize(graph_viewer.MaxNodeIndex());
   for (auto& node : graph_viewer.Nodes()) {
-    node_refs_[node.Index()] = node.GetInputEdgesCount();
+    node_refs_[node.Index()].ref_.store(static_cast<int64_t>(node.GetInputEdgesCount()));
   }
 }
 
@@ -41,22 +56,70 @@ Status ParallelExecutor::Execute(const SessionState& session_state, const std::v
   root_frame_ = std::make_unique<ExecutionFrame>(feed_mlvalue_idxs, feeds, fetch_mlvalue_idxs, fetches,
                                                          fetch_allocators, session_state);
   //std::cout << "start nodes:" << std::endl;
-  for (auto node_index : session_state.GetGraphViewer().GetRootNodes()) {
-    auto p_op_kernel = session_state.GetKernel(node_index);
-    if (!p_op_kernel)
-      continue;
+  const auto& root_nodes = session_state.GetGraphViewer().GetRootNodes();
+  // Need to make a choice which node the main thread would start with.
+  auto main_idx = root_nodes.size() - 1;
+  auto main_thread_node_idx = root_nodes[main_idx];
+  const OpKernel* p_op_kernel = session_state.GetKernel(main_thread_node_idx);
+  while (!p_op_kernel) {
+    if (main_idx == 0) {
+      break;
+    }
+    main_thread_node_idx = root_nodes[--main_idx];
+    p_op_kernel = session_state.GetKernel(main_thread_node_idx);
+  }
 
-    //std::cout << "\t" << p_op_kernel->Node().Name() << std::endl;
-    EnqueueNode(node_index, session_state, logger);
+  if (p_op_kernel) {
+    for (auto node_index : root_nodes) {
+      if (node_index == main_thread_node_idx)
+        continue;
+
+      p_op_kernel = session_state.GetKernel(node_index);
+      if (!p_op_kernel)
+        continue;
+
+      //std::cout << "\t" << p_op_kernel->Node().Name() << std::endl;
+      EnqueueNode(node_index, session_state, logger);
+    }
+  } else {
+    errors_.push_back(ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "Could find a single kernel"));
+    errors_num_.fetch_add(1, std::memory_order_relaxed);
+  }
+
+  Status status;
+
+  if (errors_num_.load() == 0) {
+    auto create_exception_message = [main_thread_node_idx, &session_state](const std::exception* ex) {
+      const auto* node = session_state.GetGraphViewer().GetNode(main_thread_node_idx);
+
+      return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "Exception running nodes in main starting at ", node->OpType(),
+                              " node '", node->Name(), "'. ",
+                              ex ? ex->what() : "Unknown exception in main was caught by catch-all handler.");
+    };
+
+    ORT_TRY {
+      status = ParallelExecutor::RunNodeAsync(main_thread_node_idx, std::cref(session_state), std::cref(logger));
+    }
+    ORT_CATCH(const std::exception& ex) {
+      ORT_HANDLE_EXCEPTION([&]() {
+        status = create_exception_message(&ex);
+      });
+    }
+    ORT_CATCH(...) {
+        // catch node processing failure exceptions here to prevent app crash.
+      status = create_exception_message(nullptr);
+    }
   }
 
   // Wait for finish.
   {
     std::unique_lock<OrtMutex> lock(complete_mutex_);
-    while (out_standings_ > 0) complete_cv_.wait(lock);
+    if (!status.IsOK()) {
+      errors_.push_back(status);
+      errors_num_.fetch_add(1, std::memory_order_relaxed);
+    }
+    while (out_standings_.load(std::memory_order_relaxed) > 0) complete_cv_.wait(lock);
   }
-
-  Status status = Status::OK();
 
   if (!errors_.empty()) {
     if (errors_.size() == 1)
@@ -129,12 +192,20 @@ Status ParallelExecutor::RunNodeAsync(size_t p_node_index,
     }
 
     const auto* p_op_kernel = session_state.GetKernel(node_index);
-    const auto& node = *graph_viewer.GetNode(node_index);
 
     // if a kernel has been added in the session state, it better be NON-null.
     if (p_op_kernel == nullptr) {
-      ORT_THROW("Got nullptr from GetKernel for node: ", node.Name());
+      ORT_THROW("Got nullptr from GetKernel for node index: ", node_index);
     }
+
+    const auto& node = *graph_viewer.GetNode(node_index);
+
+    LARGE_INTEGER kernel_start;
+    QueryPerformanceCounter(&kernel_start);
+
+    TraceLoggingWrite(telemetry_provider_handle,  // handle to my provider
+                      "ParallelOpStart",            // Event Name that should uniquely identify your event.
+                      TraceLoggingUtf8String(p_op_kernel->KernelDef().OpName().c_str(), "op_name"));
 
     OpKernelContextInternal op_kernel_context(session_state, *root_frame_, *p_op_kernel, logger, terminate_flag_);
 
@@ -245,6 +316,20 @@ Status ParallelExecutor::RunNodeAsync(size_t p_node_index,
         }
       }
     }
+
+    LARGE_INTEGER kernel_stop;
+    QueryPerformanceCounter(&kernel_stop);
+    LARGE_INTEGER elapsed;
+    elapsed.QuadPart = kernel_stop.QuadPart - kernel_start.QuadPart;
+    //elapsed.QuadPart *= 1000000;
+    const double elapsed_sec = static_cast<double>(elapsed.QuadPart) / perf_freq.QuadPart;
+    // Log an event
+    TraceLoggingWrite(telemetry_provider_handle,  // handle to my provider
+                      "ParallelOpEnd",                    // Event Name that should uniquely identify your event.
+                      TraceLoggingUtf8String(p_op_kernel->KernelDef().OpName().c_str(), "op_name"),
+                      TraceLoggingValue(elapsed_sec, "OpSec"));
+
+
     if (f_profiler_enabled) {
       session_state.Profiler().EndTimeAndRecordEvent(profiling::NODE_EVENT,
                                                      node.Name() + "_fence_after",
@@ -261,10 +346,10 @@ Status ParallelExecutor::RunNodeAsync(size_t p_node_index,
       auto begin = node.OutputEdgesBegin();
       auto end = node.OutputEdgesEnd();
 
-      std::lock_guard<OrtMutex> lock(ref_mutex_);
+      // std::lock_guard<OrtMutex> lock(ref_mutex_);
       for (auto it = begin; it != end; it++) {
         auto idx = (*it).GetNode().Index();
-        if ((--node_refs_[idx]) == 0) {
+        if (node_refs_[idx].ref_.fetch_sub(1) == 1) {
           if (!keep_running) {
             node_index = idx;
             keep_running = true;
@@ -284,14 +369,12 @@ Status ParallelExecutor::RunNodeAsync(size_t p_node_index,
 }
 
 void ParallelExecutor::EnqueueNode(size_t p_node_index, const SessionState& session_state, const logging::Logger& logger) {
-  {
-    std::unique_lock<OrtMutex> lock(complete_mutex_);
-    // if there are errors there's no point queuing more work
-    if (!errors_.empty())
-      return;
-
-    out_standings_++;
+  // if there are errors there's no point queuing more work
+  if (errors_num_.load(std::memory_order_relaxed) > 0) {
+    return;
   }
+
+  out_standings_.fetch_add(1, std::memory_order_relaxed);
 
   onnxruntime::concurrency::ThreadPool::Schedule(executor_pool_, [this, p_node_index, &session_state, &logger]() {
     auto create_exception_message = [p_node_index, &session_state](const std::exception* ex) {

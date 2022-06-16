@@ -44,8 +44,6 @@ namespace onnxruntime {
 
 namespace concurrency {
 
-const char* const mm_task_name = "Audio";
-
 #if !defined(ORT_MINIMAL_BUILD)
 ThreadPoolProfiler::ThreadPoolProfiler(int num_threads, const CHAR_TYPE* thread_pool_name) : num_threads_(num_threads) {
   child_thread_stats_.assign(num_threads, {});

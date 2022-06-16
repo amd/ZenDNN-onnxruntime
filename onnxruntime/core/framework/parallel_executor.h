@@ -36,28 +36,53 @@ class ParallelExecutor : public IExecutor {
   void EnqueueNode(size_t p_node_index, const SessionState& session_state, const logging::Logger& logger);
 
   void FinishNodeRun(const Status& status) {
+
     bool finished = false;
     {
-      //Because we have a mutex here, it's not possible another thread is doing the test("while (out_standings_ > 0)"
       std::lock_guard<OrtMutex> lock(complete_mutex_);
-      finished = --out_standings_ == 0;
-      if (!status.IsOK())
+      finished = out_standings_.fetch_sub(1, std::memory_order_seq_cst) == 1;
+      if (!status.IsOK()) {
         errors_.push_back(status);
+        errors_num_.fetch_add(1, std::memory_order_relaxed);
+      }
     }
 
     if (finished) {
       //std::cout << "all out standing nodes are completed." << std::endl;
-      complete_cv_.notify_all();
+      complete_cv_.notify_one();
     }
   }
 
   std::unique_ptr<ExecutionFrame> root_frame_;
-  std::vector<size_t> node_refs_;
-  OrtMutex ref_mutex_;
-  int out_standings_;  //protected by complete_mutex_
+
+  // Allow storing in the vector and align to cache line
+  struct alignas(64) AtomicHolder {
+    std::atomic_int64_t ref_{0};
+    AtomicHolder() = default;
+    AtomicHolder(int64_t v) : ref_(v) {}
+    AtomicHolder(const AtomicHolder& o) noexcept {
+      ref_.store(o.ref_.load());
+    }
+    AtomicHolder& operator=(const AtomicHolder& o) noexcept {
+      ref_.store(o.ref_.load());
+      return *this;
+    }
+    AtomicHolder(AtomicHolder&& o) noexcept {
+      ref_.store(o.ref_.load());
+    }
+    AtomicHolder& operator=(AtomicHolder&& o) noexcept {
+      ref_.store(o.ref_.load());
+      return *this;
+    }
+  };
+
+  std::vector<AtomicHolder> node_refs_;
+  // OrtMutex ref_mutex_;
+  std::atomic_int out_standings_;  //protected by complete_mutex_
   OrtMutex complete_mutex_;
   OrtCondVar complete_cv_;
   std::vector<Status> errors_;
+  std::atomic_size_t errors_num_{0};
 
   const bool& terminate_flag_;
   // TODO: Temporary threadpool for the executor.  This is a costly way to handle the problem.

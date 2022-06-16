@@ -46,8 +46,6 @@
 #include "core/platform/Barrier.h"
 #include "core/platform/telemetry.h"
 
-//#include <avrt.h>
-
 // ORT thread pool overview
 // ------------------------
 //
@@ -1475,32 +1473,6 @@ void DisableSpinning() {
 
   std::atomic<SpinLoopStatus> spin_loop_status_{kIdle};
 
-  static void threadSetMmCharacteristics(HANDLE& mm_handle) {
-    DWORD mmcssTaskIndex = 0;
-    mm_handle = ::AvSetMmThreadCharacteristicsA(mm_task_name, &mmcssTaskIndex);
-    if (!mm_handle) {
-      auto error_code = ::GetLastError();
-      ORT_THROW("AvSetMmThreadCharacteristicsA failed: ", std::system_category().message(error_code));
-    }
-  }
-
-  static void threadSetMmPriority(HANDLE mm_handle, int priority) {
-    BOOL success = ::AvSetMmThreadPriority(mm_handle, static_cast<AVRT_PRIORITY>(priority));
-    if (!success) {
-      auto error_code = ::GetLastError();
-      ORT_THROW("AvSetMmThreadPriority failed: ", std::system_category().message(error_code));
-    }
-  }
-
-  static void threadRevokeMmCharacteristics(HANDLE mm_handle) {
-    BOOL ok = ::AvRevertMmThreadCharacteristics(mm_handle);
-    if (!ok) {
-      auto error_code = ::GetLastError();
-      ORT_THROW("AvSetMmThreadPriority failed: ", std::system_category().message(error_code));
-    }
-  }
-
-
   // Wake any blocked workers so that they can cleanly exit WorkerLoop().  For
   // a clean exit, each thread will observe (1) done_ set, indicating that the
   // destructor has been called, (2) all threads blocked, and (3) no
@@ -1627,7 +1599,7 @@ void DisableSpinning() {
       }
     }
 
-    //threadRevokeMmCharacteristics(mm_handle);
+   // threadRevokeMmCharacteristics(mm_handle);
     
     // Whichever thread(s) observe the termination conditions are responsible for waking
     // any other threads that have remained blocked.

@@ -37,7 +37,7 @@
 using namespace Concurrency;
 #endif
 
-#ifdef ONNXRUNTIME_ENABLE_INSTRUMENT
+//#ifdef ONNXRUNTIME_ENABLE_INSTRUMENT
 #include <Windows.h>
 #include "core/platform/tracing.h"
 namespace {
@@ -51,7 +51,7 @@ LARGE_INTEGER OrtGetPerformanceFrequency() {
 
 LARGE_INTEGER perf_freq = OrtGetPerformanceFrequency();
 }  // namespace
-#endif
+//#endif
 
 namespace onnxruntime {
 
@@ -211,7 +211,8 @@ Status SequentialExecutor::Execute(const SessionState& session_state, const std:
     size_t program_counter = 0;
     utils::NodeDumpContext dump_context { session_state.GetGraphExecutionCounter(), program_counter };
 #endif
-
+    LARGE_INTEGER run_start;
+    QueryPerformanceCounter(&run_start);
 
   for (const auto& node_exec_plan : exec_plan_vec) {
     if (terminate_flag_) {
@@ -253,10 +254,10 @@ Status SequentialExecutor::Execute(const SessionState& session_state, const std:
       return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "Got nullptr from GetKernel for node: ",
                              node.Name());
 
-#ifdef ONNXRUNTIME_ENABLE_INSTRUMENT
+//#ifdef ONNXRUNTIME_ENABLE_INSTRUMENT
     LARGE_INTEGER kernel_start;
     QueryPerformanceCounter(&kernel_start);
-#endif
+//#endif
     // construct OpKernelContext
     // TODO: log kernel inputs?
     OpKernelContextInternal op_kernel_context(session_state, frame, *p_op_kernel, logger, terminate_flag_);
@@ -428,19 +429,19 @@ Status SequentialExecutor::Execute(const SessionState& session_state, const std:
         }
       }
     }
-#ifdef ONNXRUNTIME_ENABLE_INSTRUMENT
+//#ifdef ONNXRUNTIME_ENABLE_INSTRUMENT
     LARGE_INTEGER kernel_stop;
     QueryPerformanceCounter(&kernel_stop);
     LARGE_INTEGER elapsed;
     elapsed.QuadPart = kernel_stop.QuadPart - kernel_start.QuadPart;
-    elapsed.QuadPart *= 1000000;
-    elapsed.QuadPart /= perf_freq.QuadPart;
+    //elapsed.QuadPart *= 1000000;
+    const double elapsed_sec = static_cast<double>(elapsed.QuadPart) / perf_freq.QuadPart;
     // Log an event
     TraceLoggingWrite(telemetry_provider_handle,  // handle to my provider
                       "OpEnd",                    // Event Name that should uniquely identify your event.
-                      TraceLoggingValue(p_op_kernel->KernelDef().OpName().c_str(), "op_name"),
-                      TraceLoggingValue(elapsed.QuadPart, "time"));
-#endif
+                      TraceLoggingUtf8String(p_op_kernel->KernelDef().OpName().c_str(), "op_name"),
+                      TraceLoggingValue(elapsed_sec, "OpSec"));
+    //#endif
     if (is_profiler_enabled) {
       session_state.Profiler().EndTimeAndRecordEvent(profiling::NODE_EVENT,
                                                      node_name_for_profiling + "_fence_after",
@@ -516,6 +517,19 @@ Status SequentialExecutor::Execute(const SessionState& session_state, const std:
                        << i.second << " bytes for " << i.first << std::endl;
   }
 #endif
+
+  LARGE_INTEGER run_stop;
+  QueryPerformanceCounter(&run_stop);
+  LARGE_INTEGER run_elapsed;
+  run_elapsed.QuadPart = run_stop.QuadPart - run_start.QuadPart;
+  const double elapsed_sec = static_cast<double>(run_elapsed.QuadPart) / perf_freq.QuadPart;
+  constexpr double log_threshold = 0.015;  // 1.5ms
+  // Log an event
+  if (elapsed_sec > log_threshold) {
+    TraceLoggingWrite(telemetry_provider_handle,  // handle to my provider
+                      "RunEnd",                   // Event Name that should uniquely identify your event.
+                      TraceLoggingValue(elapsed_sec, "High Run Sec"));
+  }
 
   return Status::OK();
 }
