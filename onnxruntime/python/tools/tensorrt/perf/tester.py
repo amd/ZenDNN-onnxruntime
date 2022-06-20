@@ -19,8 +19,8 @@ from onnx import numpy_helper  # isort:skip
 
 logger = logging.getLogger("")
 
-NUM_RUNS = 3
-INFERENCES_PER_RUN = 4
+NUM_RUNS = 20
+INFERENCES_PER_RUN = 1200
 
 # Backends
 CPU_BE = "ORT-CPUFp32"
@@ -32,8 +32,12 @@ STANDALONE_TRT_BE = "TRTFp32"
 STANDALONE_TRT_FP16_BE = "TRTFp16"
 
 #BACKENDS = [CPU_BE, CUDA_BE, CUDA_FP16_BE, TRT_BE, TRT_FP16_BE, STANDALONE_TRT_BE, STANDALONE_TRT_FP16_BE]
-#BACKENDS = [CPU_BE, CUDA_BE, CUDA_FP16_BE, TRT_BE, TRT_FP16_BE]
-BACKENDS = [ CUDA_BE]
+BACKENDS = [CUDA_BE, CUDA_FP16_BE, TRT_BE, TRT_FP16_BE, CPU_BE]
+#BACKENDS = [TRT_BE]
+
+KNOWN_FAILURES = {
+    "MaskRCNN-10": [TRT_BE, TRT_FP16_BE]
+}
 
 # ORT Execution Providers
 CPU_EP = "CPUExecutionProvider"
@@ -403,20 +407,21 @@ def benchmark_model_be(temp_dir, init_dir, comb_idx, num_combs, model_name, mode
         except Exception:
             return (False, result)
 
-        sess_inputs, sess_outputs = get_ort_session_inputs_and_outputs(model_name, sess, inputs[0])
 
-        # First warmup/validation run.
         try:
+            sess_inputs, sess_outputs = get_ort_session_inputs_and_outputs(model_name, sess, inputs[0])
+
+            # First warmup/validation run.
             sess.run(sess_outputs, sess_inputs)
+
+            # Time multiple runs.
+            rtimes = timeit.repeat(
+                lambda: sess.run(sess_outputs, sess_inputs),
+                number=1,
+                repeat=NUM_RUNS * INFERENCES_PER_RUN
+            )
         except Exception:
             return (False, result)
-
-        # Time multiple runs.
-        rtimes = timeit.repeat(
-            lambda: sess.run(sess_outputs, sess_inputs),
-            number=1,
-            repeat=NUM_RUNS * INFERENCES_PER_RUN
-        )
 
         avgs = get_avgs(rtimes, INFERENCES_PER_RUN)
         (avgs_avg, avgs_std, avgs_cv) = get_runtimes_stats(avgs)
@@ -463,7 +468,6 @@ def main():
     status = {}
     results = {}
 
-    start = datetime.now()
     for backend in BACKENDS:
 
         # Ensure ORT supports backend EP.
@@ -477,17 +481,26 @@ def main():
         results[backend] = {}
 
         for model_name, model_info in models.items():
-            with tempfile.TemporaryDirectory() as temp_dir:
-                success, result = benchmark_model_be(temp_dir, init_dir, comb_idx, num_combs, model_name, model_info, backend)
-                status[backend][model_name] = success
+            if (model_name in KNOWN_FAILURES) and (backend in KNOWN_FAILURES[model_name]):
+                comb_idx += 1
+                logger.info("Skipping known failing combo %s, %s", model_name, backend)
+                continue
 
-                if success:
-                    results[backend][model_name] = result
+            start = datetime.now()
+            try:
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    success, result = benchmark_model_be(temp_dir, init_dir, comb_idx, num_combs, model_name, model_info, backend)
+                    status[backend][model_name] = success
+
+                    if success:
+                        results[backend][model_name] = result
+            except Exception as e:
+                logger.info(e)
 
             comb_idx += 1
+            end = datetime.now()
+            logger.info("\nElapsed time: %f\n", (end - start).total_seconds())
 
-    end = datetime.now()
-    logger.info("\nElapsed time: %f\n", (end - start).total_seconds())
     logger.info(json.dumps(status))
 
     with open(os.path.join(init_dir, "tester.csv"), mode="w", newline="", encoding="utf-8") as csv_file:
@@ -504,4 +517,12 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        start = datetime.now()
+        main()
+        end = datetime.now()
+        logger.info("\nElapsed time: %f\n", (end - start).total_seconds())
+    except Exception as e:
+        logger.info("CAUGHT EXCEPTION FROM MAIN")
+        looger.info(e)
+
