@@ -1,0 +1,102 @@
+TODO:
+
+------------
+From VS 2022 Preview prompt csharp dir
+
+msbuild -t:restore .\src\Microsoft.ML.OnnxRuntime\Microsoft.ML.OnnxRuntime.csproj -p:SelectedTargets=All
+msbuild -t:build .\src\Microsoft.ML.OnnxRuntime\Microsoft.ML.OnnxRuntime.csproj -p:SelectedTargets=All
+msbuild .\OnnxRuntime.CSharp.proj -t:CreatePackage -p:OrtPackageId=Microsoft.ML.OnnxRuntime -p:Configuration=Debug -p:Platform="Any CPU"
+
+
+Resolve this, probably via updating the nuspec generation script to create the empty files for the platforms
+
+EXEC : warning : NU5127: This package does not contain a lib/ or ref/ folder, and will therefore be treated as compatib
+le for all frameworks. Since framework specific files were found under the build/ directory for netstandard1.1, netstan
+dard2.0, monoandroid11.0, xamarinios10, net6.0-android31.0, net6.0-ios15.4, net6.0-macos12.3, consider creating the fol
+lowing empty files to correctly narrow the compatibility of the package: [D:\src\github\ort\csharp\OnnxRuntime.CSharp.p
+roj]
+  -lib/netstandard1.1/_._
+  -lib/netstandard2.0/_._
+  -lib/monoandroid11.0/_._
+  -lib/xamarinios10/_._
+  -lib/net6.0-android31.0/_._
+  -lib/net6.0-ios15.4/_._
+  -lib/net6.0-macos12.3/_._
+
+
+Did some additional changes but not sure they're correct as the nuspec with the _._ marker has strange versions for the lib folder when viewed in Nuget Package Explorer
+
+-----------------
+Resolve iOS Release build not working
+
+[20:50] Mike Parker
+Latest is building ok for me for iOS (simulator and physical device) in Debug. I can deploy and run on simulator. I can't seem to deploy to my physical device from vsmac right now due to some issues with my provisioning profile (probably vsmac). Let's assume this'd be ok for the moment. For Release, I get the following errors:
+
+/usr/local/share/dotnet/packs/Microsoft.iOS.Sdk/15.4.311/targets/Xamarin.Shared.Sdk.targets(3,3): Error: ILStrip failed for /Users/mikeparker/.nuget/packages/microsoft.ml.onnxruntime/1.12.0-dev-20220701-0830-d101781aa/runtimes/win-x64/native/onnxruntime_providers_shared.dll: The image is not a managed assembly (OnnxMauiTest)
+
+Why is a windows dll being pulled in for an iOS Release build?
+
+May be related
+
+-------------------
+Find better fix for Android build issues from java generation than manually adding file with this to the platforms/Android folder of a Maui project to workaround https://github.com/dotnet/maui/issues/3867
+
+Really we want to skip one or both of these steps:
+
+    1>      Using "BindingsGenerator" task from assembly "C:\Program Files\dotnet\packs\Microsoft.Android.Sdk.Windows\32.0.415\tools\Xamarin.Android.Build.Tasks.dll".
+    1>      Task "BindingsGenerator"
+    1>        Using: dotnet C:\Program Files\dotnet\packs\Microsoft.Android.Sdk.Windows\32.0.415\tools\generator.dll
+
+
+    1>    Target _GenerateJavaStubs:
+    1>      Building target "_GenerateJavaStubs" completely.
+    1>      Output file "obj\Debug\net6.0-android\stamp\_GenerateJavaStubs.stamp" does not exist.
+    1>      Using "GenerateJavaStubs" task from assembly "C:\Program Files\dotnet\packs\Microsoft.Android.Sdk.Windows\32.0.415\tools\Xamarin.Android.Build.Tasks.dll".
+    1>      Task "GenerateJavaStubs"
+    1>        Saving: obj\Debug\net6.0-android\AndroidManifest.xml
+    1>      Done executing task "GenerateJavaStubs".
+
+cs content to add:
+
+    using System;
+    using System.Collections.Generic;
+    using System.Linq;
+    using System.Text;
+    using System.Threading.Tasks;
+
+    namespace AI.Onnxruntime
+    {
+        public partial class OnnxMap : Java.Lang.Object, IOnnxValue
+        {
+            IValueInfo IOnnxValue.Info
+            {
+                get => Info;
+            }
+
+            Java.Lang.Object IOnnxValue.Value
+            {
+                get => (Java.Lang.Object)Value;
+            }
+        }
+
+        public partial class OnnxSequence : Java.Lang.Object, IOnnxValue
+        {
+            IValueInfo IOnnxValue.Info
+            {
+                get => Info;
+            }
+
+            Java.Lang.Object IOnnxValue.Value
+            {
+                get => (Java.Lang.Object)Value;
+            }
+        }
+
+        public partial class OnnxTensor : Java.Lang.Object, IOnnxValue
+        {
+            IValueInfo IOnnxValue.Info
+            {
+                get => Info;
+            }
+        }
+    }

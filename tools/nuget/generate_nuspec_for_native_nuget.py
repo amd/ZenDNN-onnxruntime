@@ -938,15 +938,33 @@ def generate_files(list, args):
             os.system(copy_command + " " + net6_ios_source_targets + " " + net6_ios_target_targets)
             os.system(copy_command + " " + net6_macos_source_targets + " " + net6_macos_target_targets)
 
+            nuget_marker = os.path.join(
+                args.sources_path, "csharp", "src", "Microsoft.ML.OnnxRuntime", "lib", "nuget_marker_._"
+            )
+
+            # add empty marker file to narrow the scope of platform matching to resolve this:
+            # EXEC : warning : NU5127: This package does not contain a lib/ or ref/ folder, and will therefore be
+            # treated as compatible for all frameworks. Since framework specific files were found under the build/
+            # directory for netstandard1.1, netstandard2.0, monoandroid11.0, xamarinios10, net6.0-android31.0,
+            # net6.0-ios15.4, net6.0-macos12.3, consider creating the following empty files to correctly narrow
+            # the compatibility of the package:
+            #   -lib/netstandard1.1/_._
+            #   etc. etc.
+            files_list.append("<file src=" + '"' + nuget_marker + '" target="lib\\netstandard\\_._" />')
+            files_list.append("<file src=" + '"' + nuget_marker + '" target="lib\\netcoreapp\\_._" />')
+            files_list.append("<file src=" + '"' + nuget_marker + '" target="lib\\net\\_._" />')
+
             files_list.append("<file src=" + '"' + monoandroid_target_targets + '" target="build\\monoandroid11.0" />')
             files_list.append(
                 "<file src=" + '"' + monoandroid_target_targets + '" target="buildTransitive\\monoandroid11.0" />'
             )
+            files_list.append("<file src=" + '"' + nuget_marker + '" target="lib\\monoandroid11.0\\_._" />')
 
             files_list.append("<file src=" + '"' + xamarinios_target_targets + '" target="build\\xamarinios10" />')
             files_list.append(
                 "<file src=" + '"' + xamarinios_target_targets + '" target="buildTransitive\\xamarinios10" />'
             )
+            files_list.append("<file src=" + '"' + nuget_marker + '" target="lib\\xamarinios10\\_._" />')
 
             files_list.append(
                 "<file src=" + '"' + net6_android_target_targets + '" target="build\\net6.0-android31.0" />'
@@ -954,16 +972,19 @@ def generate_files(list, args):
             files_list.append(
                 "<file src=" + '"' + net6_android_target_targets + '" target="buildTransitive\\net6.0-android31.0" />'
             )
+            files_list.append("<file src=" + '"' + nuget_marker + '" target="lib\\net6.0-android31.0\\_._" />')
 
             files_list.append("<file src=" + '"' + net6_ios_target_targets + '" target="build\\net6.0-ios15.4" />')
             files_list.append(
                 "<file src=" + '"' + net6_ios_target_targets + '" target="buildTransitive\\net6.0-ios15.4" />'
             )
+            files_list.append("<file src=" + '"' + nuget_marker + '" target="lib\\net6.0-ios15.4\\_._" />')
 
             files_list.append("<file src=" + '"' + net6_macos_target_targets + '" target="build\\net6.0-macos12.3" />')
             files_list.append(
                 "<file src=" + '"' + net6_macos_target_targets + '" target="buildTransitive\\net6.0-macos12.3" />'
             )
+            files_list.append("<file src=" + '"' + nuget_marker + '" target="lib\\net6.0-macos12.3\\_._" />')
 
     # Process License, ThirdPartyNotices, Privacy
     files_list.append("<file src=" + '"' + os.path.join(args.sources_path, "LICENSE.txt") + '" target="LICENSE.txt" />')
