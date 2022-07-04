@@ -950,9 +950,11 @@ def generate_files(list, args):
             # the compatibility of the package:
             #   -lib/netstandard1.1/_._
             #   etc. etc.
-            files_list.append("<file src=" + '"' + nuget_marker + '" target="lib\\netstandard\\_._" />')
-            files_list.append("<file src=" + '"' + nuget_marker + '" target="lib\\netcoreapp\\_._" />')
-            files_list.append("<file src=" + '"' + nuget_marker + '" target="lib\\net\\_._" />')
+
+            # TODO: Are these required or do we mainly care about limiting on mobile platforms?
+            # files_list.append("<file src=" + '"' + nuget_marker + '" target="lib\\netstandard\\_._" />')
+            # files_list.append("<file src=" + '"' + nuget_marker + '" target="lib\\netcoreapp\\_._" />')
+            # files_list.append("<file src=" + '"' + nuget_marker + '" target="lib\\net\\_._" />')
 
             files_list.append("<file src=" + '"' + monoandroid_target_targets + '" target="build\\monoandroid11.0" />')
             files_list.append(
