@@ -214,23 +214,24 @@ def generate_dependencies(xml_text, package_name, version, dependency_id, depend
 
         xml_text.append("<dependencies>")
         # Support .Net Core
-        xml_text.append('<group targetFramework="NETCOREAPP">')
+        xml_text.append('<group targetFramework="netcoreapp3.1">')
         xml_text.append('<dependency id="Microsoft.ML.OnnxRuntime.Managed"' + ' version="' + version + '"/>')
         if include_dml:
             xml_text.append(dml_dependency)
         xml_text.append("</group>")
         # Support .Net Standard
-        xml_text.append('<group targetFramework="NETSTANDARD">')
+        xml_text.append('<group targetFramework="netstandard1.1">')
         xml_text.append('<dependency id="Microsoft.ML.OnnxRuntime.Managed"' + ' version="' + version + '"/>')
         if include_dml:
             xml_text.append(dml_dependency)
         xml_text.append("</group>")
         # Support .Net Framework
-        xml_text.append('<group targetFramework="NETFRAMEWORK">')
+        xml_text.append('<group targetFramework="net5.0">')
         xml_text.append('<dependency id="Microsoft.ML.OnnxRuntime.Managed"' + ' version="' + version + '"/>')
         if include_dml:
             xml_text.append(dml_dependency)
         xml_text.append("</group>")
+
         if package_name == "Microsoft.ML.OnnxRuntime":
             # Support monoandroid11.0
             xml_text.append('<group targetFramework="monoandroid11.0">')
@@ -238,6 +239,10 @@ def generate_dependencies(xml_text, package_name, version, dependency_id, depend
             xml_text.append("</group>")
             # Support xamarinios10
             xml_text.append('<group targetFramework="xamarinios10">')
+            xml_text.append('<dependency id="Microsoft.ML.OnnxRuntime.Managed"' + ' version="' + version + '"/>')
+            xml_text.append("</group>")
+            # Support net6.0
+            xml_text.append('<group targetFramework="net6.0">')
             xml_text.append('<dependency id="Microsoft.ML.OnnxRuntime.Managed"' + ' version="' + version + '"/>')
             xml_text.append("</group>")
             # Support net6.0-android
@@ -952,9 +957,10 @@ def generate_files(list, args):
             #   etc. etc.
 
             # TODO: Are these required or do we mainly care about limiting on mobile platforms?
-            # files_list.append("<file src=" + '"' + nuget_marker + '" target="lib\\netstandard\\_._" />')
-            # files_list.append("<file src=" + '"' + nuget_marker + '" target="lib\\netcoreapp\\_._" />')
-            # files_list.append("<file src=" + '"' + nuget_marker + '" target="lib\\net\\_._" />')
+            files_list.append("<file src=" + '"' + nuget_marker + '" target="lib\\netstandard1.1\\_._" />')
+            files_list.append("<file src=" + '"' + nuget_marker + '" target="lib\\netcoreapp3.1\\_._" />')
+            files_list.append("<file src=" + '"' + nuget_marker + '" target="lib\\net5.0\\_._" />')
+            files_list.append("<file src=" + '"' + nuget_marker + '" target="lib\\net6.0\\_._" />')
 
             files_list.append("<file src=" + '"' + monoandroid_target_targets + '" target="build\\monoandroid11.0" />')
             files_list.append(
