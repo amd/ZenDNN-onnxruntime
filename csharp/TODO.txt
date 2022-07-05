@@ -56,6 +56,12 @@ Really we want to skip one or both of these steps:
     1>        Saving: obj\Debug\net6.0-android\AndroidManifest.xml
     1>      Done executing task "GenerateJavaStubs".
 
+The 'Bind' property can be used:
+
+  C:\Program Files\dotnet\packs\Microsoft.Android.Sdk.Windows\32.0.415\tools\Xamarin.Android.AvailableItems.targets
+  Search for 'AndroidLibrary'. 
+  Alternative is to use AndroidAarLibrary which sets AndroidSkipResourceProcessing to true. Possibly this is equivalent to Bind='false' on AndroidLibrary
+  
 cs content to add:
 
     using System;
