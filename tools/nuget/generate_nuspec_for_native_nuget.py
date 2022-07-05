@@ -223,6 +223,11 @@ def generate_dependencies(xml_text, package_name, version, dependency_id, depend
         if include_dml:
             xml_text.append(dml_dependency)
         xml_text.append("</group>")
+        xml_text.append('<group targetFramework="netstandard2.0">')
+        xml_text.append('<dependency id="Microsoft.ML.OnnxRuntime.Managed"' + ' version="' + version + '"/>')
+        if include_dml:
+            xml_text.append(dml_dependency)
+        xml_text.append("</group>")
         # Support .Net Framework
         xml_text.append('<group targetFramework="net5.0">')
         xml_text.append('<dependency id="Microsoft.ML.OnnxRuntime.Managed"' + ' version="' + version + '"/>')
@@ -255,6 +260,7 @@ def generate_dependencies(xml_text, package_name, version, dependency_id, depend
             xml_text.append('<group targetFramework="net6.0-macos12.3">')
             xml_text.append('<dependency id="Microsoft.ML.OnnxRuntime.Managed"' + ' version="' + version + '"/>')
             xml_text.append("</group>")
+            
         # Support Native C++
         if include_dml:
             xml_text.append('<group targetFramework="native">')
@@ -953,9 +959,11 @@ def generate_files(list, args):
             # the compatibility of the package:
             #   -lib/netstandard1.1/_._
             #   etc. etc.
-
-            # TODO: Are these required or do we mainly care about limiting on mobile platforms?
+            #
+            # The targets listed here match the targetFramework values in Microsoft.ML.OnnxRuntime.csproj.
+            # The values also have to match the dependency entries added by generate_dependencies(...)
             files_list.append("<file src=" + '"' + nuget_marker + '" target="lib\\netstandard1.1\\_._" />')
+            files_list.append("<file src=" + '"' + nuget_marker + '" target="lib\\netstandard2.0\\_._" />')
             files_list.append("<file src=" + '"' + nuget_marker + '" target="lib\\netcoreapp3.1\\_._" />')
             files_list.append("<file src=" + '"' + nuget_marker + '" target="lib\\net5.0\\_._" />')
             files_list.append("<file src=" + '"' + nuget_marker + '" target="lib\\net6.0\\_._" />')
