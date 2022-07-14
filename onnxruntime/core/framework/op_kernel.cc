@@ -221,4 +221,14 @@ Status OpKernelContext::SetOutputMLValue(int index, const OrtValue& ort_value) {
 }
 #endif
 
+#ifdef ENABLE_TRAINING
+bool OpKernelContext::IsStridedTensor(int index) const {
+  ORT_ENFORCE(index < 0 || index >= OutputCount(), "Index out of range. " + std::to_string(index) +
+                                                       " was specified, but " + "range is [0, " +
+                                                       std::to_string(OutputCount()) + ")");
+  auto output_arg_index = GetOutputArgIndex(index);
+  return execution_frame_->IsStridedTensor(output_arg_index);
+}
+#endif
+
 }  // namespace onnxruntime

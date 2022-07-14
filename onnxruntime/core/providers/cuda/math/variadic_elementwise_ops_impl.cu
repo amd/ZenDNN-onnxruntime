@@ -14,36 +14,14 @@ namespace cuda {
 template <typename T, typename VariadicElementwiseOpTag>
 struct VariadicElementwiseOpTraits;
 
-#define DEFINE_TRAITS(VariadicElementwiseOpTag, ImplName)           \
-  template <typename T>                                             \
-  struct VariadicElementwiseOpTraits<T, VariadicElementwiseOpTag> { \
-    using ScalarComputeFunctor = OP_##ImplName<T, T, T>;            \
-                                                                    \
-    static void ComputeFn(                                          \
-        cudaStream_t stream,                                        \
-        int32_t output_rank_or_simple_broadcast,                    \
-        const TArray<int64_t>* lhs_padded_strides,                  \
-        const T* lhs_data,                                          \
-        const TArray<int64_t>* rhs_padded_strides,                  \
-        const T* rhs_data,                                          \
-        const TArray<fast_divmod>* fdm_output_strides,              \
-        const fast_divmod& fdm_H,                                   \
-        const fast_divmod& fdm_C,                                   \
-        T* output_data,                                             \
-        size_t count) {                                             \
-      Impl_##ImplName(                                              \
-          stream,                                                   \
-          output_rank_or_simple_broadcast,                          \
-          lhs_padded_strides,                                       \
-          lhs_data,                                                 \
-          rhs_padded_strides,                                       \
-          rhs_data,                                                 \
-          fdm_output_strides,                                       \
-          fdm_H,                                                    \
-          fdm_C,                                                    \
-          output_data,                                              \
-          count);                                                   \
-    }                                                               \
+#define DEFINE_TRAITS(VariadicElementwiseOpTag, ImplName)                                            \
+  template <typename T>                                                                              \
+  struct VariadicElementwiseOpTraits<T, VariadicElementwiseOpTag> {                                  \
+    using ScalarComputeFunctor = OP_##ImplName<T, T, T>;                                             \
+    static void ComputeFn(cudaStream_t stream, const T* lhs_data, const T* rhs_data, T* output_data, \
+                          const BinaryElementwiseArgs& args) {                                       \
+      Impl_##ImplName(stream, lhs_data, rhs_data, output_data, args);                                \
+    }                                                                                                \
   };
 
 DEFINE_TRAITS(variadic_elementwise_ops::Sum, Add)
@@ -53,30 +31,9 @@ DEFINE_TRAITS(variadic_elementwise_ops::Max, Max)
 #undef DEFINE_TRAITS
 
 template <typename T, typename VariadicElementwiseOpTag>
-void Impl_General(
-    cudaStream_t stream,
-    int32_t output_rank_or_simple_broadcast,
-    const TArray<int64_t>* lhs_padded_strides,
-    const T* lhs_data,
-    const TArray<int64_t>* rhs_padded_strides,
-    const T* rhs_data,
-    const TArray<fast_divmod>* fdm_output_strides,
-    const fast_divmod& fdm_H,
-    const fast_divmod& fdm_C,
-    T* output_data,
-    size_t count) {
-  VariadicElementwiseOpTraits<T, VariadicElementwiseOpTag>::ComputeFn(
-      stream,
-      output_rank_or_simple_broadcast,
-      lhs_padded_strides,
-      lhs_data,
-      rhs_padded_strides,
-      rhs_data,
-      fdm_output_strides,
-      fdm_H,
-      fdm_C,
-      output_data,
-      count);
+void Impl_General(cudaStream_t stream, const T* lhs_data, const T* rhs_data, T* output_data,
+                  const BinaryElementwiseArgs& args) {
+  VariadicElementwiseOpTraits<T, VariadicElementwiseOpTag>::ComputeFn(stream, lhs_data, rhs_data, output_data, args);
 }
 
 template <typename T, typename VariadicElementwiseOpTag>
@@ -95,25 +52,11 @@ void Impl_NoBroadcastInputBatch(
       output_data);
 }
 
-#define SPECIALIZE_IMPL(T, VariadicElementwiseOpTag)                     \
-  template void Impl_General<T, VariadicElementwiseOpTag>(               \
-      cudaStream_t stream,                                               \
-      int32_t output_rank_or_simple_broadcast,                           \
-      const TArray<int64_t>* lhs_padded_strides,                         \
-      const T* lhs_data,                                                 \
-      const TArray<int64_t>* rhs_padded_strides,                         \
-      const T* rhs_data,                                                 \
-      const TArray<fast_divmod>* fdm_output_strides,                     \
-      const fast_divmod& fdm_H,                                          \
-      const fast_divmod& fdm_C,                                          \
-      T* output_data,                                                    \
-      size_t count);                                                     \
-                                                                         \
-  template void Impl_NoBroadcastInputBatch<T, VariadicElementwiseOpTag>( \
-      cudaStream_t stream,                                               \
-      InputBatchArray<T> input_data_batch,                               \
-      T * output_data,                                                   \
-      size_t count);
+#define SPECIALIZE_IMPL(T, VariadicElementwiseOpTag)                                                                 \
+  template void Impl_General<T, VariadicElementwiseOpTag>(cudaStream_t stream, const T* lhs_data, const T* rhs_data, \
+                                                          T* output_data, const BinaryElementwiseArgs& args);        \
+  template void Impl_NoBroadcastInputBatch<T, VariadicElementwiseOpTag>(                                             \
+      cudaStream_t stream, InputBatchArray<T> input_data_batch, T * output_data, size_t count);
 
 // the postfix means the types supported by the op:
 // B: uint8_t

@@ -202,6 +202,10 @@ class OpKernelContext {
     return true;
   }
 
+#ifdef ENABLE_TRAINING
+  bool IsStridedTensor(int index) const;
+#endif  // ENABLE_TRAINING
+
  protected:
 
   OpKernelContext(concurrency::ThreadPool* threadpool, const logging::Logger& logger);

@@ -2,12 +2,131 @@
 // Licensed under the MIT License.
 
 #include "core/providers/cuda/math/binary_elementwise_ops.h"
+
 #include "core/providers/cuda/math/binary_elementwise_ops_impl.h"
+#include "core/providers/cuda/math/elementwise_utils.h"
 #include "core/providers/cuda/math/unary_elementwise_ops_impl.h"
 
 using namespace onnxruntime::common;
 namespace onnxruntime {
 namespace cuda {
+
+namespace {
+
+static bool TryPerChannel(size_t rank, const TensorShapeVector& input_strides, const TensorShapeVector& output_shapes,
+                          bool& is_multi_batch, int& channel, int& height) {
+  size_t count = 0;
+  size_t dim_channel = 0;
+  for (size_t dim = 0; dim < rank; ++dim) {
+    if (output_shapes[dim] != 1 && input_strides[dim] != 0) {
+      if (count > 0) return false;
+      ++count;
+      channel = output_shapes[dim];
+      dim_channel = dim;
+    }
+  }
+  if (count == 0) return false;
+  is_multi_batch = false;
+  for (size_t dim = 0; dim < dim_channel; ++dim) {
+    if (output_shapes[dim] > 1) {
+      is_multi_batch = true;
+      break;
+    }
+  }
+  height = 1;
+  for (size_t dim = dim_channel + 1; dim < rank; ++dim) {
+    height *= static_cast<int>(output_shapes[dim]);
+  }
+  return true;
+}
+
+}  // namespace
+
+void BinaryElementwisePreparation::BinaryElementwiseBroadcastPrepareHelper(const TensorShape& lhs_shape,
+                                                                           const TensorShape& rhs_shape,
+                                                                           const TensorShape& output_shape) {
+  bool lhs_is_contiguous = true;
+  bool rhs_is_contiguous = true;
+  TensorShapeVector lhs_original_strides = TensorPitches(lhs_shape);
+  TensorShapeVector rhs_original_strides = TensorPitches(rhs_shape);
+#ifdef ENABLE_TRAINING
+  if (lhs_tensor) {
+    lhs_is_contiguous = lhs_tensor->IsContiguous();
+    if (!lhs_is_contiguous) {
+      ORT_ENFORCE(lhs_tensor->Shape() == lhs_shape);
+      lhs_original_strides = ToShapeVector(lhs_tensor->Strides());
+    }
+  }
+  if (rhs_tensor) {
+    rhs_is_contiguous = rhs_tensor->IsContiguous();
+    if (!rhs_is_contiguous) {
+      ORT_ENFORCE(rhs_tensor->Shape() == rhs_shape);
+      rhs_original_strides = ToShapeVector(rhs_tensor->Strides());
+    }
+  }
+#endif
+  args.lhs_index_type = lhs_shape.Size() == 1                            ? BroadcastIndexType::Scalar
+                        : lhs_is_contiguous && lhs_shape == output_shape ? BroadcastIndexType::NoBroadcast
+                                                                         : BroadcastIndexType::NeedCompute;
+  args.rhs_index_type = rhs_shape.Size() == 1                            ? BroadcastIndexType::Scalar
+                        : rhs_is_contiguous && rhs_shape == output_shape ? BroadcastIndexType::NoBroadcast
+                                                                         : BroadcastIndexType::NeedCompute;
+  args.output_size = static_cast<size_t>(output_shape.Size());
+  // Reset per_channel_type in case this preparation is reused.
+  args.per_channel_type = PerChannelType::None;
+
+  // Other args are not needed if none of sizes needs compute.
+  if (args.lhs_index_type != BroadcastIndexType::NeedCompute &&
+      args.rhs_index_type != BroadcastIndexType::NeedCompute) {
+    return;
+  }
+
+  size_t rank = output_shape.NumDimensions();
+  TensorShapeVector output_dims = output_shape.AsShapeVector();
+  size_t lhs_offset = rank - lhs_original_strides.size();
+  size_t rhs_offset = rank - rhs_original_strides.size();
+  TensorShapeVector lhs_strides(rank, 0);
+  for (size_t i = 0; i < lhs_original_strides.size(); ++i) {
+    lhs_strides[lhs_offset + i] = (lhs_shape[i] == 1 && output_dims[lhs_offset + i] != 1) ? 0 : lhs_original_strides[i];
+  }
+  TensorShapeVector rhs_strides(rank, 0);
+  for (size_t i = 0; i < rhs_original_strides.size(); ++i) {
+    rhs_strides[rhs_offset + i] = (rhs_shape[i] == 1 && output_dims[rhs_offset + i] != 1) ? 0 : rhs_original_strides[i];
+  }
+
+  CoalesceDimensions({lhs_strides, rhs_strides}, output_dims);
+  rank = output_dims.size();
+  args.rank = rank;
+
+  // special case for lhs(N,C,H) and rhs (C,1) which is used in conv bias
+  // when N == 1: out[id] = op(lhs[id], rhs[id / H])
+  // When N > 1:  out[id] = op(lhs[id], rhs[id / H % C])
+  bool is_multi_batch;
+  int channel, height;
+  if (args.lhs_index_type == BroadcastIndexType::NoBroadcast &&
+      args.rhs_index_type == BroadcastIndexType::NeedCompute &&
+      TryPerChannel(rank, rhs_strides, output_dims, is_multi_batch, channel, height)) {
+    args.per_channel_type = PerChannelType::RhsNeedCompute;
+    args.is_multi_batch = is_multi_batch;
+    args.channel = channel;
+    args.height = height;
+  } else if (args.lhs_index_type == BroadcastIndexType::NeedCompute &&
+             args.rhs_index_type == BroadcastIndexType::NoBroadcast &&
+             TryPerChannel(rank, lhs_strides, output_dims, is_multi_batch, channel, height)) {
+    args.per_channel_type = PerChannelType::LhsNeedCompute;
+    args.is_multi_batch = is_multi_batch;
+    args.channel = channel;
+    args.height = height;
+  } else {
+    args.output_fdms.SetSize(static_cast<int>(rank));
+    TensorPitches output_strides(output_dims);
+    for (int i = 0; i < static_cast<int>(rank); ++i) {
+      args.output_fdms[i] = fast_divmod(static_cast<int>(output_strides[i]));
+    }
+    if (args.lhs_index_type == BroadcastIndexType::NeedCompute) args.lhs_strides = TArray<int64_t>(lhs_strides);
+    if (args.rhs_index_type == BroadcastIndexType::NeedCompute) args.rhs_strides = TArray<int64_t>(rhs_strides);
+  }
+}
 
 template <>
 Status BinaryElementwise<ShouldNotBroadcast>::Prepare(OpKernelContext* context, BinaryElementwisePreparation* p) const {
@@ -17,56 +136,22 @@ Status BinaryElementwise<ShouldNotBroadcast>::Prepare(OpKernelContext* context, 
     return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, Node().Name(), ": mismatching input shapes: ",
                            p->lhs_tensor->Shape().ToString(), " != ", p->rhs_tensor->Shape().ToString());
   p->output_tensor = context->Output(0, p->lhs_tensor->Shape());
-  p->output_rank_or_simple_broadcast = static_cast<int32_t>(SimpleBroadcast::NoBroadcast);
+  p->args.lhs_index_type = BroadcastIndexType::NoBroadcast;
+  p->args.rhs_index_type = BroadcastIndexType::NoBroadcast;
+  p->args.output_size = static_cast<size_t>(p->output_tensor->Shape().Size());
   return Status::OK();
 }
 
-Status ComputeOutputShape(const std::string& node_name, const TensorShape& lhs_shape, const TensorShape& rhs_shape, TensorShape& out_shape) {
-  size_t lhs_rank = lhs_shape.NumDimensions();
-  size_t rhs_rank = rhs_shape.NumDimensions();
-  size_t out_rank = std::max(lhs_rank, rhs_rank);
-
-  std::vector<int64_t> output_dims(out_rank, 0);
-  for (size_t i = 0; i < out_rank; ++i) {
-    int64_t lhs_dim = 1;
-    if (i < lhs_rank)
-      lhs_dim = lhs_shape[lhs_rank - 1 - i];
-    int64_t rhs_dim = 1;
-    if (i < rhs_rank)
-      rhs_dim = rhs_shape[rhs_rank - 1 - i];
-    int64_t max = std::max(lhs_dim, rhs_dim);
-    int64_t min = std::min(lhs_dim, rhs_dim);
-    int64_t out_dim = (min == 0 ? min : max);  // special case a dim value of 0.
-    if (lhs_dim != out_dim && lhs_dim != 1)
-      return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, node_name, ": left operand cannot broadcast on dim ", lhs_rank - 1 - i,
-                             " LeftShape: ", lhs_shape.ToString(), ", RightShape: ", rhs_shape.ToString());
-    if (rhs_dim != out_dim && rhs_dim != 1)
-      return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, node_name, ": right operand cannot broadcast on dim ", rhs_rank - 1 - i,
-                             " LeftShape: ", lhs_shape.ToString(), ", RightShape: ", rhs_shape.ToString());
-    output_dims[out_rank - 1 - i] = out_dim;
-  }
-  out_shape = TensorShape(output_dims);
-  return Status::OK();
-}
-
-Status BinaryElementwiseBroadcastPrepare(
-    const Tensor* lhs_tensor,
-    const Tensor* rhs_tensor,
-    Tensor* output_tensor,
-    BinaryElementwisePreparation* p,
-    const TensorShape* override_lhs_shape,
-    const TensorShape* override_rhs_shape) {
+void BinaryElementwiseBroadcastPrepare(const Tensor* lhs_tensor, const Tensor* rhs_tensor, Tensor* output_tensor,
+                                       BinaryElementwisePreparation* p, const TensorShape* override_lhs_shape,
+                                       const TensorShape* override_rhs_shape) {
   p->lhs_tensor = lhs_tensor;
   p->rhs_tensor = rhs_tensor;
   const auto& lhs_shape = override_lhs_shape ? *override_lhs_shape : lhs_tensor->Shape();
   const auto& rhs_shape = override_rhs_shape ? *override_rhs_shape : rhs_tensor->Shape();
-
   p->output_tensor = output_tensor;
   const auto& output_shape = output_tensor->Shape();
-
-  ORT_RETURN_IF_ERROR(p->BinaryElementwiseBroadcastPrepareHelper(lhs_shape, rhs_shape, output_shape));
-
-  return Status::OK();
+  p->BinaryElementwiseBroadcastPrepareHelper(lhs_shape, rhs_shape, output_shape);
 }
 
 template <>
@@ -75,99 +160,67 @@ Status BinaryElementwise<ShouldBroadcast>::Prepare(OpKernelContext* context, Bin
   auto rhs_tensor = context->Input<Tensor>(1);
   const auto& lhs_shape = lhs_tensor->Shape();
   const auto& rhs_shape = rhs_tensor->Shape();
-
   TensorShape output_shape;
-  ORT_RETURN_IF_ERROR(ComputeOutputShape(Node().Name(), lhs_shape, rhs_shape, output_shape));
+  ORT_RETURN_IF_ERROR(ComputeOutputShape(Node().Name(), {lhs_shape, rhs_shape}, output_shape));
   auto output_tensor = context->Output(0, output_shape);
-
-  ORT_RETURN_IF_ERROR(BinaryElementwiseBroadcastPrepare(lhs_tensor, rhs_tensor, output_tensor, p));
-
+  BinaryElementwiseBroadcastPrepare(lhs_tensor, rhs_tensor, output_tensor, p);
   return Status::OK();
 }
 
-#define BINARY_ELEMENTWISE_REGISTER_KERNEL_TYPED_V(x, class_name, ver, T)                  \
-  ONNX_OPERATOR_TYPED_KERNEL_EX(                                                           \
-      x,                                                                                   \
-      kOnnxDomain,                                                                         \
-      ver,                                                                                 \
-      T,                                                                                   \
-      kCudaExecutionProvider,                                                              \
-      (*KernelDefBuilder::Create()).TypeConstraint("T", DataTypeImpl::GetTensorType<T>()), \
-      class_name<T>);
+#ifdef ENABLE_TRAINING
+#define CREATE_BINARY_ELEMENTWISE_KERNEL_DEF (*KernelDefBuilder::Create()).MayStridedInput(0).MayStridedInput(1)
+#else
+#define CREATE_BINARY_ELEMENTWISE_KERNEL_DEF (*KernelDefBuilder::Create())
+#endif
 
-#define BINARY_ELEMENTWISE_REGISTER_KERNEL_TYPED(x, ver, T) \
-  BINARY_ELEMENTWISE_REGISTER_KERNEL_TYPED_V(x, x, ver, T)
+#define BINARY_ELEMENTWISE_REGISTER_KERNEL_TYPED_V(x, class_name, ver, T) \
+  ONNX_OPERATOR_TYPED_KERNEL_EX(                                          \
+      x, kOnnxDomain, ver, T, kCudaExecutionProvider,                     \
+      CREATE_BINARY_ELEMENTWISE_KERNEL_DEF.TypeConstraint("T", DataTypeImpl::GetTensorType<T>()), class_name<T>);
 
-#define BINARY_ELEMENTWISE_REGISTER_KERNEL_NONTEMP(x, class_name, ver, ...)                         \
-  ONNX_OPERATOR_TYPED_KERNEL_EX(                                                                    \
-      x,                                                                                            \
-      kOnnxDomain,                                                                                  \
-      ver,                                                                                          \
-      kCudaExecutionProvider,                                                                       \
-      (*KernelDefBuilder::Create()).TypeConstraint("T", BuildKernelDefConstraints<>(__VAR_ARGS__)), \
+#define BINARY_ELEMENTWISE_REGISTER_KERNEL_TYPED(x, ver, T) BINARY_ELEMENTWISE_REGISTER_KERNEL_TYPED_V(x, x, ver, T)
+
+#define BINARY_ELEMENTWISE_REGISTER_KERNEL_NONTEMP(x, class_name, ver, ...)                                \
+  ONNX_OPERATOR_TYPED_KERNEL_EX(                                                                           \
+      x, kOnnxDomain, ver, kCudaExecutionProvider,                                                         \
+      CREATE_BINARY_ELEMENTWISE_KERNEL_DEF.TypeConstraint("T", BuildKernelDefConstraints<>(__VAR_ARGS__)), \
       class_name);
 
-#define BINARY_ELEMENTWISE_LOGICALOP_REGISTER_KERNEL_TYPED(x, ver, T)                                                                                \
-  ONNX_OPERATOR_TYPED_KERNEL_EX(                                                                                                                     \
-      x,                                                                                                                                             \
-      kOnnxDomain,                                                                                                                                   \
-      ver,                                                                                                                                           \
-      T,                                                                                                                                             \
-      kCudaExecutionProvider,                                                                                                                        \
-      (*KernelDefBuilder::Create()).TypeConstraint("T", DataTypeImpl::GetTensorType<T>()).TypeConstraint("T1", DataTypeImpl::GetTensorType<bool>()), \
+#define BINARY_ELEMENTWISE_LOGICALOP_REGISTER_KERNEL_TYPED(x, ver, T)                            \
+  ONNX_OPERATOR_TYPED_KERNEL_EX(                                                                 \
+      x, kOnnxDomain, ver, T, kCudaExecutionProvider,                                            \
+      CREATE_BINARY_ELEMENTWISE_KERNEL_DEF.TypeConstraint("T", DataTypeImpl::GetTensorType<T>()) \
+          .TypeConstraint("T1", DataTypeImpl::GetTensorType<bool>()),                            \
       x<T>);
 
-#define BINARY_ELEMENTWISE_LOGICALOP_REGISTER_KERNEL_VERSIONED_TYPED(x, startver, endver, T)                                                         \
-  ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_EX(                                                                                                           \
-      x,                                                                                                                                             \
-      kOnnxDomain,                                                                                                                                   \
-      startver,                                                                                                                                      \
-      endver,                                                                                                                                        \
-      T,                                                                                                                                             \
-      kCudaExecutionProvider,                                                                                                                        \
-      (*KernelDefBuilder::Create()).TypeConstraint("T", DataTypeImpl::GetTensorType<T>()).TypeConstraint("T1", DataTypeImpl::GetTensorType<bool>()), \
+#define BINARY_ELEMENTWISE_LOGICALOP_REGISTER_KERNEL_VERSIONED_TYPED(x, startver, endver, T)     \
+  ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_EX(                                                       \
+      x, kOnnxDomain, startver, endver, T, kCudaExecutionProvider,                               \
+      CREATE_BINARY_ELEMENTWISE_KERNEL_DEF.TypeConstraint("T", DataTypeImpl::GetTensorType<T>()) \
+          .TypeConstraint("T1", DataTypeImpl::GetTensorType<bool>()),                            \
       x<T>);
 
-#define BINARY_ELEMENTWISE_REGISTER_KERNEL_VERSIONED_TYPED(x, startver, endver, T)         \
-  ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_EX(                                                 \
-      x,                                                                                   \
-      kOnnxDomain,                                                                         \
-      startver,                                                                            \
-      endver,                                                                              \
-      T,                                                                                   \
-      kCudaExecutionProvider,                                                              \
-      (*KernelDefBuilder::Create()).TypeConstraint("T", DataTypeImpl::GetTensorType<T>()), \
-      x<T>);
+#define BINARY_ELEMENTWISE_REGISTER_KERNEL_VERSIONED_TYPED(x, startver, endver, T) \
+  ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_EX(                                         \
+      x, kOnnxDomain, startver, endver, T, kCudaExecutionProvider,                 \
+      CREATE_BINARY_ELEMENTWISE_KERNEL_DEF.TypeConstraint("T", DataTypeImpl::GetTensorType<T>()), x<T>);
 
 #define BINARY_ELEMENTWISE_REGISTER_KERNEL_VERSIONED_TYPED_CLASS(x, class_name, startver, endver, T) \
   ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_EX(                                                           \
-      x,                                                                                             \
-      kOnnxDomain,                                                                                   \
-      startver,                                                                                      \
-      endver,                                                                                        \
-      T,                                                                                             \
-      kCudaExecutionProvider,                                                                        \
-      (*KernelDefBuilder::Create()).TypeConstraint("T", DataTypeImpl::GetTensorType<T>()),           \
-      class_name<T>);
+      x, kOnnxDomain, startver, endver, T, kCudaExecutionProvider,                                   \
+      CREATE_BINARY_ELEMENTWISE_KERNEL_DEF.TypeConstraint("T", DataTypeImpl::GetTensorType<T>()), class_name<T>);
 
-#define BINARY_ELEMENTWISE_COMPUTE(x, T)                                                                         \
-  template <>                                                                                                    \
-  Status x<T>::ComputeInternal(OpKernelContext* context) const {                                                 \
-    BinaryElementwisePreparation prepare;                                                                        \
-    ORT_RETURN_IF_ERROR(Prepare(context, &prepare));                                                             \
-    Impl_##x<typename ToCudaType<T>::MappedType>(                                                                \
-        Stream(),                                                                                                \
-        prepare.output_rank_or_simple_broadcast,                                                                 \
-        &prepare.lhs_padded_strides,                                                                             \
-        reinterpret_cast<const typename ToCudaType<T>::MappedType*>(prepare.lhs_tensor->template Data<T>()),     \
-        &prepare.rhs_padded_strides,                                                                             \
-        reinterpret_cast<const typename ToCudaType<T>::MappedType*>(prepare.rhs_tensor->template Data<T>()),     \
-        &prepare.fdm_output_strides,                                                                             \
-        prepare.fdm_H,                                                                                           \
-        prepare.fdm_C,                                                                                           \
-        reinterpret_cast<typename ToCudaType<T>::MappedType*>(prepare.output_tensor->template MutableData<T>()), \
-        prepare.output_tensor->Shape().Size());                                                                  \
-    return Status::OK();                                                                                         \
+#define BINARY_ELEMENTWISE_COMPUTE(x, T)                                                                               \
+  template <>                                                                                                          \
+  Status x<T>::ComputeInternal(OpKernelContext* context) const {                                                       \
+    BinaryElementwisePreparation prepare;                                                                              \
+    ORT_RETURN_IF_ERROR(Prepare(context, &prepare));                                                                   \
+    Impl_##x<typename ToCudaType<T>::MappedType>(                                                                      \
+        Stream(), reinterpret_cast<const typename ToCudaType<T>::MappedType*>(prepare.lhs_tensor->template Data<T>()), \
+        reinterpret_cast<const typename ToCudaType<T>::MappedType*>(prepare.rhs_tensor->template Data<T>()),           \
+        reinterpret_cast<typename ToCudaType<T>::MappedType*>(prepare.output_tensor->template MutableData<T>()),       \
+        prepare.args);                                                                                                 \
+    return Status::OK();                                                                                               \
   }
 
 #define BINARY_OP_VERSIONED_TYPED(name, startver, endver, T) \
@@ -321,34 +374,36 @@ BINARY_OP_HFD(PRelu, 16)
 
 // Pow since version 12
 ONNX_OPERATOR_VERSIONED_KERNEL_EX(
-    Pow,
-    kOnnxDomain,
-    12, 12,
-    kCudaExecutionProvider,
-    (*KernelDefBuilder::Create())
+    Pow, kOnnxDomain, 12, 12, kCudaExecutionProvider,
+    CREATE_BINARY_ELEMENTWISE_KERNEL_DEF
         .TypeConstraint("T", BuildKernelDefConstraints<int32_t, int64_t, float, double, MLFloat16>())
         .TypeConstraint("T1", BuildKernelDefConstraints<int32_t, int64_t, float, double, MLFloat16>()),
     Pow);
 
 ONNX_OPERATOR_VERSIONED_KERNEL_EX(
-    Pow,
-    kOnnxDomain,
-    13, 14,
-    kCudaExecutionProvider,
-    (*KernelDefBuilder::Create())
+    Pow, kOnnxDomain, 13, 14, kCudaExecutionProvider,
+    CREATE_BINARY_ELEMENTWISE_KERNEL_DEF
         .TypeConstraint("T", BuildKernelDefConstraints<int32_t, int64_t, float, double, MLFloat16>())
         .TypeConstraint("T1", BuildKernelDefConstraints<int32_t, int64_t, float, double, MLFloat16>()),
     Pow);
 
-ONNX_OPERATOR_KERNEL_EX(
-    Pow,
-    kOnnxDomain,
-    15,
-    kCudaExecutionProvider,
-    (*KernelDefBuilder::Create())
-        .TypeConstraint("T", BuildKernelDefConstraints<int32_t, int64_t, float, double, MLFloat16>())
-        .TypeConstraint("T1", BuildKernelDefConstraints<int32_t, int64_t, float, double, MLFloat16>()),
-    Pow);
+ONNX_OPERATOR_KERNEL_EX(Pow, kOnnxDomain, 15, kCudaExecutionProvider,
+                        CREATE_BINARY_ELEMENTWISE_KERNEL_DEF
+                            .TypeConstraint("T",
+                                            BuildKernelDefConstraints<int32_t, int64_t, float, double, MLFloat16>())
+                            .TypeConstraint("T1",
+                                            BuildKernelDefConstraints<int32_t, int64_t, float, double, MLFloat16>()),
+                        Pow);
+
+#define TYPED_IMPLT1_POW(rhs_onnx_type, rhs_data_type)                                                               \
+  case rhs_onnx_type: {                                                                                              \
+    ImplT1_Pow<typename ToCudaType<T>::MappedType, typename ToCudaType<rhs_data_type>::MappedType>(                  \
+        stream, reinterpret_cast<const typename ToCudaType<T>::MappedType*>(prepare.lhs_tensor->template Data<T>()), \
+        reinterpret_cast<const typename ToCudaType<rhs_data_type>::MappedType*>(                                     \
+            prepare.rhs_tensor->template Data<rhs_data_type>()),                                                     \
+        reinterpret_cast<typename ToCudaType<T>::MappedType*>(prepare.output_tensor->template MutableData<T>()),     \
+        prepare.args);                                                                                               \
+  } break
 
 namespace pow12_internal {
 template <class T>
@@ -356,79 +411,24 @@ Status DispatchOnFirstArg(cudaStream_t stream, const BinaryElementwisePreparatio
   namespace on = ONNX_NAMESPACE;
   Status s;
   switch (prepare.rhs_tensor->GetElementType()) {
-    case on::TensorProto_DataType_INT32:
-      ImplT1_Pow<typename ToCudaType<T>::MappedType, typename ToCudaType<int32_t>::MappedType>(
-          stream,
-          prepare.output_rank_or_simple_broadcast,
-          &prepare.lhs_padded_strides,
-          reinterpret_cast<const typename ToCudaType<T>::MappedType*>(prepare.lhs_tensor->template Data<T>()),
-          &prepare.rhs_padded_strides,
-          reinterpret_cast<const typename ToCudaType<int32_t>::MappedType*>(prepare.rhs_tensor->template Data<int32_t>()),
-          &prepare.fdm_output_strides,
-          prepare.fdm_H,
-          prepare.fdm_C,
-          reinterpret_cast<typename ToCudaType<T>::MappedType*>(prepare.output_tensor->template MutableData<T>()),
-          prepare.output_tensor->Shape().Size());
-      break;
-    case on::TensorProto_DataType_INT64:
-      ImplT1_Pow<typename ToCudaType<T>::MappedType, typename ToCudaType<int64_t>::MappedType>(
-          stream,
-          prepare.output_rank_or_simple_broadcast,
-          &prepare.lhs_padded_strides,
-          reinterpret_cast<const typename ToCudaType<T>::MappedType*>(prepare.lhs_tensor->template Data<T>()),
-          &prepare.rhs_padded_strides,
-          reinterpret_cast<const typename ToCudaType<int64_t>::MappedType*>(prepare.rhs_tensor->template Data<int64_t>()),
-          &prepare.fdm_output_strides,
-          prepare.fdm_H,
-          prepare.fdm_C,
-          reinterpret_cast<typename ToCudaType<T>::MappedType*>(prepare.output_tensor->template MutableData<T>()),
-          prepare.output_tensor->Shape().Size());
-      break;
-    case on::TensorProto_DataType_FLOAT:
-      ImplT1_Pow<typename ToCudaType<T>::MappedType, typename ToCudaType<float>::MappedType>(
-          stream,
-          prepare.output_rank_or_simple_broadcast,
-          &prepare.lhs_padded_strides,
-          reinterpret_cast<const typename ToCudaType<T>::MappedType*>(prepare.lhs_tensor->template Data<T>()),
-          &prepare.rhs_padded_strides,
-          reinterpret_cast<const typename ToCudaType<float>::MappedType*>(prepare.rhs_tensor->template Data<float>()),
-          &prepare.fdm_output_strides,
-          prepare.fdm_H,
-          prepare.fdm_C,
-          reinterpret_cast<typename ToCudaType<T>::MappedType*>(prepare.output_tensor->template MutableData<T>()),
-          prepare.output_tensor->Shape().Size());
-      break;
-    case on::TensorProto_DataType_DOUBLE:
-      ImplT1_Pow<typename ToCudaType<T>::MappedType, typename ToCudaType<double>::MappedType>(
-          stream,
-          prepare.output_rank_or_simple_broadcast,
-          &prepare.lhs_padded_strides,
-          reinterpret_cast<const typename ToCudaType<T>::MappedType*>(prepare.lhs_tensor->template Data<T>()),
-          &prepare.rhs_padded_strides,
-          reinterpret_cast<const typename ToCudaType<double>::MappedType*>(prepare.rhs_tensor->template Data<double>()),
-          &prepare.fdm_output_strides,
-          prepare.fdm_H,
-          prepare.fdm_C,
-          reinterpret_cast<typename ToCudaType<T>::MappedType*>(prepare.output_tensor->template MutableData<T>()),
-          prepare.output_tensor->Shape().Size());
-      break;
-    case on::TensorProto_DataType_FLOAT16:
-      ImplT1_Pow<typename ToCudaType<T>::MappedType, typename ToCudaType<MLFloat16>::MappedType>(
-          stream,
-          prepare.output_rank_or_simple_broadcast,
-          &prepare.lhs_padded_strides,
-          reinterpret_cast<const typename ToCudaType<T>::MappedType*>(prepare.lhs_tensor->template Data<T>()),
-          &prepare.rhs_padded_strides,
-          reinterpret_cast<const typename ToCudaType<MLFloat16>::MappedType*>(prepare.rhs_tensor->template Data<MLFloat16>()),
-          &prepare.fdm_output_strides,
-          prepare.fdm_H,
-          prepare.fdm_C,
-          reinterpret_cast<typename ToCudaType<T>::MappedType*>(prepare.output_tensor->template MutableData<T>()),
-          prepare.output_tensor->Shape().Size());
-      break;
+#define CASE_IMPLT1_POW_RHL_TYPE(rhs_onnx_type, rhs_data_type)                                                       \
+  case rhs_onnx_type: {                                                                                              \
+    ImplT1_Pow<typename ToCudaType<T>::MappedType, typename ToCudaType<rhs_data_type>::MappedType>(                  \
+        stream, reinterpret_cast<const typename ToCudaType<T>::MappedType*>(prepare.lhs_tensor->template Data<T>()), \
+        reinterpret_cast<const typename ToCudaType<rhs_data_type>::MappedType*>(                                     \
+            prepare.rhs_tensor->template Data<rhs_data_type>()),                                                     \
+        reinterpret_cast<typename ToCudaType<T>::MappedType*>(prepare.output_tensor->template MutableData<T>()),     \
+        prepare.args);                                                                                               \
+  } break
+    CASE_IMPLT1_POW_RHL_TYPE(on::TensorProto_DataType_INT32, int32_t);
+    CASE_IMPLT1_POW_RHL_TYPE(on::TensorProto_DataType_INT64, int64_t);
+    CASE_IMPLT1_POW_RHL_TYPE(on::TensorProto_DataType_FLOAT, float);
+    CASE_IMPLT1_POW_RHL_TYPE(on::TensorProto_DataType_DOUBLE, double);
+    CASE_IMPLT1_POW_RHL_TYPE(on::TensorProto_DataType_FLOAT16, MLFloat16);
+#undef CASE_IMPLT1_POW_RHL_TYPE
     default:
-      s = ORT_MAKE_STATUS(ONNXRUNTIME, INVALID_ARGUMENT, "Unsupported Y type: ",
-                          DataTypeImpl::ToString(prepare.rhs_tensor->DataType()));
+      s = ORT_MAKE_STATUS(ONNXRUNTIME, INVALID_ARGUMENT,
+                          "Unsupported Y type: ", DataTypeImpl::ToString(prepare.rhs_tensor->DataType()));
   }
   return s;
 }
@@ -472,18 +472,10 @@ Status CompareFunction<T, CudaT>::CompareMethod(OpKernelContext* context, ImplCo
   BinaryElementwisePreparation prepare;
   ORT_RETURN_IF_ERROR(Prepare(context, &prepare));
 
-  Impl_Compare(
-      Stream(),
-      prepare.output_rank_or_simple_broadcast,
-      &prepare.lhs_padded_strides,
-      reinterpret_cast<const CudaT*>(prepare.lhs_tensor->template Data<T>()),
-      &prepare.rhs_padded_strides,
-      reinterpret_cast<const CudaT*>(prepare.rhs_tensor->template Data<T>()),
-      &prepare.fdm_output_strides,
-      prepare.fdm_H,
-      prepare.fdm_C,
-      reinterpret_cast<ToCudaType<bool>::MappedType*>(prepare.output_tensor->template MutableData<bool>()),
-      prepare.output_tensor->Shape().Size());
+  Impl_Compare(Stream(), reinterpret_cast<const CudaT*>(prepare.lhs_tensor->template Data<T>()),
+               reinterpret_cast<const CudaT*>(prepare.rhs_tensor->template Data<T>()),
+               reinterpret_cast<ToCudaType<bool>::MappedType*>(prepare.output_tensor->template MutableData<bool>()),
+               prepare.args);
 
   return Status::OK();
 }

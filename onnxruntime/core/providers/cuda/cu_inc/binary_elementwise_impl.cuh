@@ -2,313 +2,177 @@
 // Licensed under the MIT License.
 
 #pragma once
-#include <stdint.h>
-#include "core/providers/cuda/shared_inc/cuda_utils.h"
+
 #include "core/providers/cuda/cu_inc/common.cuh"
+#include "core/providers/cuda/shared_inc/binary_elementwise_args.h"
 
 namespace onnxruntime {
 namespace cuda {
 
-// broadcast by computing output coordinate from offset, using fast_divmod
-template <typename T, typename T1, typename T2, typename FuncT,
-  bool lhs_need_compute, bool rhs_need_compute, int NumThreadsPerBlock, int NumElementsPerThread>
-__global__ void _BinaryElementWise(
-    int32_t output_rank,
-    const TArray<int64_t> lhs_padded_strides,
-    const T1* lhs_data,
-    const TArray<int64_t> rhs_padded_strides,
-    const T2* rhs_data,
-    const TArray<fast_divmod> fdm_output_strides,
-    T* output_data,
-    const FuncT& functor,
-    CUDA_LONG N) {
-  CUDA_LONG start = NumElementsPerThread * NumThreadsPerBlock * blockIdx.x + threadIdx.x;
-  T1 lvalue[NumElementsPerThread];
-  T2 rvalue[NumElementsPerThread];
+#ifdef USE_ROCM
+constexpr int kElementsPerThread = 2;
+constexpr int kThreadsPerBlock = 512;
+#else
+constexpr int kElementsPerThread = GridDim::maxElementsPerThread;
+constexpr int kThreadsPerBlock = GridDim::maxThreadsPerBlock;
+#endif
 
-  CUDA_LONG id = start;
+template <BroadcastIndexType LhsIndexType, BroadcastIndexType RhsIndexType>
+struct BinaryOffsetCalculator {
+  BinaryOffsetCalculator() {
+    static_assert(LhsIndexType != BroadcastIndexType::NeedCompute && RhsIndexType != BroadcastIndexType::NeedCompute);
+  }
+
+  BinaryOffsetCalculator(const int rank, const TArray<int64_t> lhs_strides, const TArray<int64_t> rhs_strides,
+                         const TArray<fast_divmod> output_fdms)
+      : rank_(rank), output_fdms_(output_fdms) {
+    if (LhsIndexType == BroadcastIndexType::NeedCompute) {
+      for (int dim = 0; dim < rank; ++dim) lhs_strides_[dim] = static_cast<CUDA_LONG>(lhs_strides[dim]);
+    }
+    if (RhsIndexType == BroadcastIndexType::NeedCompute) {
+      for (int dim = 0; dim < rank; ++dim) rhs_strides_[dim] = static_cast<CUDA_LONG>(rhs_strides[dim]);
+    }
+  }
+
+  __device__ __forceinline__ TArray<CUDA_LONG, 2> get(CUDA_LONG linear_idx) const {
+    TArray<CUDA_LONG, 2> offsets;
+    offsets[0] = LhsIndexType == BroadcastIndexType::NoBroadcast ? linear_idx : 0;
+    offsets[1] = RhsIndexType == BroadcastIndexType::NoBroadcast ? linear_idx : 0;
+
+    if (LhsIndexType == BroadcastIndexType::NeedCompute || RhsIndexType == BroadcastIndexType::NeedCompute) {
+      CUDA_LONG q, r = linear_idx;
 #pragma unroll
-  for (int i = 0; i < NumElementsPerThread; i++) {
-    if (id < N) {
-      CUDA_LONG lhs_index = (lhs_need_compute ? 0 : id);
-      CUDA_LONG rhs_index = (rhs_need_compute ? 0 : id);
-      // compute indexes with broadcasting rules: https://github.com/onnx/onnx/blob/master/docs/Broadcasting.md
-      CUDA_LONG offset = id;
-#pragma unroll
-      for (auto dim = 0; dim < fdm_output_strides.Capacity(); dim++) {
-        if (dim >= output_rank) {
+      for (int dim = 0; dim < output_fdms_.Capacity(); ++dim) {
+        if (dim == rank_) {
           break;
         }
-        int q, r;
-        fdm_output_strides[dim].divmod(offset, q, r);
-        if (lhs_need_compute) {
-          lhs_index += static_cast<int>(lhs_padded_strides[dim]) * q;
-        }
-
-        if (rhs_need_compute) {
-          rhs_index += static_cast<int>(rhs_padded_strides[dim]) * q;
-        }
-        offset = r;
+        output_fdms_[dim].divmod(r, q, r);
+        if (LhsIndexType == BroadcastIndexType::NeedCompute) offsets[0] += lhs_strides_[dim] * q;
+        if (RhsIndexType == BroadcastIndexType::NeedCompute) offsets[1] += rhs_strides_[dim] * q;
       }
-      lvalue[i] = lhs_data[lhs_index];
-      rvalue[i] = rhs_data[rhs_index];
+    }
 
-      id += NumThreadsPerBlock;
+    return offsets;
+  }
+
+  int rank_ = 0;
+  TArray<CUDA_LONG> lhs_strides_;
+  TArray<CUDA_LONG> rhs_strides_;
+  TArray<fast_divmod> output_fdms_;
+};
+
+template <bool IsRhsNeedCompute, bool IsMultiBatch>
+struct BinaryPerChannelOffsetCalculator {
+  BinaryPerChannelOffsetCalculator(const int height, const int channel) {
+    fast_divmod_height_ = fast_divmod(height);
+    if (IsMultiBatch) fast_divmod_channel_ = fast_divmod(channel);
+  }
+
+  __device__ __forceinline__ TArray<CUDA_LONG, 2> get(CUDA_LONG linear_idx) const {
+    TArray<CUDA_LONG, 2> offsets;
+    CUDA_LONG offset = fast_divmod_height_.div(linear_idx);
+    if (IsMultiBatch) offset = fast_divmod_channel_.mod(offset);
+    offsets[0] = IsRhsNeedCompute ? linear_idx : offset;
+    offsets[1] = IsRhsNeedCompute ? offset : linear_idx;
+    return offsets;
+  }
+
+  fast_divmod fast_divmod_height_;
+  fast_divmod fast_divmod_channel_;
+};
+
+template <typename T, typename T1, typename T2, typename FuncT, typename OffsetCalcT>
+__global__ void UnrolledBinaryElementwiseKernel(const T1* lhs_data, const T2* rhs_data, T* output_data, FuncT functor,
+                                                OffsetCalcT offset_calc, CUDA_LONG N) {
+  CUDA_LONG start = kElementsPerThread * kThreadsPerBlock * blockIdx.x + threadIdx.x;
+  T1 lvalue[kElementsPerThread];
+  T2 rvalue[kElementsPerThread];
+
+  CUDA_LONG id = start;
+#pragma unroll
+  for (int i = 0; i < kElementsPerThread; ++i) {
+    if (id < N) {
+      TArray<CUDA_LONG, 2> offsets = offset_calc.get(id);
+      lvalue[i] = lhs_data[offsets[0]];
+      rvalue[i] = rhs_data[offsets[1]];
+      id += kThreadsPerBlock;
     }
   }
 
   id = start;
 #pragma unroll
-  for (int i = 0; i < NumElementsPerThread; i++) {
+  for (int i = 0; i < kElementsPerThread; ++i) {
     if (id < N) {
       output_data[id] = functor(lvalue[i], rvalue[i]);
-
-      id += NumThreadsPerBlock;
-    }
-  }
-}
-
-// for scalar broadcast or non-broadcast case
-template <bool IncL, bool IncR, typename T, typename T1, typename T2, typename FuncT, int NumThreadsPerBlock, int NumElementsPerThread>
-__global__ void _BinaryElementWiseSimple(
-    const T1* lhs_data,
-    const T2* rhs_data,
-    T* output_data,
-    const FuncT& func,
-    CUDA_LONG N) {
-  CUDA_LONG start = NumElementsPerThread * NumThreadsPerBlock * blockIdx.x + threadIdx.x;
-  T1 lvalue[NumElementsPerThread];
-  T2 rvalue[NumElementsPerThread];
-
-  CUDA_LONG id = start;
-#pragma unroll
-  for (int i = 0; i < NumElementsPerThread; i++) {
-    if (id < N) {
-      lvalue[i] = lhs_data[IncL ? id : 0];
-      rvalue[i] = rhs_data[IncR ? id : 0];
-
-      id += NumThreadsPerBlock;
-    }
-  }
-
-  id = start;
-#pragma unroll
-  for (int i = 0; i < NumElementsPerThread; i++) {
-    if (id < N) {
-      output_data[id] = func(lvalue[i], rvalue[i]);
-
-      id += NumThreadsPerBlock;
-    }
-  }
-}
-
-// for rhs per-channel broadcast case
-template <typename T, typename T1, typename T2, typename FuncT, int NumThreadsPerBlock, int NumElementsPerThread>
-__global__ void _BinaryElementWiseRhsPerChannelBatch1(
-    const T1* lhs_data,
-    const T2* rhs_data,
-    const fast_divmod fdm_H,
-    T* output_data,
-    FuncT func,
-    CUDA_LONG N) {
-  CUDA_LONG start = NumElementsPerThread * NumThreadsPerBlock * blockIdx.x + threadIdx.x;
-  T1 lvalue[NumElementsPerThread];
-  T2 rvalue[NumElementsPerThread];
-
-  CUDA_LONG id = start;
-#pragma unroll
-  for (int i = 0; i < NumElementsPerThread; i++) {
-    if (id < N) {
-      CUDA_LONG rhs_id = fdm_H.div(id);
-      lvalue[i] = lhs_data[id];
-      rvalue[i] = rhs_data[rhs_id];
-
-      id += NumThreadsPerBlock;
-    }
-  }
-
-  id = start;
-#pragma unroll
-  for (int i = 0; i < NumElementsPerThread; i++) {
-    if (id < N) {
-      output_data[id] = func(lvalue[i], rvalue[i]);
-
-      id += NumThreadsPerBlock;
-    }
-  }
-}
-
-template <typename T, typename T1, typename T2, typename FuncT, int NumThreadsPerBlock, int NumElementsPerThread>
-__global__ void _BinaryElementWiseRhsPerChannelBatchN(
-    const T1* lhs_data,
-    const T2* rhs_data,
-    const fast_divmod fdm_H,
-    const fast_divmod fdm_C,
-    T* output_data,
-    FuncT func,
-    CUDA_LONG N) {
-  CUDA_LONG start = NumElementsPerThread * NumThreadsPerBlock * blockIdx.x + threadIdx.x;
-  T1 lvalue[NumElementsPerThread];
-  T2 rvalue[NumElementsPerThread];
-
-  CUDA_LONG id = start;
-#pragma unroll
-  for (int i = 0; i < NumElementsPerThread; i++) {
-    if (id < N) {
-      CUDA_LONG rhs_id = fdm_H.div(id);
-      int q, r;
-      fdm_C.divmod(rhs_id, q, r);
-      rhs_id = r;
-
-      lvalue[i] = lhs_data[id];
-      rvalue[i] = rhs_data[rhs_id];
-
-      id += NumThreadsPerBlock;
-    }
-  }
-
-  id = start;
-#pragma unroll
-  for (int i = 0; i < NumElementsPerThread; i++) {
-    if (id < N) {
-      output_data[id] = func(lvalue[i], rvalue[i]);
-
-      id += NumThreadsPerBlock;
+      id += kThreadsPerBlock;
     }
   }
 }
 
 template <typename T, typename T1, typename T2, typename FuncT>
-void BinaryElementWiseNoBroadcastImpl(
-    cudaStream_t stream,
-    const T1* lhs_data,
-    const T2* rhs_data,
-    T* output_data,
-    const FuncT& func,
-    size_t count) {
-  if (count == 0)  // special case where there's a dim value of 0 in the output shape
-    return;
-  
-  #ifdef USE_ROCM
-  const int num_elements_per_thread = 2;
-  const int num_threads_per_block = 512;
-  #else
-  const int num_elements_per_thread = GridDim::maxElementsPerThread;
-  const int num_threads_per_block = GridDim::maxThreadsPerBlock;
-  #endif
-
-  int blocksPerGrid = static_cast<int>(CeilDiv(count, num_threads_per_block * num_elements_per_thread));
-  CUDA_LONG N = static_cast<CUDA_LONG>(count);
-  _BinaryElementWiseSimple<true, true, T, T1, T2, FuncT, num_threads_per_block, num_elements_per_thread><<<blocksPerGrid, num_threads_per_block, 0, stream>>>(
-      lhs_data,
-      rhs_data,
-      output_data,
-      func,
-      N);
-
+void BinaryElementWiseNoBroadcastImpl(cudaStream_t stream, const T1* lhs_data, const T2* rhs_data, T* output_data,
+                                      const FuncT& func, size_t output_size) {
+  if (output_size == 0) return;
+  CUDA_LONG N = static_cast<CUDA_LONG>(output_size);
+  int blocks_per_grid = static_cast<int>(CeilDiv(N, kThreadsPerBlock * kElementsPerThread));
+  auto offset_calc = BinaryOffsetCalculator<BroadcastIndexType::NoBroadcast, BroadcastIndexType::NoBroadcast>();
+  UnrolledBinaryElementwiseKernel<T, T1, T2, FuncT, decltype(offset_calc)>
+      <<<blocks_per_grid, kThreadsPerBlock, 0, stream>>>(lhs_data, rhs_data, output_data, func, offset_calc, N);
 }
 
+#define LAUNCH_BINARY_ELEMENTWISE_PER_CHANNEL_KERNEL(is_rhs_need_compute, is_multi_batch)                              \
+  auto offset_calc = BinaryPerChannelOffsetCalculator<is_rhs_need_compute, is_multi_batch>(args.height, args.channel); \
+  UnrolledBinaryElementwiseKernel<T, T1, T2, FuncT, decltype(offset_calc)>                                             \
+      <<<blocks_per_grid, kThreadsPerBlock, 0, stream>>>(lhs_data, rhs_data, output_data, func, offset_calc, N)
+
+#define HANDLE_BINARY_ELEMENTWISE_PER_CHANNEL_BATCH(is_rhs_need_compute)      \
+  if (args.is_multi_batch) {                                                  \
+    LAUNCH_BINARY_ELEMENTWISE_PER_CHANNEL_KERNEL(is_rhs_need_compute, true);  \
+  } else {                                                                    \
+    LAUNCH_BINARY_ELEMENTWISE_PER_CHANNEL_KERNEL(is_rhs_need_compute, false); \
+  }
+
+#define HANDLE_BINARY_ELEMENTWISE_RHS_INDEX_TYPE(lhs_index_type, rhs_index_type)                                   \
+  case rhs_index_type: {                                                                                           \
+    auto offset_calc = BinaryOffsetCalculator<lhs_index_type, rhs_index_type>(                                     \
+        static_cast<int>(args.rank), args.lhs_strides, args.rhs_strides, args.output_fdms);                        \
+    UnrolledBinaryElementwiseKernel<T, T1, T2, FuncT, decltype(offset_calc)>                                       \
+        <<<blocks_per_grid, kThreadsPerBlock, 0, stream>>>(lhs_data, rhs_data, output_data, func, offset_calc, N); \
+  } break
+
+#define HANDLE_BINARY_ELEMENTWISE_LHS_INDEX_TYPE(lhs_index_type, rhs_index_type_val)             \
+  case lhs_index_type: {                                                                         \
+    switch (rhs_index_type_val) {                                                                \
+      HANDLE_BINARY_ELEMENTWISE_RHS_INDEX_TYPE(lhs_index_type, BroadcastIndexType::NoBroadcast); \
+      HANDLE_BINARY_ELEMENTWISE_RHS_INDEX_TYPE(lhs_index_type, BroadcastIndexType::Scalar);      \
+      HANDLE_BINARY_ELEMENTWISE_RHS_INDEX_TYPE(lhs_index_type, BroadcastIndexType::NeedCompute); \
+    }                                                                                            \
+  } break
+
 template <typename T, typename T1, typename T2, typename FuncT>
-void BinaryElementWiseImpl(
-    cudaStream_t stream,
-    int32_t output_rank_or_simple_broadcast,
-    const TArray<int64_t>* lhs_padded_strides,
-    const T1* lhs_data,
-    const TArray<int64_t>* rhs_padded_strides,
-    const T2* rhs_data,
-    const TArray<fast_divmod>* fdm_output_strides,
-    const fast_divmod& fdm_H,
-    const fast_divmod& fdm_C,
-    T* output_data,
-    const FuncT& func,
-    size_t count) {
-  if (count == 0)  // special case where there's a dim value of 0 in the output shape
-    return;
+void BinaryElementWiseImpl(cudaStream_t stream, const T1* lhs_data, const T2* rhs_data, T* output_data,
+                           const BinaryElementwiseArgs& args, const FuncT& func) {
+  if (args.output_size == 0) return;
+  CUDA_LONG N = static_cast<CUDA_LONG>(args.output_size);
+  int blocks_per_grid = static_cast<int>(CeilDiv(N, kElementsPerThread * kThreadsPerBlock));
 
-  #ifdef USE_ROCM
-  const int num_elements_per_thread = 2;
-  const int num_threads_per_block = 512;
-  #else
-  const int num_elements_per_thread = GridDim::maxElementsPerThread;
-  const int num_threads_per_block = GridDim::maxThreadsPerBlock;
-  #endif
-
-  int blocksPerGrid = static_cast<int>(CeilDiv(count, num_threads_per_block * num_elements_per_thread));
-  CUDA_LONG N = static_cast<CUDA_LONG>(count);
-  if (output_rank_or_simple_broadcast == static_cast<int32_t>(SimpleBroadcast::NoBroadcast)) {
-    _BinaryElementWiseSimple<true, true, T, T1, T2, FuncT, num_threads_per_block, num_elements_per_thread><<<blocksPerGrid, num_threads_per_block, 0, stream>>>(
-        lhs_data,
-        rhs_data,
-        output_data,
-        func,
-        N);
-  } else if (output_rank_or_simple_broadcast == static_cast<int32_t>(SimpleBroadcast::LeftScalar)) {
-    _BinaryElementWiseSimple<false, true, T, T1, T2, FuncT, num_threads_per_block, num_elements_per_thread><<<blocksPerGrid, num_threads_per_block, 0, stream>>>(
-        lhs_data,
-        rhs_data,
-        output_data,
-        func,
-        N);
-  } else if (output_rank_or_simple_broadcast == static_cast<int32_t>(SimpleBroadcast::RightScalar)) {
-    _BinaryElementWiseSimple<true, false, T, T1, T2, FuncT, num_threads_per_block, num_elements_per_thread><<<blocksPerGrid, num_threads_per_block, 0, stream>>>(
-        lhs_data,
-        rhs_data,
-        output_data,
-        func,
-        N);
-  } else if (output_rank_or_simple_broadcast == static_cast<int32_t>(SimpleBroadcast::RightPerChannelBatch1)) {
-    _BinaryElementWiseRhsPerChannelBatch1<T, T1, T2, FuncT, num_threads_per_block, num_elements_per_thread><<<blocksPerGrid, num_threads_per_block, 0, stream>>>(
-        lhs_data,
-        rhs_data,
-        fdm_H,
-        output_data,
-        func,
-        N);
-  } else if (output_rank_or_simple_broadcast == static_cast<int32_t>(SimpleBroadcast::RightPerChannelBatchN)) {
-    _BinaryElementWiseRhsPerChannelBatchN<T, T1, T2, FuncT, num_threads_per_block, num_elements_per_thread><<<blocksPerGrid, num_threads_per_block, 0, stream>>>(
-        lhs_data,
-        rhs_data,
-        fdm_H,
-        fdm_C,
-        output_data,
-        func,
-        N);
+  if (args.per_channel_type == PerChannelType::LhsNeedCompute) {
+    HANDLE_BINARY_ELEMENTWISE_PER_CHANNEL_BATCH(false);
+  } else if (args.per_channel_type == PerChannelType::RhsNeedCompute) {
+    HANDLE_BINARY_ELEMENTWISE_PER_CHANNEL_BATCH(true);
   } else {
-    if (lhs_padded_strides && rhs_padded_strides && lhs_padded_strides->Size() && rhs_padded_strides->Size())
-      _BinaryElementWise<T, T1, T2, FuncT, true, true, num_threads_per_block, num_elements_per_thread><<<blocksPerGrid, num_threads_per_block, 0, stream>>>(
-          output_rank_or_simple_broadcast,
-          *lhs_padded_strides,
-          lhs_data,
-          *rhs_padded_strides,
-          rhs_data,
-          *fdm_output_strides,
-          output_data,
-          func,
-          N);
-    else if (lhs_padded_strides && lhs_padded_strides->Size())
-      _BinaryElementWise<T, T1, T2, FuncT, true, false, num_threads_per_block, num_elements_per_thread><<<blocksPerGrid, num_threads_per_block, 0, stream>>>(
-          output_rank_or_simple_broadcast,
-          *lhs_padded_strides,
-          lhs_data,
-          TArray<int64_t>(), // rhs is not computed, so no need to deference rhs_padded_strides
-          rhs_data,
-          *fdm_output_strides,
-          output_data,
-          func,
-          N);
-    else if (rhs_padded_strides && rhs_padded_strides->Size())
-      _BinaryElementWise<T, T1, T2, FuncT, false, true, num_threads_per_block, num_elements_per_thread><<<blocksPerGrid, num_threads_per_block, 0, stream>>>(
-          output_rank_or_simple_broadcast,
-          TArray<int64_t>(), // lhs is not computed, so no need to deference lhs_padded_strides
-          lhs_data,
-          *rhs_padded_strides,
-          rhs_data,
-          *fdm_output_strides,
-          output_data,
-          func,
-          N);
+    switch (args.lhs_index_type) {
+      HANDLE_BINARY_ELEMENTWISE_LHS_INDEX_TYPE(BroadcastIndexType::NoBroadcast, args.rhs_index_type);
+      HANDLE_BINARY_ELEMENTWISE_LHS_INDEX_TYPE(BroadcastIndexType::Scalar, args.rhs_index_type);
+      HANDLE_BINARY_ELEMENTWISE_LHS_INDEX_TYPE(BroadcastIndexType::NeedCompute, args.rhs_index_type);
+    }
   }
 }
+
+#undef HANDLE_BINARY_ELEMENTWISE_LHS_INDEX_TYPE
+#undef HANDLE_BINARY_ELEMENTWISE_RHS_INDEX_TYPE
+#undef HANDLE_BINARY_ELEMENTWISE_PER_CHANNEL_BATCH
+#undef LAUNCH_BINARY_ELEMENTWISE_PER_CHANNEL_KERNEL
 
 }  // namespace cuda
 }  // namespace onnxruntime

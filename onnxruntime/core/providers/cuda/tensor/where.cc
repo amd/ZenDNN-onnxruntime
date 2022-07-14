@@ -1,8 +1,10 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-#include "where.h"
-#include "where_impl.h"
+#include "core/providers/cuda/tensor/where.h"
+
+#include "core/providers/cuda/tensor/where_impl.h"
+#include "core/providers/cuda/math/elementwise_utils.h"
 #include "core/providers/cpu/tensor/utils.h"
 
 namespace onnxruntime {
@@ -31,49 +33,6 @@ namespace cuda {
           .TypeConstraint("B", DataTypeImpl::GetTensorType<bool>()) \
           .TypeConstraint("T", DataTypeImpl::GetTensorType<T>()),   \
       Where<T>);
-
-// Compute where operator output shape based upon three way broad-casting.
-Status ComputeOutputShape(const std::string& node_name, const TensorShape& cond_shape,
-                          const TensorShape& x_shape, const TensorShape& y_shape, TensorShape& out_shape) {
-  size_t cond_rank = cond_shape.NumDimensions();
-  size_t x_rank = x_shape.NumDimensions();
-  size_t y_rank = y_shape.NumDimensions();
-  size_t out_rank = std::max(std::max(cond_rank, x_rank), y_rank);
-
-  std::vector<int64_t> output_dims(out_rank, 0);
-  for (size_t i = 0; i < out_rank; ++i) {
-    int64_t cond_dim = 1;
-    if (i < cond_rank)
-      cond_dim = cond_shape[cond_rank - 1 - i];
-
-    int64_t x_dim = 1;
-    if (i < x_rank)
-      x_dim = x_shape[x_rank - 1 - i];
-
-    int64_t y_dim = 1;
-    if (i < y_rank)
-      y_dim = y_shape[y_rank - 1 - i];
-
-    int64_t out_dim = std::max(std::max(cond_dim, x_dim), y_dim);
-    // special case to handle a dim of 0 which can be broadcast with a 1
-    if (out_dim == 1)
-      out_dim = std::min(std::min(cond_dim, x_dim), y_dim);
-
-    if (cond_dim != out_dim && cond_dim != 1)
-      return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, node_name, ": condition operand cannot broadcast on dim ", cond_rank - 1 - i,
-                             " Condition Shape: ", cond_shape.ToString(), ", X Shape: ", x_shape.ToString(), ", Y Shape: ", y_shape.ToString());
-    if (x_dim != out_dim && x_dim != 1)
-      return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, node_name, ": X operand cannot broadcast on dim ", x_rank - 1 - i,
-                             " Condition Shape: ", cond_shape.ToString(), ", X Shape: ", x_shape.ToString(), ", Y Shape: ", y_shape.ToString());
-    if (y_dim != out_dim && y_dim != 1)
-      return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, node_name, ": Y operand cannot broadcast on dim ", y_rank - 1 - i,
-                             " Condition Shape: ", cond_shape.ToString(), ", X Shape: ", x_shape.ToString(), ", Y Shape: ", y_shape.ToString());
-    output_dims[out_rank - 1 - i] = out_dim;
-  }
-
-  out_shape = TensorShape(output_dims);
-  return Status::OK();
-}
 
 struct TernaryElementwisePreparation {
   const Tensor* a_tensor = nullptr;
@@ -175,7 +134,7 @@ Status Where<T>::ComputeInternal(OpKernelContext* context) const {
   auto const& Y_shape = Y->Shape();
 
   TensorShape output_shape;
-  ORT_RETURN_IF_ERROR(ComputeOutputShape(Node().Name(), condition_shape, X_shape, Y_shape, output_shape));
+  ORT_RETURN_IF_ERROR(ComputeOutputShape(Node().Name(), {condition_shape, X_shape, Y_shape}, output_shape));
   auto output_tensor = context->Output(0, output_shape);
 
   if (output_shape.Size() == 0)

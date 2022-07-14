@@ -29,7 +29,7 @@ ONNX_OPERATOR_KERNEL_EX(Split,
                         kCudaExecutionProvider,
                         (*KernelDefBuilder::Create())
                             .InputMemoryType(OrtMemTypeCPUInput, 1)
-                            .TypeConstraint("T", DataTypeImpl::AllFixedSizeTensorTypes()),
+                            .TypeConstraint("T", DataTypeImpl::AllFixedSizeTensorTypes()), //.MayStridedOutput(0, 0).MayStridedOutput(0, 1).MayStridedOutput(0, 2),
                         Split);
 
 Status Split::ComputeInternal(OpKernelContext* ctx) const {
@@ -70,6 +70,7 @@ Status Split::ComputeInternal(OpKernelContext* ctx) const {
   gsl::span<void*> output_ptr_span = output_ptr.CpuSpan();
   TensorShapeVector axis_dimension_input_output_mapping(input_dims[axis]);
   int index = 0;
+  // bool is_strided = false;
   for (int i = 0; i < num_outputs; ++i) {
     // update size of dimension for axis we're splitting on
     auto split_size = gsl::narrow<int>(split_sizes[i]);
@@ -78,10 +79,22 @@ Status Split::ComputeInternal(OpKernelContext* ctx) const {
     Tensor* output = ctx->Output(i, TensorShape{output_dimensions});
     auto output_data = output->MutableDataRaw();
     output_ptr_span[i] = output_data;
+    // if (input_data == output->DataRaw()) {
+    //   ORT_ENFORCE(i == 0 || is_strided);
+    //   auto input_strides = input_tensor->Strides();
+    //   TensorShapeVector new_strides = ToShapeVector(input_strides);
+    //   output->SetShapeAndStrides(TensorShape{output_dimensions}, new_strides);
+    //   output->SetByteOffset(index * input_strides[axis] *  input_tensor->DataType()->Size());
+    //   is_strided = true;
+    // } else {
+    //   ORT_ENFORCE(!is_strided);
+    // }
     for (int j = 0; j < split_size; ++j) {
       axis_dimension_input_output_mapping.at(index++) = i;
     }
   }
+
+  // if (is_strided) return Status::OK();
 
   if (input_tensor->Shape().Size() > 0) {
     ORT_RETURN_IF_ERROR(output_ptr.CopyToGpu());

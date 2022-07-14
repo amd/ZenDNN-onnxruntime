@@ -10,23 +10,19 @@
 namespace onnxruntime {
 namespace cuda {
 
-ONNX_OPERATOR_VERSIONED_KERNEL_EX(
-    Transpose,
-    kOnnxDomain,
-    1, 12,
-    kCudaExecutionProvider,
-    (*KernelDefBuilder::Create())
-        .TypeConstraint("T", DataTypeImpl::AllFixedSizeTensorTypes()),
-    Transpose);
+#if defined(ENABLE_TRAINING) && false
+#define CREATE_TRANS_KERNEL_DEF (*KernelDefBuilder::Create()).MayStridedOutput(0, 0)
+#else
+#define CREATE_TRANS_KERNEL_DEF (*KernelDefBuilder::Create())
+#endif
 
-ONNX_OPERATOR_KERNEL_EX(
-    Transpose,
-    kOnnxDomain,
-    13,
-    kCudaExecutionProvider,
-    (*KernelDefBuilder::Create())
-        .TypeConstraint("T", DataTypeImpl::AllFixedSizeTensorTypes()),
-    Transpose);
+ONNX_OPERATOR_VERSIONED_KERNEL_EX(Transpose, kOnnxDomain, 1, 12, kCudaExecutionProvider,
+                                  CREATE_TRANS_KERNEL_DEF.TypeConstraint("T", DataTypeImpl::AllFixedSizeTensorTypes()),
+                                  Transpose);
+
+ONNX_OPERATOR_KERNEL_EX(Transpose, kOnnxDomain, 13, kCudaExecutionProvider,
+                        CREATE_TRANS_KERNEL_DEF.TypeConstraint("T", DataTypeImpl::AllFixedSizeTensorTypes()),
+                        Transpose);
 
 // special case acceleration using cublas matrix transpose
 static std::tuple<int, int> TryTransposeWithCublas(const gsl::span<const size_t>& perm, const TensorShape& input_shape) {
@@ -273,9 +269,23 @@ Status Transpose::ComputeInternal(OpKernelContext* ctx) const {
     return status;
 
   TensorShape output_shape{output_dims};
-  Tensor* Y = ctx->Output(0, output_shape);
+  Tensor* p_Y = ctx->Output(0, output_shape);
 
-  return DoTranspose(this->GetDeviceProp(), this->Stream(), this->CublasHandle(), *p_perm, X, *Y);
+#ifdef ENABLE_TRAINING
+  if (X.DataRaw() == p_Y->DataRaw()) {
+    // Calculate and set new strides.
+    auto old_strides = X.Strides();
+    TensorShapeVector new_strides(rank);
+    for (size_t i = 0; i < static_cast<size_t>(rank); ++i) {
+      new_strides[i] = old_strides[(*p_perm)[i]];
+    }
+
+    p_Y->SetShapeAndStrides(output_shape, new_strides);
+    return Status::OK();
+  }
+#endif
+
+  return DoTranspose(this->GetDeviceProp(), this->Stream(), this->CublasHandle(), *p_perm, X, *p_Y);
 }
 
 }  // namespace cuda

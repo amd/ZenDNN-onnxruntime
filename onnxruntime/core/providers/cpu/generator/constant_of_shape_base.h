@@ -46,7 +46,7 @@ class ConstantOfShapeBase {
 
   void* GetValuePtr() const { return p_value_; }
 
-  static Status PrepareCompute(OpKernelContext* ctx, Tensor** output_tensor) {
+  static Status PrepareCompute(OpKernelContext* ctx, Tensor** output_tensor, bool is_strided = false) {
     const auto shape_tensor = ctx->Input<Tensor>(0);
     const auto& input_shape = shape_tensor->Shape();
 
@@ -58,7 +58,13 @@ class ConstantOfShapeBase {
     const auto span = shape_tensor->DataAsSpan<int64_t>();
 
     TensorShape output_shape(span.begin(), span.size());
-    (*output_tensor) = ctx->Output(0, output_shape);
+    if (is_strided) {
+      (*output_tensor) = ctx->Output(0, TensorShape({}));
+      TensorShapeVector strides(span.size(), 0);
+      (*output_tensor)->SetShapeAndStrides(output_shape, strides);
+    } else {
+      (*output_tensor) = ctx->Output(0, output_shape);
+    }
 
     return Status::OK();
   }

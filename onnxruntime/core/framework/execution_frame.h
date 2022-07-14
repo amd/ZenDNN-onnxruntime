@@ -62,6 +62,7 @@ class IExecutionFrame {
 
                      const std::unordered_map<int, OrtValue>& initializers);
   Status GetOutputs(gsl::span<const int> fetch_mlvalue_idxs, std::vector<OrtValue>& fetches);
+  virtual bool IsStridedTensor(int index);
 #endif
 
   // TO DO: make it thread safe
@@ -183,6 +184,10 @@ class ExecutionFrame final : public IExecutionFrame {
     return static_activation_memory_sizes_in_byte_;
   }
 #endif
+
+#ifdef ENABLE_TRAINING
+  bool IsStridedTensor(int index) override;
+#endif  // ENABLE_TRAINING
 
  private:
   ORT_DISALLOW_COPY_ASSIGNMENT_AND_MOVE(ExecutionFrame);

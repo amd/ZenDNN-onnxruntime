@@ -255,7 +255,7 @@ Status ReduceKernel<allow_multi_axes>::ReduceKernelShared(
       auto log_sum_result_buffer = GetScratchBuffer<T>(output_count);
       auto log_sum_result = log_sum_result_buffer.get();
       BinaryElementwisePreparation prepare;
-      ORT_RETURN_IF_ERROR(prepare.BinaryElementwiseBroadcastPrepareHelper(input_shape, rhs_shape, input_shape));
+      prepare.BinaryElementwiseBroadcastPrepareHelper(input_shape, rhs_shape, input_shape);
       Impl_Sub<HipT>(Stream(),
                      prepare.output_rank_or_simple_broadcast,
                      &prepare.lhs_padded_strides,
@@ -592,7 +592,7 @@ Status ReduceComputeCore(ROCMExecutionProvider& rocm_ep, const Tensor& input, Pr
       auto log_sum_result_buffer = rocm_ep.GetScratchBuffer<T>(output_count);
       auto log_sum_result = log_sum_result_buffer.get();
       BinaryElementwisePreparation prepare;
-      ORT_RETURN_IF_ERROR(prepare.BinaryElementwiseBroadcastPrepareHelper(input_shape, output_shape, input_shape));
+      prepare.BinaryElementwiseBroadcastPrepareHelper(input_shape, output_shape, input_shape);
       Impl_Sub<HipT>(stream,
                      prepare.output_rank_or_simple_broadcast,
                      &prepare.lhs_padded_strides,
@@ -663,7 +663,7 @@ Status ReduceComputeCore(ROCMExecutionProvider& rocm_ep, const Tensor& input, Pr
               &one, input_tensor, temp_X.get(),
               &zero, output_tensor, temp_output.get()));
 
-          Impl_Cast<float, HipT>(stream, temp_output.get(), reinterpret_cast<HipT*>(output.template MutableData<T>()), output_count); 
+          Impl_Cast<float, HipT>(stream, temp_output.get(), reinterpret_cast<HipT*>(output.template MutableData<T>()), output_count);
         } else {
           MIOPEN_RETURN_IF_ERROR(miopenReduceTensor(
               rocm_ep.PerThreadMiopenHandle(), reduce_desc, indices_rocm.get(), indices_bytes,

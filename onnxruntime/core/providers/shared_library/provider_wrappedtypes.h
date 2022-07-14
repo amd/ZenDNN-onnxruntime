@@ -754,6 +754,10 @@ struct OpKernelContext final {
   bool TryGetInferredOutputShape(int index, TensorShape& shape) const { return g_host->OpKernelContext__TryGetInferredOutputShape(this, index, shape); }
   bool TryGetInferredInputShape(int index, TensorShape& shape) const { return g_host->OpKernelContext__TryGetInferredInputShape(this, index, shape); }
 
+#ifdef ENABLE_TRAINING
+  bool IsStridedTensor(int index) const { return g_host->OpKernelContext__IsStridedTensor(this, index); }
+#endif  // ENABLE_TRAINING
+
   PROVIDER_DISALLOW_ALL(OpKernelContext)
 };
 

@@ -178,7 +178,7 @@ TEST(BiasGeluTest, Two_One_Dim_bfloat16) {
   execution_providers.push_back(DefaultCudaExecutionProvider());
 #elif USE_ROCM
   execution_providers.push_back(DefaultRocmExecutionProvider());
-#endif 
+#endif
   tester.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
 }
 #endif
@@ -186,27 +186,37 @@ TEST(BiasGeluTest, Two_One_Dim_bfloat16) {
 TEST(MathOpTest, ComplexMul) {
   if (DefaultCudaExecutionProvider() == nullptr) return;
 
-  std::vector<float> input_a_data = {
-        -0.5f, 0.6f};
+  // Broadcast
+  {
+    std::vector<float> input_a_data = {-0.5f, 0.6f};
+    std::vector<float> input_b_data = {0.8f, -0.5f, 0.0f, 1.f, 0.5f, 0.2f, 0.3f, -0.6f};
+    std::vector<float> output_data = {-0.10f, 0.73f, -0.60f, -0.50f, -0.37f, 0.20f, 0.21f, 0.48f};
 
-  std::vector<float> input_b_data = {
-        0.8f, -0.5f, 0.0f, 1.f,
-        0.5f, 0.2f, 0.3f, -0.6f};
+    OpTester tester("ComplexMul", 1, onnxruntime::kMSDomain);
+    tester.AddInput<float>("A", {1, 2}, input_a_data);
+    tester.AddInput<float>("B", {4, 2}, input_b_data);
+    tester.AddOutput<float>("C", {4, 2}, output_data);
 
-  std::vector<float> output_data = {
-        -0.10f, 0.73f,
-        -0.60f, -0.50f,
-        -0.37f, 0.20f,
-        0.21f, 0.48f};
+    std::vector<std::unique_ptr<IExecutionProvider>> execution_providers;
+    execution_providers.push_back(DefaultCudaExecutionProvider());
+    tester.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
+  }
 
-  OpTester tester("ComplexMul", 1, onnxruntime::kMSDomain);
-  tester.AddInput<float>("A", {1, 2}, input_a_data);
-  tester.AddInput<float>("B", {4, 2}, input_b_data);
-  tester.AddOutput<float>("C", {4, 2}, output_data);
+  // Non-broadcast
+  {
+    std::vector<float> input_a_data = {-0.5f, 0.3f, 0.6f, -0.6f};
+    std::vector<float> input_b_data = {0.8f, -0.5f, 0.5f, 0.2f};
+    std::vector<float> output_data = {-0.25f, 0.49f, 0.42f, -0.18f};
 
-  std::vector<std::unique_ptr<IExecutionProvider>> execution_providers;
-  execution_providers.push_back(DefaultCudaExecutionProvider());
-  tester.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
+    OpTester tester("ComplexMul", 1, onnxruntime::kMSDomain);
+    tester.AddInput<float>("A", {2, 2}, input_a_data);
+    tester.AddInput<float>("B", {2, 2}, input_b_data);
+    tester.AddOutput<float>("C", {2, 2}, output_data);
+
+    std::vector<std::unique_ptr<IExecutionProvider>> execution_providers;
+    execution_providers.push_back(DefaultCudaExecutionProvider());
+    tester.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
+  }
 }
 
 TEST(MathOpTest, ComplexMulConj) {

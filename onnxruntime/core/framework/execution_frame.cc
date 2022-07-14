@@ -124,6 +124,8 @@ Status IExecutionFrame::GetOutputs(gsl::span<const int> fetch_mlvalue_idxs, std:
   return Status::OK();
 }
 
+bool IExecutionFrame::IsStridedTensor(int /*index*/) { return false; }
+
 #endif
 
 // Return nullptr if index map to an value that is an unused optional input/output
@@ -914,5 +916,13 @@ bool ExecutionFrame::TryGetInferredShape(int index, TensorShape& shape) const {
   // Tell the caller if the search is successful or not.
   return false;
 }
+
+#ifdef ENABLE_TRAINING
+bool ExecutionFrame::IsStridedTensor(int index) {
+  int ort_value_idx = GetNodeIdxToMLValueIdx(index);
+  if (ort_value_idx == NodeIndexInfo::kInvalidEntry) return false;
+  return GetAllocationPlan(ort_value_idx).is_strided_tensor;
+}
+#endif  // ENABLE_TRAINING
 
 }  // namespace onnxruntime

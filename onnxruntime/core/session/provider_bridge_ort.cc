@@ -801,6 +801,9 @@ struct ProviderHostImpl : ProviderHost {
   bool OpKernelContext__GetUseDeterministicCompute(const OpKernelContext* p) override { return p->GetUseDeterministicCompute(); }
   bool OpKernelContext__TryGetInferredOutputShape(const OpKernelContext* p, int index, TensorShape& shape) override { return p->TryGetInferredOutputShape(index, shape); }
   bool OpKernelContext__TryGetInferredInputShape(const OpKernelContext* p, int index, TensorShape& shape) override { return p->TryGetInferredInputShape(index, shape); }
+#ifdef ENABLE_TRAINING
+  bool OpKernelContext__IsStridedTensor(const OpKernelContext* p, int index) override { return p->IsStridedTensor(index); }
+#endif  // ENABLE_TRAINING
 
   // OpKernelInfo (wrapped)
   std::unique_ptr<OpKernelInfo> CopyOpKernelInfo(const OpKernelInfo& info) override { return onnxruntime::CopyOpKernelInfo(info); }

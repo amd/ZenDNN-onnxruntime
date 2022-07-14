@@ -2,8 +2,9 @@
 // Licensed under the MIT License.
 
 #pragma once
+
 #include <stdint.h>
-#include "core/providers/cuda/shared_inc/cuda_utils.h"
+#include "core/providers/cuda/shared_inc/binary_elementwise_args.h"
 
 namespace onnxruntime {
 namespace cuda {
@@ -31,56 +32,26 @@ namespace cuda {
 // NOTE that cu files are compiled with nvcc and should not refer to any onnxruntime headers
 // so struct BinaryElementwisePreparation cannot be used here
 
-#define BINARY_ELEMENTWISE_IMPL_DECLARATION(name)    \
-  template <typename T>                              \
-  void Impl_##name(                                  \
-      cudaStream_t stream,                           \
-      int32_t output_rank_or_simple_broadcast,       \
-      const TArray<int64_t>* lhs_padded_strides,     \
-      const T* lhs_data,                             \
-      const TArray<int64_t>* rhs_padded_strides,     \
-      const T* rhs_data,                             \
-      const TArray<fast_divmod>* fdm_output_strides, \
-      const fast_divmod& fdm_H,                      \
-      const fast_divmod& fdm_C,                      \
-      T* output_data,                                \
-      size_t count)
+#define BINARY_ELEMENTWISE_IMPL_DECLARATION(name)                                             \
+  template <typename T>                                                                       \
+  void Impl_##name(cudaStream_t stream, const T* lhs_data, const T* rhs_data, T* output_data, \
+                   const BinaryElementwiseArgs& args)
 
 #define BINARY_OP_NAME_EXPR(name, expr) BINARY_ELEMENTWISE_IMPL_DECLARATION(name);
 BINARY_OPS()
 #undef BINARY_OP_NAME_EXPR
 
-#define BINARY_ELEMENTWISE_IMPL_DECLARATION_T1(name) \
-  template <typename T, typename T1>                 \
-  void ImplT1_##name(                                \
-      cudaStream_t stream,                           \
-      int32_t output_rank_or_simple_broadcast,       \
-      const TArray<int64_t>* lhs_padded_strides,     \
-      const T* lhs_data,                             \
-      const TArray<int64_t>* rhs_padded_strides,     \
-      const T1* rhs_data,                            \
-      const TArray<fast_divmod>* fdm_output_strides, \
-      const fast_divmod& fdm_H,                      \
-      const fast_divmod& fdm_C,                      \
-      T* output_data,                                \
-      size_t count)
+#define BINARY_ELEMENTWISE_IMPL_DECLARATION_T1(name)                                             \
+  template <typename T, typename T1>                                                             \
+  void ImplT1_##name(cudaStream_t stream, const T* lhs_data, const T1* rhs_data, T* output_data, \
+                     const BinaryElementwiseArgs& args)
 
 BINARY_ELEMENTWISE_IMPL_DECLARATION_T1(Pow);
 
-#define BINARY_ELEMENTWISE_IMPL_DECLARATION_T2(name) \
-  template <typename T, typename T1, typename T2>    \
-  void ImplT2_##name(                                \
-      cudaStream_t stream,                           \
-      int32_t output_rank_or_simple_broadcast,       \
-      const TArray<int64_t>* lhs_padded_strides,     \
-      const T1* lhs_data,                            \
-      const TArray<int64_t>* rhs_padded_strides,     \
-      const T2* rhs_data,                            \
-      const TArray<fast_divmod>* fdm_output_strides, \
-      const fast_divmod& fdm_H,                      \
-      const fast_divmod& fdm_C,                      \
-      T* output_data,                                \
-      size_t count)
+#define BINARY_ELEMENTWISE_IMPL_DECLARATION_T2(name)                                              \
+  template <typename T, typename T1, typename T2>                                                 \
+  void ImplT2_##name(cudaStream_t stream, const T1* lhs_data, const T2* rhs_data, T* output_data, \
+                     const BinaryElementwiseArgs& args)
 
 #define BINARY_OPS2()                    \
   BINARY_OP_NAME_EXPR2(Greater, (a > b)) \

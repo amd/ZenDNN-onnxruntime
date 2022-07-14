@@ -3,8 +3,8 @@
 
 #include <cuda_runtime.h>
 #include "contrib_ops/cuda/math/binary_elementwise_ops_impl.h"
-#include "core/providers/cuda/cu_inc/common.cuh"
 #include "core/providers/cuda/cu_inc/binary_elementwise_impl.cuh"
+#include "core/providers/cuda/cu_inc/common.cuh"
 
 namespace onnxruntime {
 namespace contrib {
@@ -18,33 +18,14 @@ namespace cuda {
     }                                                    \
   };
 
-#define CONTRIB_BINARY_ELEMENTWISE_IMPL(name)              \
-  CONTRIB_BINARY_ELEMENTWISE_IMPL_DECLARATION(name) {      \
-    BinaryElementWiseImpl(stream,                          \
-                          output_rank_or_simple_broadcast, \
-                          lhs_padded_strides,              \
-                          lhs_data,                        \
-                          rhs_padded_strides,              \
-                          rhs_data,                        \
-                          fdm_output_strides,              \
-                          fdm_H,                           \
-                          fdm_C,                           \
-                          output_data,                     \
-                          OP_##name<T>(),                  \
-                          count);                          \
+#define CONTRIB_BINARY_ELEMENTWISE_IMPL(name)                                             \
+  CONTRIB_BINARY_ELEMENTWISE_IMPL_DECLARATION(name) {                                     \
+    BinaryElementWiseImpl(stream, lhs_data, rhs_data, output_data, args, OP_##name<T>()); \
   }
 
-#define CONTRIB_SPECIALIZED_BINARY_ELEMENTWISE_IMPL(x, T)                                     \
-  template void Impl_##x<T>(cudaStream_t stream,                                        \
-                            int32_t output_rank,                                              \
-                            const TArray<int64_t>* lhs_padded_strides,                        \
-                            const T* lhs_data,                                                \
-                            const TArray<int64_t>* rhs_padded_strides,                        \
-                            const T* rhs_data,                                                \
-                            const TArray<onnxruntime::cuda::fast_divmod>* fdm_output_strides, \
-                            const onnxruntime::cuda::fast_divmod& fdm_H,                      \
-                            const onnxruntime::cuda::fast_divmod& fdm_C,                      \
-                            T* output_data, size_t count);
+#define CONTRIB_SPECIALIZED_BINARY_ELEMENTWISE_IMPL(x, T)                                              \
+  template void Impl_##x<T>(cudaStream_t stream, const T* lhs_data, const T* rhs_data, T* output_data, \
+                            const BinaryElementwiseArgs& args);
 
 #define CONTRIB_SPECIALIZED_BINARY_ELEMENTWISE_IMPL_UZILHFD(x) \
   CONTRIB_SPECIALIZED_BINARY_ELEMENTWISE_IMPL(x, uint32_t)     \

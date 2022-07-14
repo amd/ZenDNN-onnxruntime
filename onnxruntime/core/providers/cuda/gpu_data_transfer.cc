@@ -1,9 +1,12 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-#include "core/providers/shared_library/provider_api.h"
 #include "core/providers/cuda/gpu_data_transfer.h"
-#include "cuda_common.h"
+
+#include "core/providers/cuda/cuda_common.h"
+#include "core/providers/cuda/tensor/copy.h"
+#include "core/providers/shared_library/provider_api.h"
+#include "core/providers/cpu/tensor/utils.h"
 
 // use default stream for copy for now, to avoid racing in BFC arena as in issue #4829
 // note this may cause some models to run slower if there are ops running on CPU
@@ -38,13 +41,22 @@ bool GPUDataTransfer::CanCopy(const OrtDevice& src_device, const OrtDevice& dst_
 }
 
 common::Status GPUDataTransfer::CopyTensor(const Tensor& src, Tensor& dst, int exec_queue_id) const {
+  auto& src_device = src.Location().device;
+  auto& dst_device = dst.Location().device;
+  if (src_device.Type() == OrtDevice::GPU && dst_device.Type() == OrtDevice::GPU) {
+    return cuda::StridedCopyTensor(GetStream(kCudaStreamDefault), src, dst);
+  }
+
+  TensorShapeVector src_strides = TensorPitches(src.Shape());
+  TensorShapeVector dst_strides = TensorPitches(dst.Shape());
+#ifdef ENABLE_TRAINING
+  src_strides = ToShapeVector(src.Strides());
+  dst_strides = ToShapeVector(dst.Strides());
+#endif
+  ORT_ENFORCE(src_strides == dst_strides);
   size_t bytes = src.SizeInBytes();
   const void* src_data = src.DataRaw();
   void* dst_data = dst.MutableDataRaw();
-
-  auto& src_device = src.Location().device;
-  auto& dst_device = dst.Location().device;
-
   if (dst_device.Type() == OrtDevice::GPU) {
     if (src_device.Type() == OrtDevice::CPU && src_device.MemType() == OrtDevice::MemType::CUDA_PINNED) {
       // copy from pinned memory to GPU, this is non-blocking

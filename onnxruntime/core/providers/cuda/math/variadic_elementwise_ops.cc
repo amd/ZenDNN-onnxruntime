@@ -10,6 +10,7 @@
 #include "core/framework/data_types_internal.h"
 #include "core/providers/cuda/math/binary_elementwise_ops.h"
 #include "core/providers/cuda/math/binary_elementwise_ops_impl.h"
+#include "core/providers/cuda/math/elementwise_utils.h"
 #include "core/providers/cuda/math/variadic_elementwise_ops_impl.h"
 #include "core/providers/cuda/math/variadic_elementwise_ops_tags.h"
 
@@ -39,13 +40,11 @@ Status VariadicElementwiseOp<VariadicElementwiseOpTag, SupportedElementTypes...>
     // Special case for 2 inputs left.
     if (batch == 2) {
       BinaryElementwisePreparation prepare;
-      ORT_RETURN_IF_ERROR(BinaryElementwiseBroadcastPrepare(&output, &inputs[input_count - 1].get(), &output, &prepare));
+      BinaryElementwiseBroadcastPrepare(&output, &inputs[input_count - 1].get(), &output, &prepare);
       Impl_General<CudaT, VariadicElementwiseOpTag>(
-          stream, prepare.output_rank_or_simple_broadcast, &prepare.lhs_padded_strides,
-          reinterpret_cast<const CudaT*>(prepare.lhs_tensor->template Data<T>()), &prepare.rhs_padded_strides,
-          reinterpret_cast<const CudaT*>(prepare.rhs_tensor->template Data<T>()), &prepare.fdm_output_strides,
-          prepare.fdm_H, prepare.fdm_C, reinterpret_cast<CudaT*>(prepare.output_tensor->template MutableData<T>()),
-          prepare.output_tensor->Shape().Size());
+          stream, reinterpret_cast<const CudaT*>(prepare.lhs_tensor->template Data<T>()),
+          reinterpret_cast<const CudaT*>(prepare.rhs_tensor->template Data<T>()),
+          reinterpret_cast<CudaT*>(prepare.output_tensor->template MutableData<T>()), prepare.args);
 
       // Must be the last.
       break;
@@ -74,20 +73,12 @@ Status VariadicElementwiseOp<VariadicElementwiseOpTag, SupportedElementTypes...>
   using CudaT = typename ToCudaType<T>::MappedType;
 
   BinaryElementwisePreparation prepare;
-  ORT_RETURN_IF_ERROR(BinaryElementwiseBroadcastPrepare(&lhs, &rhs, &output, &prepare));
+  BinaryElementwiseBroadcastPrepare(&lhs, &rhs, &output, &prepare);
 
   Impl_General<CudaT, VariadicElementwiseOpTag>(
-      stream,
-      prepare.output_rank_or_simple_broadcast,
-      &prepare.lhs_padded_strides,
-      reinterpret_cast<const CudaT*>(prepare.lhs_tensor->template Data<T>()),
-      &prepare.rhs_padded_strides,
+      stream, reinterpret_cast<const CudaT*>(prepare.lhs_tensor->template Data<T>()),
       reinterpret_cast<const CudaT*>(prepare.rhs_tensor->template Data<T>()),
-      &prepare.fdm_output_strides,
-      prepare.fdm_H,
-      prepare.fdm_C,
-      reinterpret_cast<CudaT*>(prepare.output_tensor->template MutableData<T>()),
-      prepare.output_tensor->Shape().Size());
+      reinterpret_cast<CudaT*>(prepare.output_tensor->template MutableData<T>()), prepare.args);
 
   return Status::OK();
 }
@@ -115,23 +106,18 @@ VariadicElementwiseOp<VariadicElementwiseOpTag, SupportedElementTypes...>::Gener
   // No input has same shape of output, memset the output, and add the 1st input as initialization.
   if (index_of_same_shape == inputs.size()) {
     CUDA_RETURN_IF_ERROR(cudaMemsetAsync(output.MutableDataRaw(), 0, output.SizeInBytes(), stream));
-    ORT_RETURN_IF_ERROR(BinaryElementwiseBroadcastPrepare(&output, &inputs[0].get(), &output, &prepare));
-    Impl_Add(stream, prepare.output_rank_or_simple_broadcast, &prepare.lhs_padded_strides,
-             reinterpret_cast<const CudaT*>(prepare.lhs_tensor->template Data<T>()), &prepare.rhs_padded_strides,
-             reinterpret_cast<const CudaT*>(prepare.rhs_tensor->template Data<T>()), &prepare.fdm_output_strides,
-             prepare.fdm_H, prepare.fdm_C, reinterpret_cast<CudaT*>(prepare.output_tensor->template MutableData<T>()),
-             prepare.output_tensor->Shape().Size());
+    BinaryElementwiseBroadcastPrepare(&output, &inputs[0].get(), &output, &prepare);
+    Impl_Add(stream, reinterpret_cast<const CudaT*>(prepare.lhs_tensor->template Data<T>()),
+             reinterpret_cast<const CudaT*>(prepare.rhs_tensor->template Data<T>()),
+             reinterpret_cast<CudaT*>(prepare.output_tensor->template MutableData<T>()), prepare.args);
   } else {
     // First operation is between input[0] and input[index_of_same_shape] if index_of_same_shape is not 0.
     size_t index = index_of_same_shape == 0 ? 1 : 0;
-    ORT_RETURN_IF_ERROR(
-        BinaryElementwiseBroadcastPrepare(&inputs[index_of_same_shape].get(), &inputs[index].get(), &output, &prepare));
+    BinaryElementwiseBroadcastPrepare(&inputs[index_of_same_shape].get(), &inputs[index].get(), &output, &prepare);
     Impl_General<CudaT, VariadicElementwiseOpTag>(
-        stream, prepare.output_rank_or_simple_broadcast, &prepare.lhs_padded_strides,
-        reinterpret_cast<const CudaT*>(prepare.lhs_tensor->template Data<T>()), &prepare.rhs_padded_strides,
-        reinterpret_cast<const CudaT*>(prepare.rhs_tensor->template Data<T>()), &prepare.fdm_output_strides,
-        prepare.fdm_H, prepare.fdm_C, reinterpret_cast<CudaT*>(prepare.output_tensor->template MutableData<T>()),
-        prepare.output_tensor->Shape().Size());
+        stream, reinterpret_cast<const CudaT*>(prepare.lhs_tensor->template Data<T>()),
+        reinterpret_cast<const CudaT*>(prepare.rhs_tensor->template Data<T>()),
+        reinterpret_cast<CudaT*>(prepare.output_tensor->template MutableData<T>()), prepare.args);
   }
 
   for (size_t index = 1; index < inputs.size(); index++) {
@@ -140,13 +126,11 @@ VariadicElementwiseOp<VariadicElementwiseOpTag, SupportedElementTypes...>::Gener
       continue;
     }
 
-    ORT_RETURN_IF_ERROR(BinaryElementwiseBroadcastPrepare(&output, &inputs[index].get(), &output, &prepare));
+    BinaryElementwiseBroadcastPrepare(&output, &inputs[index].get(), &output, &prepare);
     Impl_General<CudaT, VariadicElementwiseOpTag>(
-        stream, prepare.output_rank_or_simple_broadcast, &prepare.lhs_padded_strides,
-        reinterpret_cast<const CudaT*>(prepare.lhs_tensor->template Data<T>()), &prepare.rhs_padded_strides,
-        reinterpret_cast<const CudaT*>(prepare.rhs_tensor->template Data<T>()), &prepare.fdm_output_strides,
-        prepare.fdm_H, prepare.fdm_C, reinterpret_cast<CudaT*>(prepare.output_tensor->template MutableData<T>()),
-        prepare.output_tensor->Shape().Size());
+        stream, reinterpret_cast<const CudaT*>(prepare.lhs_tensor->template Data<T>()),
+        reinterpret_cast<const CudaT*>(prepare.rhs_tensor->template Data<T>()),
+        reinterpret_cast<CudaT*>(prepare.output_tensor->template MutableData<T>()), prepare.args);
   }
 
   return Status::OK();
@@ -209,8 +193,8 @@ Status VariadicElementwiseOp<VariadicElementwiseOpTag, SupportedElementTypes...>
   TensorShape output_shape;
   TensorShape previous_output_shape = first_input_tensor.Shape();
   for (int index = 1; index < input_count; index++) {
-    ORT_RETURN_IF_ERROR(ComputeOutputShape(
-        node_name, previous_output_shape, input_tensors[index].get().Shape(), output_shape));
+    ORT_RETURN_IF_ERROR(
+        ComputeOutputShape(node_name, {previous_output_shape, input_tensors[index].get().Shape()}, output_shape));
     previous_output_shape = output_shape;
   }
   Tensor& output_tensor = context->RequiredOutput(0, output_shape);

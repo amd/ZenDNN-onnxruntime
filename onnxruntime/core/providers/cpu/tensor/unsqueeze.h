@@ -27,7 +27,7 @@ class UnsqueezeBase {
     }
   }
 
- private:
+//  private:
   TensorShapeVector axes_;
 };
 

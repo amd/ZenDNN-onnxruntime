@@ -292,6 +292,13 @@ class PlannerImpl {
   bool FindReusableInput(const onnxruntime::Node& node, int output_arg_num, OrtValueIndex* reusable_input,
                          bool* is_strided_tensor) {
     *is_strided_tensor = false;
+    auto p_output_arg = node.OutputDefs()[output_arg_num];
+    const KernelCreateInfo& ci = GetKernelCreateInfo(kernel_create_info_map_, node.Index());
+    if (ci.kernel_def == nullptr) {
+      return false;
+    }
+    auto input_args = node.InputDefs();
+
 #ifdef ENABLE_TRAINING
     // Inputs of Yields are essentially the outputs for FW partial subgraph
     // Thses tensors will be pass back to pytorch, thus cannot share the buffer with other tensors
@@ -304,29 +311,69 @@ class PlannerImpl {
     if (p_next_node != node.OutputNodesEnd() && p_next_node->OpType() == "YieldOp") {
       return false;
     }
-#endif  //ENABLE_TRAINING
 
-    auto p_output_arg = node.OutputDefs()[output_arg_num];
-    const KernelCreateInfo& ci = GetKernelCreateInfo(kernel_create_info_map_, node.Index());
-
-    if (ci.kernel_def == nullptr) {
-      return false;
+    // If any output of the kernel can support strided tensor, and all its consumers' inputs also support
+    // strided tensors at the corresponding position, this output will generate a strided tensor
+    // and share the data from the corresponding input specified in MayStridedOutputsMap.
+    const auto& may_strided_outputs_map = ci.kernel_def->MayStridedOutput();
+    for (auto& pair : may_strided_outputs_map) {
+      if (pair.second == output_arg_num &&
+          (pair.first == -1 || (pair.first >= 0 && static_cast<size_t>(pair.first) < input_args.size() &&
+                                input_args[pair.first]->Exists()))) {
+        bool can_strided = true;
+        for (auto it = node.OutputNodesBegin(); it != node.OutputNodesEnd(); ++it) {
+          const KernelCreateInfo& output_node_ci = GetKernelCreateInfo(kernel_create_info_map_, it->Index());
+          if (!output_node_ci.kernel_def) {
+            can_strided = false;
+            break;
+          }
+          const auto& may_strided_inputs = output_node_ci.kernel_def->MayStridedInput();
+          for (size_t i = 0; i < it->InputDefs().size(); ++i) {
+            if (it->InputDefs()[i] == p_output_arg && std::find(may_strided_inputs.begin(), may_strided_inputs.end(),
+                                                                static_cast<int>(i)) == may_strided_inputs.end()) {
+              can_strided = false;
+              break;
+            }
+          }
+          if (!can_strided) {
+            break;
+          }
+        }
+        if (can_strided) {
+          *is_strided_tensor = true;
+          if (pair.first == -1) return false;
+          *reusable_input = Index(input_args[pair.first]->Name());
+        }
+      }
     }
+#endif  // ENABLE_TRAINING
 
     const auto& alias_map = ci.kernel_def->Alias();
-    auto input_args = node.InputDefs();
     for (auto& pair : alias_map) {
       if (pair.second == output_arg_num) {
         // we _must_ reuse this input to satisfy aliasing requirement: (e.g., for reshape)
         if ((0 <= pair.first) && (static_cast<size_t>(pair.first) < input_args.size())) {
           auto p_input_arg = input_args[pair.first];
           if (p_input_arg->Exists()) {
-            *reusable_input = Index(p_input_arg->Name());
-            return true;
+            OrtValueIndex index = Index(p_input_arg->Name());
+            if (*is_strided_tensor) {
+              ORT_ENFORCE(*reusable_input == index);
+              return true;
+            } else if (AllocPlan(index).is_strided_tensor) {
+              // The resued is strided tensor, but the consumer is not MayStridedInput, need tensor copy.
+              return false;
+            } else {
+              *reusable_input = index;
+              return true;
+            }
           }
         }
       }
     }
+
+    // Currently there is no Op that is both VariadicAlias/MayInplace and MayStridedOutput, if yes,
+    // we need to change below code to support.
+    if (*is_strided_tensor) return true;
 
     const auto& variadic_alias_offsets = ci.kernel_def->VariadicAlias();
     if (variadic_alias_offsets.has_value()) {
@@ -362,42 +409,6 @@ class PlannerImpl {
         }
       }
     }
-
-#ifdef ENABLE_TRAINING
-    // If any output of the kernel can support strided tensor, and all its consumers' inputs also support
-    // strided tensors at the corresponding position, this output will generate a strided tensor
-    // and share the data from the corresponding input specified in MayStridedOutputsMap.
-    const auto& may_strided_outputs_map = ci.kernel_def->MayStridedOutput();
-    for (auto& pair : may_strided_outputs_map) {
-      if (pair.second == output_arg_num && pair.first >= 0 && static_cast<size_t>(pair.first) < input_args.size() &&
-          input_args[pair.first]->Exists()) {
-        bool can_strided = true;
-        for (auto it = node.OutputNodesBegin(); it != node.OutputNodesEnd(); ++it) {
-          const KernelCreateInfo& output_node_ci = GetKernelCreateInfo(kernel_create_info_map_, it->Index());
-          if (!output_node_ci.kernel_def) {
-            can_strided = false;
-            break;
-          }
-          const auto& may_strided_inputs = output_node_ci.kernel_def->MayStridedInput();
-          for (size_t i = 0; i < it->InputDefs().size(); ++i) {
-            if (it->InputDefs()[i] == p_output_arg && std::find(may_strided_inputs.begin(), may_strided_inputs.end(),
-                                                                static_cast<int>(i)) == may_strided_inputs.end()) {
-              can_strided = false;
-              break;
-            }
-          }
-          if (!can_strided) {
-            break;
-          }
-        }
-        if (can_strided) {
-          *reusable_input = Index(input_args[pair.first]->Name());
-          *is_strided_tensor = true;
-          return true;
-        }
-      }
-    }
-#endif
 
     return false;
   }
@@ -1018,11 +1029,6 @@ class PlannerImpl {
           // and optional types if the kernel has marked certain inputs as
           // possible candidates for re-use
           Reuse(reused, current, AllocKind::kReuse);
-#ifdef ENABLE_TRAINING
-          if (is_strided_tensor) AllocPlan(current).is_strided_tensor = true;
-#else
-          ORT_ENFORCE(!is_strided_tensor);
-#endif  // ENABLE_TRAINING
 #if !defined(ORT_MINIMAL_BUILD) && defined(ORT_MEMORY_PROFILE)
           InplaceReuse(reused, current);
 #endif
@@ -1042,6 +1048,11 @@ class PlannerImpl {
           AllocPlan(current).alloc_kind = AllocKind::kAllocate;
           AllocPlan(current).program_counter.AddStart(program_counter);
         }
+#ifdef ENABLE_TRAINING
+        if (is_strided_tensor) AllocPlan(current).is_strided_tensor = true;
+#else
+        ORT_ENFORCE(!is_strided_tensor);
+#endif  // ENABLE_TRAINING
       }
 
       // determine if inputs of *pnode can be freed:

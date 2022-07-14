@@ -1,8 +1,10 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-#include "expand.h"
-#include "expand_impl.h"
+#include "core/providers/cuda/tensor/expand.h"
+
+#include "core/providers/cuda/tensor/expand_impl.h"
+#include "core/providers/cuda/math/elementwise_utils.h"
 #include "core/providers/cpu/tensor/utils.h"
 
 namespace onnxruntime {
@@ -96,7 +98,7 @@ Status Expand::ComputeInternal(OpKernelContext* ctx) const {
   TensorShapeVector output_dims{p_shape, p_shape + input_shape_tensor.Shape().Size()};
   TensorShape output_shape(output_dims);
 
-  ORT_RETURN_IF_ERROR(ComputeOutputShape(Node().Name(), input_data_tensor.Shape(), output_dims, output_shape));
+  ORT_RETURN_IF_ERROR(ComputeOutputShape(Node().Name(), {input_data_tensor.Shape(), output_shape}, output_shape));
   auto& output_tensor = *ctx->Output(0, output_shape);
   if (0 == output_shape.Size()) {
     return Status::OK();
