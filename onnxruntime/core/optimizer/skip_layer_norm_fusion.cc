@@ -242,7 +242,9 @@ Status SkipLayerNormFusion::ApplyImpl(Graph& graph, bool& modified, int graph_le
                                                "SkipLayerNormalization",
                                                "fused SkipLayerNorm subgraphs ",
                                                skip_layer_norm_input_defs,
-                                               ln_node.MutableOutputDefs(), {}, kMSDomain);
+                                               ln_node.MutableOutputDefs(),
+                                               static_cast<NodeAttributes*>(nullptr),
+                                               kMSDomain);
     // Get attribute "epsilon" from "LayerNormalization" node if available. Else, default value
     // will be used.
     NodeAttributes ln_attrs = ln_node.GetAttributes();

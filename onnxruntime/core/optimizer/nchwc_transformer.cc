@@ -908,7 +908,7 @@ void NchwcTransformerImpl::TransformBatchNormalization(Node& node) {
                                     nchwc_node_name,
                                     std::array{nchwc_input->nchwc_arg_, nchwc_conv_W_arg, nchwc_conv_B_arg},
                                     output_defs,
-                                    nullptr,
+                                    static_cast<NodeAttributes*>(nullptr),
                                     kMSNchwcDomain);
   nchwc_node.SetExecutionProviderType(kCpuExecutionProvider);
   nchwc_node.AddAttribute("group", nchwc_channels);
@@ -946,7 +946,7 @@ void NchwcTransformerImpl::TransformTransposeToNhwc(Node& node) {
                                              "ReorderOutput",
                                              std::array<NodeArg*, 1>{nchwc_input->nchwc_arg_},
                                              output_defs,
-                                             nullptr,
+                                             static_cast<NodeAttributes*>(nullptr),
                                              kMSNchwcDomain);
   reorder_output_node.SetExecutionProviderType(kCpuExecutionProvider);
   reorder_output_node.AddAttribute("channels", nchwc_input->channels_);

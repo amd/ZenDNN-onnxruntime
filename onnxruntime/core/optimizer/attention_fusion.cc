@@ -377,14 +377,13 @@ static bool FuseSubGraphQKImpl(Node& layer_norm,
   const Node& reshape = parent_path_nodes[0];
   const std::array input_defs{layer_norm.MutableOutputDefs()[0], &qkv_weights, &qkv_bias, mask_int32};
   const std::array output_defs{graph.GetNode(reshape.Index())->MutableOutputDefs()[0]};
-  Node& attention_node = graph.AddNode(
-      graph.GenerateNodeName("Attention"),
-      "Attention",
-      "Fused Attention subgraphs ",
-      input_defs,
-      output_defs,
-      nullptr,
-      kMSDomain);
+  Node& attention_node = graph.AddNode(graph.GenerateNodeName("Attention"),
+                                       "Attention",
+                                       "Fused Attention subgraphs ",
+                                       input_defs,
+                                       output_defs,
+                                       static_cast<NodeAttributes*>(nullptr),
+                                       kMSDomain);
   attention_node.AddAttribute("num_heads", num_heads);
 
   // Assign provider to this new node.
@@ -669,7 +668,7 @@ bool AttentionFusion::FuseSubGraph(Node& layer_norm, const Node& add_after_layer
     return false;
   }
 
-  //store parent path
+  // store parent path
   std::vector<std::reference_wrapper<const Node>> parent_path_nodes{reshape, transpose, qkv_matmul, v_transpose, v_reshape, v_add, v_matmul};
 
   // Find mask nodes: Unsqueeze -> Unsqueeze -> (Cast) -> Sub -> Mul -> Add -> Softmax --> [MatMul]

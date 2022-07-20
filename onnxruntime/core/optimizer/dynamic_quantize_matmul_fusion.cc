@@ -94,7 +94,7 @@ Status DynamicQuantizeMatMulFusion::ApplyImpl(Graph& graph, bool& modified, int 
                                       "",
                                       input_defs,
                                       matmul_integer_to_float_node.MutableOutputDefs(),
-                                      nullptr,
+                                      static_cast<NodeAttributes*>(nullptr),
                                       kMSDomain);
 
     // Assign provider to this new node. Provider should be same as the provider for old node.

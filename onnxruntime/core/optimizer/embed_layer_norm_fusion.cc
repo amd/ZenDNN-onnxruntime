@@ -34,7 +34,7 @@ static NodeArg* CastToInt32(Graph& graph, NodeArg* input, ProviderType provider_
                              "Cast Input from int64 to int32",
                              std::array{input},
                              std::array{&cast32},
-                             nullptr,
+                             static_cast<NodeAttributes*>(nullptr),
                              kOnnxDomain);
 
   // Add attribute: "to" = 6
@@ -514,7 +514,8 @@ static void CreateEmbedLayernormNode(Graph& graph,
                                               "fused EmbedLayerNorm subgraphs ",
                                               embed_layer_norm_input_defs,
                                               std::array{layer_norm_node.MutableOutputDefs()[0], &mask_index},
-                                              {}, kMSDomain);
+                                              static_cast<NodeAttributes*>(nullptr),
+                                              kMSDomain);
 
   // Get attribute "epsilon" from "LayerNormalization" node if available. Else, default value
   // will be used.
@@ -843,7 +844,7 @@ Status EmbedLayerNormFusion::ApplyImpl(Graph& graph, bool& modified, int graph_l
     Node& layer_norm_add_node = *graph.GetNode(edges[0]->GetNode().Index());
 
     if (IsNeighborNodeExpectedTypes(layer_norm_add_node.InputEdgesBegin(), layer_norm_add_node.InputNodesEnd(), {"Gather", "Gather"})) {
-      //DistilBert
+      // DistilBert
       if (FuseSubGraphDistilBert(graph, layer_norm_add_node, layer_norm_node, logger)) {
         modified = true;
       }

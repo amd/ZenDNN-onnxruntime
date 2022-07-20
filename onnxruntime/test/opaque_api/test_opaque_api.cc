@@ -175,12 +175,12 @@ std::string CreateModel() {
     auto& input_arg = graph.GetOrCreateNodeArg("Input", &exp_type_proto);
     inputs.push_back(&input_arg);
 
-    //Output is our custom data type. This will return an Opaque type proto
+    // Output is our custom data type. This will return an Opaque type proto
     auto& output_arg = graph.GetOrCreateNodeArg("Output", &exp_type_proto);
     outputs.push_back(&output_arg);
 
     auto& node = graph.AddNode("OpaqueCApiTestKernel", "OpaqueCApiTestKernel", "Replace all h to underscore",
-                               inputs, outputs, nullptr, onnxruntime::kMSDomain);
+                               inputs, outputs, static_cast<NodeAttributes*>(nullptr), onnxruntime::kMSDomain);
     node.SetExecutionProviderType(onnxruntime::kCpuExecutionProvider);
   }
   EXPECT_TRUE(graph.Resolve().IsOK());

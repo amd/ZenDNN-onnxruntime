@@ -137,7 +137,7 @@ class ModelTestBuilder {
                           "description",
                           input_args,
                           output_args,
-                          nullptr,
+                          static_cast<NodeAttributes*>(nullptr),
                           domain);
   }
 

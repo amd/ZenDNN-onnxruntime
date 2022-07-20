@@ -379,7 +379,8 @@ class SparseTensorTests : public testing::Test {
 
   void Node(const std::string& op, const std::vector<NodeArg*> inputs, const std::vector<NodeArg*> outputs) {
     Graph& graph = model->MainGraph();
-    auto& node = graph.AddNode("", op, "", inputs, outputs, nullptr, onnxruntime::kMLDomain);
+    auto& node = graph.AddNode("", op, "", inputs, outputs, static_cast<NodeAttributes*>(nullptr),
+                               onnxruntime::kMLDomain);
     node.SetExecutionProviderType(onnxruntime::kCpuExecutionProvider);
   }
 
@@ -537,16 +538,16 @@ TEST_F(SparseTensorTests, Test2) {
 }
 
 TEST(SparseCrcsFormatTests, Test1) {
-  //const std::vector<float> input_data = {
-  //    0, 1, 2, 0, 0, 0, 3, 4, 5,
-  //    6, 7, 8, 0, 0, 0, 9, 10, 11,
-  //    12, 13, 14, 0, 0, 0, 15, 16, 17,
-  //    0, 0, 0, 18, 19, 20, 21, 22, 23,
-  //    0, 0, 0, 24, 25, 26, 27, 28, 29,
-  //    0, 0, 0, 30, 31, 32, 33, 34, 35,
-  //    36, 37, 38, 39, 40, 41, 0, 0, 0,
-  //    42, 43, 44, 45, 46, 47, 0, 0, 0,
-  //    48, 49, 50, 51, 52, 53, 0, 0, 0};
+  // const std::vector<float> input_data = {
+  //     0, 1, 2, 0, 0, 0, 3, 4, 5,
+  //     6, 7, 8, 0, 0, 0, 9, 10, 11,
+  //     12, 13, 14, 0, 0, 0, 15, 16, 17,
+  //     0, 0, 0, 18, 19, 20, 21, 22, 23,
+  //     0, 0, 0, 24, 25, 26, 27, 28, 29,
+  //     0, 0, 0, 30, 31, 32, 33, 34, 35,
+  //     36, 37, 38, 39, 40, 41, 0, 0, 0,
+  //     42, 43, 44, 45, 46, 47, 0, 0, 0,
+  //     48, 49, 50, 51, 52, 53, 0, 0, 0};
   auto* cpu_provider = TestCPUExecutionProvider();
   auto cpu_transfer = cpu_provider->GetDataTransfer();
 

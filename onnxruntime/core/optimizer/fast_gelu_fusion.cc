@@ -180,15 +180,15 @@ In case of ORTModule, there are extra Cast nodes exported for fp16. They should 
 
 x --> Cast --> FastGelu
 
-The first Cast should have been fused in CommonSubexpressionElimination transformer, thus it has 2 output edges. 
+The first Cast should have been fused in CommonSubexpressionElimination transformer, thus it has 2 output edges.
 
 +--------------------------------------------> Mul ---> Cast ----+
 |                                                                |
 |                                                                v
-X --> Cast --> Pow --> Mul --> Add --> Mul --> Tanh --> Add --> Mul 
-       |                        ^                  
-       |                        |                
-       +------------------------+     
+X --> Cast --> Pow --> Mul --> Add --> Mul --> Tanh --> Add --> Mul
+       |                        ^
+       |                        |
+       +------------------------+
 
 */
 Status FastGeluFusion::ApplyImpl(Graph& graph, bool& modified, int graph_level, const logging::Logger& logger) const {
@@ -294,7 +294,9 @@ Status FastGeluFusion::ApplyImpl(Graph& graph, bool& modified, int graph_level, 
                                          "FastGelu",
                                          "fused GPT2Gelu subgraphs ",
                                          std::array{matchRet.gelu_without_bias_input_arg},
-                                         std::array{&shape_output}, {}, kMSDomain);
+                                         std::array{&shape_output},
+                                         static_cast<NodeAttributes*>(nullptr),
+                                         kMSDomain);
 
     // assign provider to this new node, provider should be same as the provider for old node.
     fast_gelu_node.SetExecutionProviderType(node.GetExecutionProviderType());

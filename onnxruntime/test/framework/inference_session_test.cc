@@ -200,7 +200,8 @@ static void CreateMatMulModel(std::unique_ptr<onnxruntime::Model>& p_model, Prov
   output_defs.push_back(&output_arg);
 
   // Create a simple model
-  auto& node = graph.AddNode("node1", "MatMul", "MatMul", input_defs, output_defs, nullptr, onnxruntime::kOnnxDomain);
+  auto& node = graph.AddNode("node1", "MatMul", "MatMul", input_defs, output_defs,
+                             static_cast<NodeAttributes*>(nullptr), onnxruntime::kOnnxDomain);
   if (provider_type == kCpuExecutionProvider) {
     node.SetExecutionProviderType(provider_type);
   } else {
@@ -1475,11 +1476,9 @@ TEST(InferenceSessionTests, Test3LayerNestedSubgraph) {
   data_0.add_float_data(0);
   graph.AddInitializedTensor(data_0);
 
-  auto status = graph.Resolve();
-  ASSERT_TRUE(status.IsOK());
+  ASSERT_STATUS_OK(graph.Resolve());
   std::string model_file_name = "3-layer-nested-subgraph-test.onnx";
-  status = onnxruntime::Model::Save(model, model_file_name);
-  ASSERT_TRUE(status.IsOK());
+  ASSERT_STATUS_OK(onnxruntime::Model::Save(model, model_file_name));
 
   SessionOptions so;
   so.session_logid = "InferenceSessionTests.Test3LayerNestedSubgraph";
@@ -1491,10 +1490,8 @@ TEST(InferenceSessionTests, Test3LayerNestedSubgraph) {
   ASSERT_STATUS_OK(session_object.RegisterExecutionProvider(DefaultRocmExecutionProvider()));
 #endif
 
-  status = session_object.Load(model_file_name);
-  ASSERT_TRUE(status.IsOK());
-  status = session_object.Initialize();
-  ASSERT_TRUE(status.IsOK());
+  ASSERT_STATUS_OK(session_object.Load(model_file_name));
+  ASSERT_STATUS_OK(session_object.Initialize());
 
   RunOptions run_options;
   run_options.run_tag = so.session_logid;
@@ -1517,8 +1514,7 @@ TEST(InferenceSessionTests, Test3LayerNestedSubgraph) {
   std::vector<float> expected_values = {1.0f};
 
   // Now run
-  status = session_object.Run(run_options, feeds, output_names, &fetches);
-  ASSERT_TRUE(status.IsOK());
+  ASSERT_STATUS_OK(session_object.Run(run_options, feeds, output_names, &fetches));
   VerifyOutputs(fetches, expected_dims, expected_values);
 }
 

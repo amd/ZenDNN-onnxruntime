@@ -612,8 +612,8 @@ static Node& CreateNodeHelper(onnxruntime::Graph& graph, std::string_view op_typ
   }
 
   std::vector<NodeArg*> outputs;
-  Node& node = graph.AddNode(name, op_type_str, "Added in transpose optimizer", input_args, output_args, nullptr,
-                             std::string(domain));
+  Node& node = graph.AddNode(name, op_type_str, "Added in transpose optimizer", input_args, output_args,
+                             static_cast<NodeAttributes*>(nullptr), std::string(domain));
 
   if (node.SinceVersion() == -1) {
     node.SetSinceVersion(since_version);

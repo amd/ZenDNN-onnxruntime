@@ -87,7 +87,7 @@ class Node {
        std::string_view description,
        gsl::span<NodeArg* const> input_args,
        gsl::span<NodeArg* const> output_args,
-       const NodeAttributes* attributes,
+       NodeAttributes* attributes,
        std::string_view domain) {
     Init(std::string{name}, std::string{op_type}, std::string{description},
          std::vector<NodeArg*>{input_args.begin(), input_args.end()},
@@ -565,7 +565,7 @@ class Node {
             const std::string& description,
             const std::vector<NodeArg*>& input_args,
             const std::vector<NodeArg*>& output_args,
-            const NodeAttributes* attributes,
+            NodeAttributes* attributes,
             const std::string& domain);
 
   // internal only method to allow selected classes to directly alter the input/output definitions and arg counts
@@ -920,8 +920,27 @@ class Graph {
                 const std::string& description,
                 gsl::span<NodeArg* const> input_args,
                 gsl::span<NodeArg* const> output_args,
-                const NodeAttributes* attributes = nullptr,
+                NodeAttributes* attributes = nullptr,  // AttributeProto instances are std::move'd
                 const std::string& domain = kOnnxDomain);
+
+  // backwards compatibily AddNode with const NodeAttributes.
+  Node& AddNode(const std::string& name,
+                const std::string& op_type,
+                const std::string& description,
+                gsl::span<NodeArg* const> input_args,
+                gsl::span<NodeArg* const> output_args,
+                const NodeAttributes* attributes,
+                const std::string& domain) {
+    if (attributes) {
+      // copy NodeAttributes. We pass a non-const NodeAttributes and use std::move to populate the node.
+      // This is a backwards compatibility path where it's not possible to avoid the copy.
+      NodeAttributes attr_copy{*attributes};
+      return AddNode(name, op_type, description, input_args, output_args, &attr_copy, domain);
+    } else {
+      NodeAttributes* empty_attributes = nullptr;
+      return AddNode(name, op_type, description, input_args, output_args, empty_attributes, domain);
+    }
+  }
 
   Node& AddNode(const std::string& name,
                 const std::string& op_type,
@@ -1398,7 +1417,8 @@ class Graph {
   void InitializeStateFromModelFileGraphProto();
 
   // Add node with specified <node_proto>.
-  Node& AddNode(const ONNX_NAMESPACE::NodeProto& node_proto,
+  // node_proto is mutable as we std::move the NodeAttribute instances
+  Node& AddNode(ONNX_NAMESPACE::NodeProto& node_proto,
                 const ArgNameToTypeMap& name_to_type);
 
 #endif

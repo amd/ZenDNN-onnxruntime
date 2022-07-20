@@ -511,7 +511,7 @@ void OpTester::AddNodes(
   // node inputs/outputs
   // being 1:1 with graph inputs/outputs.
   auto& node = graph.AddNode("node1", op_, op_, graph_input_defs,
-                             graph_output_defs, nullptr, domain_);
+                             graph_output_defs, static_cast<NodeAttributes*>(nullptr), domain_);
 
   // Add the attributes if any
   for (auto& add_attribute_fn : add_attribute_funcs)

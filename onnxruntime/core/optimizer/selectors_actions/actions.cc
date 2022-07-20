@@ -82,8 +82,8 @@ static Status CreateReplacementNode(Graph& graph,
   auto& replacement = graph.AddNode(target.Name(),
                                     op_type,
                                     target.Description(),
-                                    {},  // input defs
-                                    {},  // output defs
+                                    gsl::span<NodeArg* const>{},  // input defs
+                                    gsl::span<NodeArg* const>{},  // output defs
                                     &replacement_attributes,
                                     domain);
 

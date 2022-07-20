@@ -609,10 +609,12 @@ void Node::ToProto(NodeProto& proto, bool update_subgraphs) const {
   proto.clear_attribute();
   for (const auto& attribute : attributes_) {
     const gsl::not_null<AttributeProto*> attr{proto.add_attribute()};
-    *attr = attribute.second;  // copy
-    if (update_subgraphs && attr->has_g()) {
-      attr->clear_g();
+    if (update_subgraphs && attribute.second.has_g()) {
+      attr->set_name(attribute.first);
+      attr->set_type(ONNX_NAMESPACE::AttributeProto_AttributeType_GRAPH);
       *attr->mutable_g() = attr_to_subgraph_map_.find(attribute.first)->second->ToGraphProto();
+    } else {
+      *attr = attribute.second;  // copy
     }
   }
 
@@ -816,7 +818,7 @@ void Node::Init(const std::string& name,
                 const std::string& description,
                 const std::vector<NodeArg*>& input_args,
                 const std::vector<NodeArg*>& output_args,
-                const NodeAttributes* attributes,
+                NodeAttributes* attributes,
                 const std::string& domain) {
   name_ = name;
   op_type_ = op_type;
@@ -835,15 +837,30 @@ void Node::Init(const std::string& name,
   definitions_.input_arg_count.assign(input_args.size(), 1);
 
   if (attributes) {
-    attributes_ = *attributes;
+    // attributes_ = *attributes;
+    attributes_.reserve(attributes->size());
 
-    for (auto& name_to_attr : attributes_) {
+    for (auto& name_to_attr : *attributes) {
+      // only std::move a Graph attribute. this limit the memory usage but comes with the risk of changing the
+      // ownership semantics. TBD if this is a problem.
       if (utils::HasGraph(name_to_attr.second)) {
+        attributes_[name_to_attr.first] = std::move(name_to_attr.second);
+
+        // Create empty GraphProto in the original attribute to make the ONNX checker happy.
+        // This has to happen before CreateSubgraph, as a nested subgraph will call Graph::Resolve when created,
+        // which will traverse up to the main graph before starting the Resolve. That means we'll be running the ONNX
+        // checker for this graph earlier than expected? Is this true? Won't we only have partial nodes at that point?
+        // name_to_attr.second.set_name(name_to_attr.first);
+        // name_to_attr.second.set_type(ONNX_NAMESPACE::AttributeProto_AttributeType_GRAPH);
+        // name_to_attr.second.mutable_g()->set_name("Empty GraphProto inserted by Node::Init after std::move");
+
 #if !defined(ORT_MINIMAL_BUILD)
         CreateSubgraph(name_to_attr.first);
 #else
         ORT_THROW("Creating node with a subgraph via AddNode is not supported in this build.");
 #endif
+      } else {
+        attributes_[name_to_attr.first] = name_to_attr.second;  // copy
       }
     }
   }
@@ -1242,7 +1259,7 @@ Graph::Graph(const Model& owning_model,
     }
   }
 
-  for (const auto& node_proto : graph_proto_->node()) {
+  for (auto& node_proto : *graph_proto_->mutable_node()) {
     AddNode(node_proto, name_to_type_map);
   }
 
@@ -2985,7 +3002,7 @@ Node& Graph::AddNode(const Node& other) {
   return new_node;
 }
 
-Node& Graph::AddNode(const NodeProto& node_proto,
+Node& Graph::AddNode(NodeProto& node_proto,
                      const ArgNameToTypeMap& name_to_type_map) {
   auto input_defs = CreateNodeArgs(node_proto.input(), name_to_type_map);
   auto output_defs = CreateNodeArgs(node_proto.output(), name_to_type_map);
@@ -2995,8 +3012,30 @@ Node& Graph::AddNode(const NodeProto& node_proto,
   attributes.reserve(num_attributes);
 
   for (int i = 0; i < num_attributes; ++i) {
-    auto& attr = node_proto.attribute(i);
-    attributes[attr.name()] = attr;
+    auto& attr = *node_proto.mutable_attribute(i);
+    const std::string& attr_name = attr.name();
+
+    if (attr.has_g()) {
+      // std::move a GraphProto as it could be large.
+      attributes[attr_name] = std::move(attr);  // <-- this does a copy unless both are a) not using an arena or b) are using the same arena
+
+      // if this is a nested subgraph we need to insert some placeholder info in the original GraphProto so that the
+      // onnx checker is happy. e.g. a Loop node with a nested If node will start with a GraphProto in the Loop node's
+      // 'body' attribute. When creating the subgraph for that, we will create an If node. When creating the If node
+      // we will std::move the GraphProto instances for the else_branch and then_branch into the If node's attributes,
+      // leaving an empty GraphProto in the Loop node's 'body' attribute. This will cause the onnx checker to fail
+      // when it's called for the Loop node.
+      // We don't need a full GraphProto as we will recurse into any subgraphs via the subgraph type/shape inferencing
+      // hook, which calls VerifyNodeAndOpMatch via PerformTypeAndShapeInferencing. VerifyNodeAndOpMatch calls the
+      // onnx checker for individual nodes.
+      // NOTE: this can also be hit when constructing a subgraph manually, so we always add the extra info
+      // instead of putting this inside of `if (parent_graph_) {...}`
+      attr.set_name(attr_name);
+      attr.set_type(ONNX_NAMESPACE::AttributeProto_AttributeType_GRAPH);
+      attr.mutable_g()->set_name("Dummy GraphProto from AddNode " + node_proto.op_type() + ":" + node_proto.name());
+    } else {
+      attributes[attr_name] = attr;  // copy
+    }
   }
 
   return AddNode(node_proto.name(),
@@ -3176,7 +3215,7 @@ Node& Graph::AddNode(const std::string& name,
                      const std::string& description,
                      gsl::span<NodeArg* const> input_args,
                      gsl::span<NodeArg* const> output_args,
-                     const NodeAttributes* attributes,
+                     NodeAttributes* attributes,
                      const std::string& domain) {
   std::vector<NodeArg*> inputs;
   std::vector<NodeArg*> outputs;

@@ -33,11 +33,11 @@ static bool CheckBiasShape(const TensorShapeProto* bias_shape) {
 
 /**
 MatMulIntegerToFloatFusion will fuse subgraph like below into MatMulIntegerToFloat:
- 
+
  A   A_Zero B B_Zero  A_Scale) B_Scale  Bias (Const, Optional)
   \    |    |    /        \      /             |
    \   |    |   /          \    /              |
-    \  |    |  /            \  /               |  
+    \  |    |  /            \  /               |
     MatMulInteger            Mul               |                             (A, B, A_Scale, B_Scale, A_Zero, B_Zero, Bias)
       |                       |                |                                               |
       v                       v                |                                               v
@@ -139,7 +139,7 @@ Status MatMulIntegerToFloatFusion::ApplyImpl(Graph& graph, bool& modified, int g
                                      "",
                                      input_defs,
                                      p_add_node != nullptr ? p_add_node->MutableOutputDefs() : mul_node.MutableOutputDefs(),
-                                     nullptr,
+                                     static_cast<NodeAttributes*>(nullptr),
                                      kMSDomain);
     // Assign provider to this new node. Provider should be same as the provider for old node.
     fused_node.SetExecutionProviderType(mul_node.GetExecutionProviderType());

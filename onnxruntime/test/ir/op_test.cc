@@ -30,7 +30,7 @@ TEST(FormalParamTest, Success) {
   EXPECT_EQ("desc: integer input", p.GetDescription());
 #endif
   // TODO: change onnx to make formal parameter construction self-contain.
-  //EXPECT_EQ(Utils::DataTypeUtils::ToType("tensor(int32)"), *p.GetTypes().begin());
+  // EXPECT_EQ(Utils::DataTypeUtils::ToType("tensor(int32)"), *p.GetTypes().begin());
 }
 
 #ifndef DISABLE_ML_OPS
@@ -69,7 +69,7 @@ TEST(FeatureVectorizerTest, TraditionalMlOpTest) {
   std::unique_ptr<NodeArg> output_arg1 = std::make_unique<NodeArg>("node_1_out_1", &tensor_float);
   outputs.clear();
   outputs.push_back(output_arg1.get());
-  graph.AddNode("node_1", "CastMap", "node 1", inputs, outputs, nullptr, kMLDomain);
+  graph.AddNode("node_1", "CastMap", "node 1", inputs, outputs, static_cast<NodeAttributes*>(nullptr), kMLDomain);
 
   inputs.clear();
   inputs.push_back(output_arg1.get());
@@ -77,7 +77,8 @@ TEST(FeatureVectorizerTest, TraditionalMlOpTest) {
   std::unique_ptr<NodeArg> output_arg4 = std::make_unique<NodeArg>("node_4_out_1", &tensor_float);
   outputs.clear();
   outputs.push_back(output_arg4.get());
-  graph.AddNode("node_4", "FeatureVectorizer", "node 4", inputs, outputs, nullptr, kMLDomain);
+  graph.AddNode("node_4", "FeatureVectorizer", "node 4", inputs, outputs, static_cast<NodeAttributes*>(nullptr),
+                kMLDomain);
   auto status = graph.Resolve();
   EXPECT_TRUE(status.IsOK()) << status.ErrorMessage();
 }

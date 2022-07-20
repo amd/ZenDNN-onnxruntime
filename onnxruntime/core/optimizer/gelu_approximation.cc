@@ -89,7 +89,8 @@ Status GeluApproximation::ApplyImpl(Graph& graph, bool& modified, int graph_leve
 
     if (IsCandidateNode(node, GetCompatibleExecutionProviders())) {
       Node& fastgelu = graph.AddNode(graph.GenerateNodeName("FastGelu"), "FastGelu", "Gelu approximation",
-                                     node.MutableInputDefs(), node.MutableOutputDefs(), nullptr, kMSDomain);
+                                     node.MutableInputDefs(), node.MutableOutputDefs(),
+                                     static_cast<NodeAttributes*>(nullptr), kMSDomain);
 
       fastgelu.SetExecutionProviderType(node.GetExecutionProviderType());
 
