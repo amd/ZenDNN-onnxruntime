@@ -38,5 +38,6 @@ jobs:
   - bash: |
       set -x -e
       dotnet workload restore ./MauiVisionSample.sln
+      dotnet build ./MauiVisionSample.sln
       dotnet publish -f:net6.0-ios -c:Release /p:"ArchiveOnBuild=true;NullabilityInfoContextSupport=true" -r:ios-arm64 ./MauiVisionSample.sln
     workingDirectory: onnxruntime-inference-examples/mobile/examples/Maui/MauiVisionSample
