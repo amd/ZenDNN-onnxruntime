@@ -13,7 +13,8 @@ jobs:
     vmImage: "macOS-12"
 
   steps:
-  - checkout: none
+  - checkout: self                           # due to checkout multiple repos, the root directory is $(Build.SourcesDirectory)/onnxruntime
+    submodules: false
 
   - checkout: onnxruntime-inference-examples # due to checkout multiple repos, the root directory is $(Build.SourcesDirectory)/onnxruntime-inference-examples
     submodules: false
