@@ -1,0 +1,41 @@
+resources:
+  repositories:
+  - repository: onnxruntime-inference-examples # The name used to reference this repository in the checkout step
+    type: github
+    endpoint: ort-examples
+    name: microsoft/onnxruntime-inference-examples
+
+jobs:
+- job: IosBuildSample
+  displayName: "iOS build sample"
+
+  pool:
+    vmImage: "macOS-12"
+
+  steps:
+  - checkout: none
+
+  - checkout: onnxruntime-inference-examples # due to checkout multiple repos, the root directory is $(Build.SourcesDirectory)/onnxruntime-inference-examples
+    submodules: false
+
+  - task: InstallAppleCertificate@2
+    inputs:
+      certSecureFile: '$(ios_signing_certificate_name)'
+      certPwd: '$(ios_signing_certificate_password)'
+      keychain: 'temp'
+      deleteCert: true
+    displayName: 'Install ORT Mobile Test Signing Certificate'
+
+  - task: InstallAppleProvisioningProfile@1
+    inputs:
+      provProfileSecureFile: '$(ios_provision_profile_name)'
+      removeProfile: true
+    displayName: 'Install ORT Mobile Test Provisioning Profile'
+
+  - bash: dotnet --info
+
+  - bash: |
+      set -x -e
+      dotnet workload restore ./MauiVisionSample.sln
+      dotnet publish -f:net6.0-ios -c:Release /p:"ArchiveOnBuild=true;NullabilityInfoContextSupport=true" --no-restore -r:ios-arm64 ./MauiVisionSample.sln
+    workingDirectory: onnxruntime-inference-examples/mobile/examples/Maui/MauiVisionSample
