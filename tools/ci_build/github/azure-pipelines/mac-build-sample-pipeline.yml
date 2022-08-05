@@ -37,7 +37,12 @@ jobs:
 
   - bash: |
       set -x -e
+      # manually install a couple of things to try. the sln based restore installs maui-ios and maui-android
+      dotnet workload install ios
+      dotnet workload install android
       dotnet workload restore ./MauiVisionSample.sln
       dotnet build ./MauiVisionSample.sln
+      # try without the /p args first for another data point
+      dotnet publish -f:net6.0-ios -c:Release -r:ios-arm64 ./MauiVisionSample.sln
       dotnet publish -f:net6.0-ios -c:Release /p:"ArchiveOnBuild=true;NullabilityInfoContextSupport=true" -r:ios-arm64 ./MauiVisionSample.sln
     workingDirectory: onnxruntime-inference-examples/mobile/examples/Maui/MauiVisionSample
