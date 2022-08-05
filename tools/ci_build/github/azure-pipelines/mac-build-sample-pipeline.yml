@@ -37,8 +37,13 @@ jobs:
 
   - bash: |
       set -x -e
-      # manually install a couple of things to try. the sln based restore installs maui-ios and maui-android
-      # dotnet workload install ios
+      dotnet workload install android --source https://api.nuget.org/v3/index.json
+      dotnet workload install tvos --source https://api.nuget.org/v3/index.json
+      dotnet workload install maui --source https://api.nuget.org/v3/index.json
+      dotnet workload install maccatalyst --source https://api.nuget.org/v3/index.json
+      dotnet workload install ios --source https://api.nuget.org/v3/index.json
+      dotnet workload install macos --source https://api.nuget.org/v3/index.json
+      dotnet workload install wasm-tools --source https://api.nuget.org/v3/index.json      dotnet workload list
       dotnet workload restore ./MauiVisionSample/MauiVisionSample.csproj
       dotnet workload list
       # dotnet workload restore ./MauiVisionSample.sln
