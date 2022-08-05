@@ -38,9 +38,10 @@ jobs:
   - bash: |
       set -x -e
       # manually install a couple of things to try. the sln based restore installs maui-ios and maui-android
-      dotnet workload install ios
-      # dotnet workload restore ./MauiVisionSample/MauiVisionSample.csproj
-      dotnet workload restore ./MauiVisionSample.sln
+      # dotnet workload install ios
+      dotnet workload restore ./MauiVisionSample/MauiVisionSample.csproj
+      # dotnet workload restore ./MauiVisionSample.sln
+      dotnet --info
       # dotnet build ./MauiVisionSample.sln
       # dotnet publish -f:net6.0-ios -c:Release -r:ios-arm64 --no-self-contained ./MauiVisionSample.sln
       dotnet publish -f:net6.0-ios -c:Release -r:ios-arm64 ./MauiVisionSample/MauiVisionSample.csproj
