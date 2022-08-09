@@ -45,8 +45,9 @@ jobs:
       # dotnet publish -f:net6.0-ios -c:Release -r:ios-arm64 --no-self-contained ./MauiVisionSample.sln
       # dotnet publish -f:net6.0-ios -c:Release /p:"ArchiveOnBuild=true;NullabilityInfoContextSupport=true" -r:ios-arm64 ./MauiVisionSample.sln
     workingDirectory: onnxruntime-inference-examples/mobile/examples/Maui/MauiVisionSample
-    
+
   - task: PublishBuildArtifacts@1
+    condition: succeededOrFailed()
     inputs:
       pathtoPublish: 'onnxruntime-inference-examples/mobile/examples/Maui/MauiVisionSample/msbuild.binlog'
       artifactName: 'msbuild.binlog'
