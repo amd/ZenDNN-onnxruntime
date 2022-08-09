@@ -16,7 +16,7 @@ jobs:
   - checkout: self                           # due to checkout multiple repos, the root directory is $(Build.SourcesDirectory)/onnxruntime
     submodules: false
 
-  - checkout: onnxruntime-inference-examples # due to checkout multiple repos, the root directory is $(Build.SourcesDirectory)/onnxruntime-inference-examples
+  - checkout: onnxruntime-inference-examples@skottmckay/iOS_build_testing # due to checkout multiple repos, the root directory is $(Build.SourcesDirectory)/onnxruntime-inference-examples
     submodules: false
 
   - task: InstallAppleCertificate@2
@@ -37,18 +37,15 @@ jobs:
 
   - bash: |
       set -x -e
-      dotnet workload install android --source https://api.nuget.org/v3/index.json
-      dotnet workload install tvos --source https://api.nuget.org/v3/index.json
-      dotnet workload install maui --source https://api.nuget.org/v3/index.json
-      dotnet workload install maccatalyst --source https://api.nuget.org/v3/index.json
-      dotnet workload install ios --source https://api.nuget.org/v3/index.json
-      dotnet workload install macos --source https://api.nuget.org/v3/index.json
-      dotnet workload install wasm-tools --source https://api.nuget.org/v3/index.json
-      dotnet workload restore ./MauiVisionSample/MauiVisionSample.csproj
-      dotnet workload list
-      # dotnet workload restore ./MauiVisionSample.sln
+      dotnet workload restore ./MauiVisionSample.sln
       # dotnet build ./MauiVisionSample.sln
+      # build with binlog using csproj
+      dotnet publish -bl -f:net6.0-ios -c:Release -r:ios-arm64 ./MauiVisionSample/MauiVisionSample.csproj
       # dotnet publish -f:net6.0-ios -c:Release -r:ios-arm64 --no-self-contained ./MauiVisionSample.sln
-      dotnet publish -f:net6.0-ios -c:Release -r:ios-arm64 ./MauiVisionSample/MauiVisionSample.csproj
       # dotnet publish -f:net6.0-ios -c:Release /p:"ArchiveOnBuild=true;NullabilityInfoContextSupport=true" -r:ios-arm64 ./MauiVisionSample.sln
     workingDirectory: onnxruntime-inference-examples/mobile/examples/Maui/MauiVisionSample
+    
+  - task: PublishBuildArtifacts@1
+    inputs:
+      pathtoPublish: 'onnxruntime-inference-examples/mobile/examples/Maui/MauiVisionSample/msbuild.binlog'
+      artifactName: 'msbuild.binlog'
