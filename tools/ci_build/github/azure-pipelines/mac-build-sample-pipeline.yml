@@ -38,6 +38,8 @@ jobs:
 
   - bash: |
       set -x -e
+      # Check if we have CoreML.framework
+      ls /System/Library/Frameworks
       dotnet workload restore ./MauiVisionSample.sln
       # dotnet build ./MauiVisionSample.sln
       # build with binlog using csproj
