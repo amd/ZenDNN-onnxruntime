@@ -50,3 +50,8 @@ jobs:
     inputs:
       pathtoPublish: 'onnxruntime-inference-examples/mobile/examples/Maui/MauiVisionSample/msbuild.binlog'
       artifactName: 'msbuild.binlog'
+
+  - task: PublishBuildArtifacts@1
+    inputs:
+      pathtoPublish: 'onnxruntime-inference-examples/mobile/examples/Maui/MauiVisionSample/MauiVisionSample/bin/Release/net6.0-ios/ios-arm64/publish//MauiVisionSample.ipa'
+      ArtifactName: 'MauiVisionSample.ipa'
