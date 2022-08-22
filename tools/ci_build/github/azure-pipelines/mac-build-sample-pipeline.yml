@@ -42,7 +42,7 @@ jobs:
       buildVersionToDownload: 'specific'
       pipelineId: '224411'
       artifactName: 'drop-signed-nuget-CPU'
-      targetPath: '$(Pipeline.Workspace)'
+      targetPath: '$(Pipeline.Workspace)/drop-signed-nuget-CPU'
 
   - bash: dotnet --info
 
