@@ -4,7 +4,7 @@ resources:
     type: github
     endpoint: ort-examples
     name: microsoft/onnxruntime-inference-examples
-    ref: skottmckay/iOS_build_testing
+    ref: edgchen1/test_maui_sample
 
 jobs:
 - job: IosBuildSample
@@ -34,10 +34,22 @@ jobs:
       removeProfile: true
     displayName: 'Install ORT Mobile Test Provisioning Profile'
 
+  - task: DownloadPipelineArtifact@2
+    inputs:
+      buildType: 'specific'
+      project: '530acbc4-21bc-487d-8cd8-348ff451d2ff'
+      definition: '940'
+      buildVersionToDownload: 'specific'
+      pipelineId: '224411'
+      artifactName: 'drop-signed-nuget-CPU'
+      targetPath: '$(Pipeline.Workspace)'
+
   - bash: dotnet --info
 
   - bash: |
       set -x -e
+      # add nuget source for downloaded artifacts
+      dotnet nuget add source --name ort_dev "$(Pipeline.Workspace)/drop-signed-nuget-CPU"
       dotnet workload restore ./MauiVisionSample.sln
       # `-bl` produces the binlog
       # dotnet publish -bl -f:net6.0-ios -c:Release -r:ios-arm64 ./MauiVisionSample/MauiVisionSample.csproj
