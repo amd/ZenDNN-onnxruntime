@@ -27,11 +27,14 @@ void XnnpackThreadPool::ParallelFor(std::ptrdiff_t total, double,
                                     const std::function<void(std::ptrdiff_t first, std::ptrdiff_t last)>& func) {
   uint32_t flags = PTHREADPOOL_FLAG_DISABLE_DENORMALS;
   // flags |= PTHREADPOOL_FLAG_YIELD_WORKERS;
+  size_t range = total / NumThreads() + ((total % NumThreads()) >= (NumThreads() / 2) ? 1 : 0);
+  range = std::max<size_t>(1, range);
 
-  pthreadpool_parallelize_1d(
+  pthreadpool_parallelize_1d_tile_1d(
       xnnpack_thread_pool_,
-      [func](std::ptrdiff_t index) { func(index, index + 1); },
+      [func](std::ptrdiff_t start, std::ptrdiff_t range) { func(start, start + range); },
       total,
+      range,
       flags);
 }
 
