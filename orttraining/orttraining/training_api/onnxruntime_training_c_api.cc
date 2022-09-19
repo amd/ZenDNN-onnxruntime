@@ -17,7 +17,7 @@ std::vector<std::shared_ptr<onnxruntime::IExecutionProvider>> CreateProviders(
     const std::vector<std::shared_ptr<onnxruntime::IExecutionProviderFactory>>& provider_factories) {
   std::vector<std::shared_ptr<onnxruntime::IExecutionProvider>> execution_providers;
   for (const auto& factory : provider_factories) {
-    execution_providers.emplace_back(std::move(factory->CreateProvider()));
+    execution_providers.emplace_back(factory->CreateProvider());
   }
 
   return execution_providers;
@@ -255,7 +255,7 @@ ORT_API_STATUS_IMPL(OrtTrainingApis::RegisterLinearLRScheduler, _Inout_ OrtTrain
         return std::make_unique<onnxruntime::training::api::LinearLRScheduler>(
             optimizer, warmup_step_count, total_step_count);
       },
-      std::optional<float>(initial_lr)));
+                                 std::optional<float>(initial_lr)));
 
   return status;
   API_IMPL_END
@@ -312,7 +312,7 @@ ORT_API_STATUS_IMPL(OrtTrainingApis::CopyParametersToBuffer, _Inout_ OrtTraining
   }
   auto session = reinterpret_cast<onnxruntime::training::api::TrainingSession*>(sess);
   ORT_API_RETURN_IF_STATUS_NOT_OK(session->CopyParametersToBuffer(*parameters_buffer, trainable_only));
-  
+
   return nullptr;
   API_IMPL_END
 }
