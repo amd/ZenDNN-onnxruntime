@@ -199,7 +199,7 @@ jobs:
 
   - task: CopyFiles@2
     inputs:
-      sourceFolder: $(Build.BinariesDirectory)/android-aar
+      sourceFolder: $(Build.BinariesDirectory)/android-full-aar
       contents: onnxruntime-*.aar
       targetFolder: $(Build.SourcesDirectory)/js/react_native/e2e/node_modules/onnxruntime-react-native/android/libs
     displayName: Copy Android package to React Native e2e directory
