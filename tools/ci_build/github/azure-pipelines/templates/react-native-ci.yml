@@ -76,14 +76,14 @@ jobs:
   - task: DownloadPipelineArtifact@2
     inputs:
       buildType: 'current'
-      artifactName: 'onnxruntime-android-aar'
-      targetPath: '$(Build.BinariesDirectory)/android-aar'
+      artifactName: 'onnxruntime-android-full-aar'
+      targetPath: '$(Build.BinariesDirectory)/android-full-aar'
     displayName: Download Android AAR artifacts
 
   - task: CopyFiles@2
     inputs:
-      sourceFolder: $(Build.BinariesDirectory)/android-aar
-      contents: onnxruntime-*.aar
+      sourceFolder: $(Build.BinariesDirectory)/android-full-aar
+      contents: onnxruntime-android-*.aar
       targetFolder: $(Build.SourcesDirectory)/js/react_native/android/libs
     displayName: Copy Android package to React Native directory
 
