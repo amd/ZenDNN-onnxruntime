@@ -25,10 +25,10 @@ jobs:
   parameters:
     buildConfig: '${{parameters.BuildConfig}}'
     buildSettings: '$(Build.SourcesDirectory)/tools/ci_build/github/js/react_native_e2e_full_aar_build_settings.json'
-    artifactName: 'onnxruntime-android-aar'
+    artifactName: 'onnxruntime-android-full-aar'
     job_name_suffix: 'For_React_Native'
     pool_name: '${{parameters.PoolName}}'
-    packageName: 'onnxruntime'
+    packageName: 'onnxruntime-android'
 
 - job: ReactNative_CI
   pool:
