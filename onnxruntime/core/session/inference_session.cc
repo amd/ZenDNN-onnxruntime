@@ -302,11 +302,16 @@ void InferenceSession::ConstructorCommon(const SessionOptions& session_options,
           ORT_ENFORCE(to.custom_join_thread_fn, "custom join thread function not set for intra op thread pool");
         }
 #ifdef USE_XNNPACK
-        thread_pool_ = std::make_unique<concurrency::XnnpackThreadPool>(to.thread_pool_size);
-#else
-        thread_pool_ =
-            concurrency::CreateThreadPool(&Env::Default(), to, concurrency::ThreadPoolType::INTRA_OP);
+        bool use_pthreadpool =
+            session_options_.config_options.GetConfigOrDefault(kOrtSessionOptionsConfigUseXnnpackThreadPool, "0") == "1";
+        if (use_pthreadpool) {
+          thread_pool_ = std::make_unique<concurrency::XnnpackThreadPool>(to.thread_pool_size);
+        }
 #endif
+        if (!thread_pool_) {
+          thread_pool_ =
+              concurrency::CreateThreadPool(&Env::Default(), to, concurrency::ThreadPoolType::INTRA_OP);
+        }
       }
     }
     if (session_options_.execution_mode == ExecutionMode::ORT_PARALLEL) {

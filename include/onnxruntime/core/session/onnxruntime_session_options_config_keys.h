@@ -70,6 +70,7 @@ static const char* const kOrtSessionOptionsUseDeviceAllocatorForInitializers = "
 // "1": default, thread will spin a number of times before blocking
 static const char* const kOrtSessionOptionsConfigAllowInterOpSpinning = "session.inter_op.allow_spinning";
 static const char* const kOrtSessionOptionsConfigAllowIntraOpSpinning = "session.intra_op.allow_spinning";
+static const char* const kOrtSessionOptionsConfigUseXnnpackThreadPool = "session.intra_op.use_xnnpack_threadpool";
 
 // Key for using model bytes directly for ORT format
 // If a session is created using an input byte array contains the ORT format model data,
@@ -81,9 +82,9 @@ static const char* const kOrtSessionOptionsConfigUseORTModelBytesDirectly = "ses
 
 /// <summary>
 /// Key for using the ORT format model flatbuffer bytes directly for initializers.
-/// This avoids copying the bytes and reduces peak memory usage during model loading and initialization. 
-/// Requires `session.use_ort_model_bytes_directly` to be true. 
-/// If set, the flatbuffer bytes provided when creating the InferenceSession MUST remain valid for the entire 
+/// This avoids copying the bytes and reduces peak memory usage during model loading and initialization.
+/// Requires `session.use_ort_model_bytes_directly` to be true.
+/// If set, the flatbuffer bytes provided when creating the InferenceSession MUST remain valid for the entire
 /// duration of the InferenceSession.
 /// </summary>
 static const char* const kOrtSessionOptionsConfigUseORTModelBytesForInitializers =

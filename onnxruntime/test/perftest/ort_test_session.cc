@@ -482,6 +482,7 @@ select from 'TF8', 'TF16', 'UINT8', 'FLOAT', 'ITENSOR'. \n)");
 #endif
   } else if (provider_name == onnxruntime::kXnnpackExecutionProvider) {
 #ifdef USE_XNNPACK
+    session_options.AddConfigEntry(kOrtSessionOptionsConfigUseXnnpackThreadPool, "1");
     session_options.AppendExecutionProvider(
         "XNNPACK", {{"thread_num", std::to_string(performance_test_config.run_config.intra_op_num_threads)}});
 #else
