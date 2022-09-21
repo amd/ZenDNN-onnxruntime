@@ -610,6 +610,12 @@ static ptrdiff_t CalculateParallelForBlock(const ptrdiff_t n, const Eigen::Tenso
   return block_size;
 }
 
+ptrdiff_t CalculateParallelForBlock(const ptrdiff_t n, const TensorOpCost& c,
+                                    std::function<ptrdiff_t(ptrdiff_t)> block_align, int num_threads) {
+  Eigen::TensorOpCost cost{c.bytes_loaded, c.bytes_stored, c.compute_cycles};
+  return CalculateParallelForBlock(n, cost, block_align, num_threads);
+}
+
 void ThreadPool::ParallelFor(std::ptrdiff_t n, const TensorOpCost& c,
                              const std::function<void(std::ptrdiff_t first, std::ptrdiff_t)>& f) {
   ORT_ENFORCE(n >= 0);
