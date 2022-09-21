@@ -47,12 +47,12 @@ void XnnpackThreadPool::ParallelFor(std::ptrdiff_t total, const TensorOpCost& co
     fn(0, total);
     return;
   }
-  /*
-    size_t tile = total / NumThreads() + ((total % NumThreads()) >= (NumThreads() / 2) ? 1 : 0);
-    tile = std::max<size_t>(1, tile);
-  */
 
-  size_t block = CalculateParallelForBlock(total, cost, nullptr, NumThreads());
+  size_t tile = total / NumThreads() + ((total % NumThreads()) >= (NumThreads() / 2) ? 1 : 0);
+  tile = std::max<size_t>(1, tile);
+
+  size_t block = total <= NumThreads() ? 1 : CalculateParallelForBlock(total, cost, nullptr, NumThreads());
+  block = std::min<size_t>(tile + 1, block);
 
   pthreadpool_parallelize_1d_tile_1d(
       xnnpack_thread_pool_,
