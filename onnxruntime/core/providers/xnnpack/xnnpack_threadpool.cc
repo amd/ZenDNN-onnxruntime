@@ -9,7 +9,8 @@ namespace onnxruntime {
 namespace concurrency {
 using Task = std::function<void()>;
 
-XnnpackThreadPool::XnnpackThreadPool(size_t thread_num) : ThreadPool(nullptr, {}, nullptr, 1, false) {
+XnnpackThreadPool::XnnpackThreadPool(size_t thread_num) : ThreadPool(nullptr, {}, nullptr, 1, false),
+                                                          thread_flag_(PTHREADPOOL_FLAG_DISABLE_DENORMALS) {
   if (thread_num > 1) {
     xnnpack_thread_pool_ = pthreadpool_create(thread_num);
   }
@@ -17,6 +18,14 @@ XnnpackThreadPool::XnnpackThreadPool(size_t thread_num) : ThreadPool(nullptr, {}
 
 XnnpackThreadPool ::~XnnpackThreadPool() {
   pthreadpool_destroy(xnnpack_thread_pool_);
+}
+
+void XnnpackThreadPool::EnableSpinning() {
+  thread_flag_ |= PTHREADPOOL_FLAG_YIELD_WORKERS;
+}
+
+void XnnpackThreadPool::DisableSpinning() {
+  thread_flag_ &= ~PTHREADPOOL_FLAG_YIELD_WORKERS;
 }
 
 int XnnpackThreadPool::NumThreads() const {
@@ -38,34 +47,27 @@ void XnnpackThreadPool::ParallelFor(std::ptrdiff_t total, const TensorOpCost& co
     fn(0, total);
     return;
   }
+  /*
+    size_t tile = total / NumThreads() + ((total % NumThreads()) >= (NumThreads() / 2) ? 1 : 0);
+    tile = std::max<size_t>(1, tile);
+  */
 
-  uint32_t flags = PTHREADPOOL_FLAG_DISABLE_DENORMALS;
-  // flags |= PTHREADPOOL_FLAG_YIELD_WORKERS;
-
-  // block size calculation 1:
-  size_t tile = total / NumThreads() + ((total % NumThreads()) >= (NumThreads() / 2) ? 1 : 0);
-  tile = std::max<size_t>(1, tile);
-
-  // block size calculation 2:
   size_t block = CalculateParallelForBlock(total, cost, nullptr, NumThreads());
-  if (block > tile) {
-    block = tile;
-  }
+
   pthreadpool_parallelize_1d_tile_1d(
       xnnpack_thread_pool_,
       [fn](std::ptrdiff_t start, std::ptrdiff_t range) { fn(start, start + range); },
       total,
       block,
-      flags);
+      thread_flag_);
 }
 
 void XnnpackThreadPool::SimpleParallelFor(std::ptrdiff_t total, const std::function<void(std::ptrdiff_t)>& fn) {
-  std::function<void(std::ptrdiff_t, std::ptrdiff_t)> fn_wrapper = [fn](std::ptrdiff_t from, std::ptrdiff_t to) {
-    for (auto i = from; i < to; ++i) {
-      fn(i);
-    }
-  };
-  return ParallelFor(total, 0.0, fn_wrapper);
+  pthreadpool_parallelize_1d(
+      xnnpack_thread_pool_,
+      fn,
+      total,
+      thread_flag_);
 }
 
 void XnnpackThreadPool::Schedule(std::function<void()>) {

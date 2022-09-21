@@ -218,9 +218,9 @@ class ThreadPool {
   // This is used to support real-time scenarios where
   // spinning between relatively infrequent requests
   // contributes to high CPU usage while not processing anything.
-  void EnableSpinning();
+  virtual void EnableSpinning();
 
-  void DisableSpinning();
+  virtual void DisableSpinning();
 
   // Schedules fn() for execution in the pool of threads.  The function may run
   // synchronously if it cannot be enqueued.  This will occur if the thread pool's

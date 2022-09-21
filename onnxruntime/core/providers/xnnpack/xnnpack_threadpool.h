@@ -29,12 +29,15 @@ class XnnpackThreadPool final : public ThreadPool {
   void Schedule(std::function<void()> fn) override;
 
   void StartProfiling() override;
+  void EnableSpinning() override;
 
+  void DisableSpinning() override;
   std::string StopProfiling() override;
   pthreadpool* Get() { return xnnpack_thread_pool_; }
 
  private:
   pthreadpool* xnnpack_thread_pool_{nullptr};
+  uint32_t thread_flag_{0};
 };
 
 }  // namespace concurrency
