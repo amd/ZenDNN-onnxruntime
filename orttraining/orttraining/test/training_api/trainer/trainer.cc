@@ -345,6 +345,11 @@ int RunTraining(const TestRunnerParameters& params) {
 
   std::cout << "Training completed - end to end latency: " << stabilized_total_end_to_end_time << "(s)" << std::endl;
 
+  std::ostringstream oss1;
+  oss1 << "model_infer_" << params.model_name;
+  PathString model_infer_file = ConcatPathComponent<PathChar>(params.output_dir, ToPathString(oss1.str()));
+  Ort::SaveCheckpointAsInferenceModel(ckpt_file, model_infer_file);
+
   return 0;
 }
 

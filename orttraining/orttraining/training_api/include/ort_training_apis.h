@@ -47,6 +47,9 @@ ORT_API_STATUS_IMPL(LoadCheckpoint, _In_ const ORTCHAR_T* checkpoint_path,
 ORT_API_STATUS_IMPL(SaveCheckpoint, _In_ const ORTCHAR_T* checkpoint_path, _In_ const OrtTrainingSession* session,
                     bool save_optimizer_state);
 
+ORT_API_STATUS_IMPL(SaveCheckpointAsInferenceModel, _In_ const ORTCHAR_T* checkpoint_path,
+                    _In_ const ORTCHAR_T* inference_model_path);
+
 ORT_API_STATUS_IMPL(GetParametersSize, _Inout_ OrtTrainingSession* sess,
                     _Out_ size_t* out, bool trainable_only);
 

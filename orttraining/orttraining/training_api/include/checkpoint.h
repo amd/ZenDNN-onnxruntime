@@ -91,6 +91,9 @@ Status LoadCheckpoint(const PathString& checkpoint_path,
 Status LoadCheckpointToModel(const PathString& checkpoint_path,
                              ONNX_NAMESPACE::ModelProto& model_proto);
 
+Status LoadCheckpointToModel(const PathString& checkpoint_path,
+                             const PathString& inference_model_path);
+
 }  // namespace api
 }  // namespace training
 }  // namespace onnxruntime

@@ -295,6 +295,15 @@ ORT_API_STATUS_IMPL(OrtTrainingApis::SaveCheckpoint, _In_ const ORTCHAR_T* check
   API_IMPL_END
 }
 
+ORT_API_STATUS_IMPL(OrtTrainingApis::SaveCheckpointAsInferenceModel, _In_ const ORTCHAR_T* checkpoint_path,
+                    _In_ const ORTCHAR_T* inference_model_path) {
+  API_IMPL_BEGIN
+  ORT_API_RETURN_IF_STATUS_NOT_OK(onnxruntime::training::api::LoadCheckpointToModel(checkpoint_path, inference_model_path));
+
+  return nullptr;
+  API_IMPL_END
+}
+
 ORT_API_STATUS_IMPL(OrtTrainingApis::GetParametersSize, _Inout_ OrtTrainingSession* sess,
                     _Out_ size_t* out, bool trainable_only) {
   API_IMPL_BEGIN
@@ -341,6 +350,7 @@ ORT_API(void, OrtTrainingApis::ReleaseCheckpointState, _Frees_ptr_opt_ OrtCheckp
 static constexpr OrtTrainingApi ort_training_api = {
     &OrtTrainingApis::LoadCheckpoint,
     &OrtTrainingApis::SaveCheckpoint,
+    &OrtTrainingApis::SaveCheckpointAsInferenceModel,
     &OrtTrainingApis::CreateTrainingSession,
     &OrtTrainingApis::TrainingSessionGetTrainingModelOutputCount,
     &OrtTrainingApis::TrainingSessionGetEvalModelOutputCount,

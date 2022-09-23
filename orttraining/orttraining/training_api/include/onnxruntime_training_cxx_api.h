@@ -140,6 +140,14 @@ CheckpointState LoadCheckpoint(const std::basic_string<ORTCHAR_T>& path_to_check
 void SaveCheckpoint(const TrainingSession& session, const std::basic_string<ORTCHAR_T>& path_to_checkpoint,
                     bool include_optimizer_states);
 
+/** \brief Saves the checkpoint files to a model tensorproto file provided by the given path.
+ *
+ * Wraps OrtTrainingApi::SaveCheckpointAsInferenceModel
+ *
+ */
+void SaveCheckpointAsInferenceModel(const std::basic_string<ORTCHAR_T>& path_to_checkpoint,
+                                    const std::basic_string<ORTCHAR_T>& inference_model_path);
+
 }  // namespace Ort
 
 #include "onnxruntime_training_cxx_inline.h"

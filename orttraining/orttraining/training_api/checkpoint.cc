@@ -600,6 +600,23 @@ Status LoadCheckpointToModel(const PathString& checkpoint_path,
   return OrtLoadInternal(checkpoint_path, model_proto);
 }
 
+Status LoadCheckpointToModel(const PathString& checkpoint_path,
+                             const PathString& inference_model_path) {
+  ONNX_NAMESPACE::ModelProto model_proto;
+  ORT_RETURN_IF_ERROR(OrtLoadInternal(checkpoint_path, model_proto));
+
+  int fd = 0;
+  ORT_RETURN_IF_ERROR(Env::Default().FileOpenWr(inference_model_path, fd));
+  ORT_ENFORCE(fd >= 0, "<fd> is less than 0.");
+
+  google::protobuf::io::FileOutputStream output(fd);
+  const bool result = model_proto.SerializeToZeroCopyStream(&output) && output.Flush();
+  ORT_RETURN_IF_ERROR(Env::Default().FileClose(fd));
+  ORT_ENFORCE(result, "Fail to serialize model proto to file.");
+
+  return Status::OK();
+}
+
 }  // namespace api
 }  // namespace training
 }  // namespace onnxruntime

@@ -88,4 +88,9 @@ inline void SaveCheckpoint(const TrainingSession& session, const std::basic_stri
   ThrowOnError(GetTrainingApi().SaveCheckpoint(path_to_checkpoint.c_str(), session, include_optimizer_states));
 }
 
+inline void SaveCheckpointAsInferenceModel(const std::basic_string<ORTCHAR_T>& path_to_checkpoint,
+                                           const std::basic_string<ORTCHAR_T>& inference_model_path) {
+  ThrowOnError(GetTrainingApi().SaveCheckpointAsInferenceModel(path_to_checkpoint.c_str(), inference_model_path.c_str()));
+}
+
 }  // namespace Ort
