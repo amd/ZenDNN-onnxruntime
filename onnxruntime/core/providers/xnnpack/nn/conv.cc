@@ -505,7 +505,8 @@ Status Conv::Compute(OpKernelContext* context) const {
   if (Y->Shape().Size() == 0) {
     return Status::OK();
   }
-  pthreadpool_t t_pool = static_cast<concurrency::XnnpackThreadPool*>(context->GetOperatorThreadPool())->Get();
+  pthreadpool_t t_pool = (pthreadpool_t)context->GetOperatorThreadPool()->GetPoolInterface();
+  t_pool = t_pool ? GetThreadPool() : t_pool;
 
   xnn_status status = xnn_status_invalid_state;
   if (conv_type_ == OpComputeType::op_compute_type_fp32) {

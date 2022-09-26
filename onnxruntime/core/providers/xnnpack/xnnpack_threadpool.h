@@ -17,6 +17,12 @@ class XnnpackThreadPool final : public ThreadPool {
  public:
   explicit XnnpackThreadPool(size_t thread_num);
   ~XnnpackThreadPool() override;
+
+  void* GetPoolInterface() const override {
+    return xnnpack_thread_pool_;
+  }
+
+ private:
   int NumThreads() const override;
   void ParallelFor(std::ptrdiff_t total, double cost_per_unit,
                    const std::function<void(std::ptrdiff_t first, std::ptrdiff_t last)>& fn) override;
@@ -33,7 +39,6 @@ class XnnpackThreadPool final : public ThreadPool {
 
   void DisableSpinning() override;
   std::string StopProfiling() override;
-  pthreadpool* Get() { return xnnpack_thread_pool_; }
 
  private:
   pthreadpool* xnnpack_thread_pool_{nullptr};

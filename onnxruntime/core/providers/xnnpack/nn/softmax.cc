@@ -194,7 +194,8 @@ Status Softmax::Compute(OpKernelContext* context) const {
   if (X_shape.Size() == 0) {
     return Status::OK();
   }
-  pthreadpool_t t_pool = static_cast<concurrency::XnnpackThreadPool*>(context->GetOperatorThreadPool())->Get();
+  pthreadpool_t t_pool = (pthreadpool_t)context->GetOperatorThreadPool()->GetPoolInterface();
+  t_pool = t_pool ? GetThreadPool() : t_pool;
 
   const size_t N = X_shape.SizeToDimension(axis_);
   // const size_t D = X_shape.SizeFromDimension(axis_); // the step D is 1

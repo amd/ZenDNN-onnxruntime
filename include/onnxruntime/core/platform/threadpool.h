@@ -222,6 +222,9 @@ class ThreadPool {
 
   virtual void DisableSpinning();
 
+  virtual void* GetPoolInterface() const {
+    return underlying_threadpool_;
+  }
   // Schedules fn() for execution in the pool of threads.  The function may run
   // synchronously if it cannot be enqueued.  This will occur if the thread pool's
   // degree-of-parallelism is 1, but it may also occur for implementation-dependent
