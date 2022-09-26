@@ -11,6 +11,7 @@
 #include "xnnpack.h"
 #include "core/providers/xnnpack/xnnpack_threadpool.h"
 
+struct pthreadpool;
 namespace onnxruntime {
 // placeholder for future use. no options currently
 struct XnnpackExecutionProviderInfo {
@@ -18,13 +19,11 @@ struct XnnpackExecutionProviderInfo {
   XnnpackExecutionProviderInfo() = default;
 
   XnnpackExecutionProviderInfo(const ProviderOptions& po) {
-    if (po.count("thread_num")) {
-      // xnn_thread_pool_size = std::stoi(po.at("thread_num"));
+    if (auto it = po.find("intra_op_num_threads"); it != po.end()) {
+      xnn_thread_pool_size = std::stoi(it->second);
     }
-    // future: parse ProviderOptions
   }
 };
-
 
 class XnnpackExecutionProvider : public IExecutionProvider {
  public:
@@ -32,8 +31,8 @@ class XnnpackExecutionProvider : public IExecutionProvider {
   ~XnnpackExecutionProvider() override;
 
   std::vector<std::unique_ptr<ComputeCapability>> GetCapability(
-      const onnxruntime::GraphViewer& graph,
-      const std::vector<const KernelRegistry*>& kernel_registries) const override;
+      const onnxruntime::GraphViewer& graph_viewer,
+      const IKernelLookup& /*kernel_lookup*/) const override;
 
   std::shared_ptr<KernelRegistry> GetKernelRegistry() const override;
 
@@ -46,14 +45,12 @@ class XnnpackExecutionProvider : public IExecutionProvider {
   // xnnpack does not support concurrent execution of a kernel
   bool ConcurrentRunSupported() const override { return false; }
 
-  pthreadpool_t GetPrivateThreadPool() const {
-    return xnnpack_thread_pool_.get();
+  pthreadpool* GetPrivateThreadPool() const {
+    return xnnpack_thread_pool_;
   }
 
  private:
-  // Thread pool with smart-pointer for lifetime management.
-  std::unique_ptr<pthreadpool, decltype(&pthreadpool_destroy)> xnnpack_thread_pool_{
-      nullptr, &pthreadpool_destroy};
+  pthreadpool* xnnpack_thread_pool_{nullptr};
 };
 
 }  // namespace onnxruntime
