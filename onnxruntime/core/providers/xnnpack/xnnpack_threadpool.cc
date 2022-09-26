@@ -42,12 +42,6 @@ void XnnpackThreadPool::ParallelFor(std::ptrdiff_t total, double cost_per_unit,
 
 void XnnpackThreadPool::ParallelFor(std::ptrdiff_t total, const TensorOpCost& cost,
                                     const std::function<void(std::ptrdiff_t first, std::ptrdiff_t)>& fn) {
-  // Compute small problems directly in the caller thread.
-  if (total <= 1 || NumThreads() == 1) {
-    fn(0, total);
-    return;
-  }
-
   size_t tile = total / NumThreads() + ((total % NumThreads()) >= (NumThreads() / 2) ? 1 : 0);
   tile = std::max<size_t>(1, tile);
 
