@@ -603,6 +603,7 @@ Status LoadCheckpointToModel(const PathString& checkpoint_path,
 Status LoadCheckpointToModel(const PathString& checkpoint_path,
                              const PathString& inference_model_path) {
   ONNX_NAMESPACE::ModelProto model_proto;
+  auto status = Model::Load(inference_model_path, model_proto);
   ORT_RETURN_IF_ERROR(OrtLoadInternal(checkpoint_path, model_proto));
 
   int fd = 0;
