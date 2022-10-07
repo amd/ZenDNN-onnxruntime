@@ -20,6 +20,7 @@
 #include "gtest/gtest.h"
 #include "test/util/include/asserts.h"
 
+
 using namespace std;
 using namespace ONNX_NAMESPACE;
 using namespace onnxruntime::logging;
@@ -366,6 +367,37 @@ TEST(OrtModelOnlyTests, MetadataSerialization) {
   SaveAndCompareModels("testdata/model_with_metadata.onnx", ort_file);
 }
 
+TEST(OrtModelOnlyTests, UpdateOrtModelVersion) {
+  const std::basic_string<ORTCHAR_T> ort_file = ORT_TSTR("testdata/mnist.level1_opt.v4.ort");
+  const std::basic_string<ORTCHAR_T> onnx_file = ORT_TSTR("testdata/mnist.onnx");
+
+  // TODO: Update this to use RunOrtModel. Started with test in different file. 
+  const auto run_model = [](const std::basic_string<ORTCHAR_T>& model_path, OrtValue& result) {
+    SessionOptions so;
+    InferenceSession session{so, GetEnvironment()};
+
+    ASSERT_STATUS_OK(session.Load(model_path));
+    ASSERT_STATUS_OK(session.Initialize());
+
+    NameMLValMap feeds;
+    OrtValue ml_value;
+    std::vector<float> data(28 * 28, 0.0);
+    CreateMLValue<float>(TestCPUExecutionProvider()->GetAllocator(0, OrtMemTypeDefault), {1, 1, 28, 28}, data,
+                         &ml_value);
+    feeds.insert(std::make_pair("Input3", ml_value));
+    std::vector<std::string> fetch_names = {"Plus214_Output_0"};
+    std::vector<OrtValue> fetches;
+    ASSERT_STATUS_OK(session.Run(feeds, fetch_names, &fetches));
+    result = fetches[0];
+  };
+
+  OrtValue orig, updated;
+  run_model(onnx_file, orig);
+  run_model(ort_file, updated);
+
+  CompareTensors(orig, updated);
+}
+
 #if !defined(DISABLE_ML_OPS)
 TEST(OrtModelOnlyTests, SerializeToOrtFormatMLOps) {
   const std::basic_string<ORTCHAR_T> ort_file =
@@ -537,5 +569,6 @@ TEST(OrtModelOnlyTests, LoadOrtFormatModelMLOpsFromBufferNoCopy) {
 }
 
 #endif  // !defined(DISABLE_ML_OPS)
+
 }  // namespace test
 }  // namespace onnxruntime
