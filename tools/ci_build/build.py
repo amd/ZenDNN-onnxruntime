@@ -2113,7 +2113,7 @@ def derive_linux_build_property():
 
 
 def build_nuget_package(
-    source_dir, build_dir, configs, use_cuda, use_openvino, use_tensorrt, use_dnnl, use_tvm, use_winml
+    source_dir, build_dir, configs, use_cuda, use_openvino, use_tensorrt, use_dnnl, use_tvm, use_winml, use_snpe
 ):
     if not (is_windows() or is_linux()):
         raise BuildError(
@@ -2149,6 +2149,9 @@ def build_nuget_package(
     elif use_tvm:
         execution_provider = '/p:ExecutionProvider="tvm"'
         package_name = '/p:OrtPackageId="Microsoft.ML.OnnxRuntime.Tvm"'
+    elif use_snpe:
+        execution_provider = '/p:ExecutionProvider="snpe"'
+        package_name = '/p:OrtPackageId="Microsoft.ML.OnnxRuntime.Snpe"'
     else:
         # use the solution file that includes Xamarin mobile targets
         sln = "OnnxRuntime.CSharp.sln"
@@ -2788,6 +2791,7 @@ def main():
                 args.use_dnnl,
                 args.use_tvm,
                 args.use_winml,
+                args.use_snpe,
             )
 
     if args.test and args.build_nuget:
