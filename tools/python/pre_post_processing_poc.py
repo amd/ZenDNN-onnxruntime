@@ -5,7 +5,7 @@ import onnx
 import onnxruntime as ort
 
 from dataclasses import dataclass
-from onnx import parser
+from onnx import parser, version_converter
 from pathlib import Path
 from typing import List, Tuple, Union
 
@@ -32,6 +32,10 @@ TENSOR_TYPE_TO_ONNX_GRAPH_TYPE = {
     int(onnx.TensorProto.BFLOAT16): 'bfloat16',
 }
 
+# We need to use an opset that's valid for the pre/post processing operators we add.
+# Could alternatively use onnx.defs.onnx_opset_version to match the onnx version installed, but that's not deterministic
+PRE_POST_PROCESSING_ONNX_OPSET = 16
+
 
 # Create an checker context that includes the ort-ext domain so that custom ops don't cause failure
 def _create_custom_op_checker_context():
@@ -39,7 +43,7 @@ def _create_custom_op_checker_context():
     context.ir_version = onnx.checker.DEFAULT_CONTEXT.ir_version
 
     # arbitrary default of ONNX v16 and example custom op domain.
-    onnx_version = 16  # Could use this for version of ONNX user has installed: onnx.defs.onnx_opset_version
+    onnx_version = PRE_POST_PROCESSING_ONNX_OPSET
     context.opset_imports = {'': onnx_version, 'ortext': 1}
 
     return context
@@ -248,7 +252,17 @@ class PrePostProcessor:
     def run(self, model: onnx.ModelProto):
         pre_process_graph = None
         post_process_graph = None
-        graph = model.graph
+
+        # update to the ONNX opset we're using
+        model_opset = [entry.version for entry in model.opset_import
+                       if entry.domain == '' or entry.domain == 'ai.onnx'][0]
+        if (model_opset > PRE_POST_PROCESSING_ONNX_OPSET):
+            # It will probably work if the user updates PRE_POST_PROCESSING_ONNX_OPSET to match the model
+            # but there are no guarantees.
+            # Would only break if ONNX operators used in the pre/post processing graphs have had spec changes.
+            raise ValueError(f"Model opset is {model_opset} which is newer than the opset used by this script.")
+
+        model = onnx.version_converter.convert_version(model, PRE_POST_PROCESSING_ONNX_OPSET)
 
         def name_nodes(new_graph: onnx.GraphProto, prefix: str):
             idx = 0
@@ -264,6 +278,7 @@ class PrePostProcessor:
 
             return processor.apply(graph)
 
+        graph = model.graph
         # add pre-processing
         if self.pre_processors:
             # create empty graph with pass through of the requested input name
@@ -286,7 +301,7 @@ class PrePostProcessor:
             if not self._pre_processing_joins:
                 # default to 1:1 between outputs of last step with inputs of model
                 last_step = self.pre_processors[-1]
-                num_entries = max(len(last_step.output_names), len(graph.input))
+                num_entries = min(len(last_step.output_names), len(graph.input))
                 self._pre_processing_joins = [(last_step, i, graph.input[i].name) for i in range(0, num_entries)]
 
             # map the pre-processing outputs to graph inputs
@@ -305,7 +320,7 @@ class PrePostProcessor:
             if not self._post_processing_joins:
                 # default to 1:1 between outputs of original model with inputs of first post-processing step
                 first_step = self.post_processors[0]
-                num_entries = max(len(first_step.input_names), len(orig_model_outputs))
+                num_entries = min(len(first_step.input_names), len(orig_model_outputs))
                 self._post_processing_joins = [(first_step, i, orig_model_outputs[i]) for i in range(0, num_entries)]
 
             # update the input names for the steps to match the values produced by the model
@@ -864,6 +879,13 @@ def update_mobilenet():
     mobilenet(Path(mobilenet_path), Path(mobilenet_withppp_path))
 
 
+def update_mobilenet2():
+    mobilenet_path = r'D:\temp\prepostprocessor_poc\mobilenetv2-7.onnx'
+    mobilenet_withppp_path = r'D:\temp\prepostprocessor_poc\mobilenetv2-7.with_preprocessing.onnx'
+
+    mobilenet(Path(mobilenet_path), Path(mobilenet_withppp_path))
+
+
 def update_superresolution():
     superresolution_path = r'D:\temp\prepostprocessor_poc\pt_super_resolution.onnx'
     superresolution_withppp_path = r'D:\temp\prepostprocessor_poc\pt_super_resolution.with_preprocessing.onnx'
@@ -871,8 +893,8 @@ def update_superresolution():
 
 
 def main():
-    update_mobilenet()
-    update_superresolution()
+    update_mobilenet2()
+    #update_superresolution()
 
 
 if __name__ == '__main__':
