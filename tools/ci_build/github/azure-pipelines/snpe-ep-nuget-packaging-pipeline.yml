@@ -24,14 +24,6 @@ parameters:
   type: boolean
   default: false
 
-resources:
-  repositories:
-  - repository: OnnxRuntimeGithub
-    type: github
-    endpoint: Github_Access
-    name: microsoft/onnxruntime
-    ref: snpe_nuget_rel_1.13.1
-
 jobs:
 
   - job: OnnxRuntime_SnpeNuget_Win_x64
@@ -55,14 +47,6 @@ jobs:
         inputs:
           versionSpec: '3.7'
           addToPath: true
-
-      - checkout: OnnxRuntimeGithub
-        fetchDepth: 1
-        lfs: true
-        clean: true
-        submodules: recursive
-        persistCredentials: true
-        path: s/onnxruntime
       
       - task: PythonScript@0
         displayName: 'Build onnxruntime for x64'
@@ -115,13 +99,6 @@ jobs:
           versionSpec: '3.7'
           addToPath: true
 
-      - checkout: OnnxRuntimeGithub
-        fetchDepth: 1
-        lfs: true
-        clean: true
-        submodules: recursive
-        persistCredentials: true
-        path: s/onnxruntime
       - task: PythonScript@0
         displayName: 'Generate CMake Configuration for arm64'
         inputs:
