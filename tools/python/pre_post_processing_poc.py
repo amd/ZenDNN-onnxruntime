@@ -433,11 +433,12 @@ class ConvertImageToRGB(Step):
 
     def _create_graph_for_step(self, graph: onnx.GraphProto):
         input_type_str, input_shape_str = self._get_input_type_and_shape_strs(graph, 0)
+        assert(input_type_str == 'uint8')
         output_shape_str = f'torgb_ppp_{self.step_num}_h, torgb_ppp_{self.step_num}_w, torgb_ppp_{self.step_num}_c'
 
         converter_graph = onnx.parser.parse_graph(f'''\
-            convert_to_rgb ({input_type_str}[{input_shape_str}] {self.input_names[0]}) 
-                => ({input_type_str}[{output_shape_str}C] {self.output_names[0]})  
+            convert_to_rgb (uint8[{input_shape_str}] {self.input_names[0]}) 
+                => (uint8[{output_shape_str}C] {self.output_names[0]})  
             {{
                 {self.output_names[0]} = ortext.ConvertImageToRGB ({self.input_names[0]})
             }}
@@ -549,9 +550,10 @@ class ImageBytesToFloat(Step):
 
     def _create_graph_for_step(self, graph: onnx.GraphProto):
         input_type_str, input_shape_str = self._get_input_type_and_shape_strs(graph, 0)
+        assert(input_type_str == 'uint8')
 
         byte_to_float_graph = onnx.parser.parse_graph(f'''\
-            byte_to_float ({input_type_str}[{input_shape_str}] {self.input_names[0]}) 
+            byte_to_float (uint8[{input_shape_str}] {self.input_names[0]}) 
                 => (float[{input_shape_str}] {self.output_names[0]})
             {{
                 k255 = Constant <value = float[1] {{255.0}}> ()
@@ -572,6 +574,7 @@ class FloatToImageBytes(Step):
 
     def _create_graph_for_step(self, graph: onnx.GraphProto):
         input_type_str, input_shape_str = self._get_input_type_and_shape_strs(graph, 0)
+        assert(input_type_str == 'float')
 
         float_to_byte_graphs = onnx.parser.parse_graph(f'''\
             float_to_type (float[{input_shape_str}] {self.input_names[0]}) 
@@ -595,6 +598,8 @@ class Normalize(Step):
         If a single tuple is provided the values will be applied to all channels.
 
         Layout can be HWC or CHW. Set hwc_layout to False for CHW.
+
+        Data is converted to float during normalization.
         """
         super().__init__(['data'], ['normalized_data'], name)
 
@@ -733,16 +738,18 @@ class RGBToYCbCr(Step):
 
     def _create_graph_for_step(self, graph: onnx.GraphProto):
         input_type_str, input_shape_str = self._get_input_type_and_shape_strs(graph, 0)
+        assert(input_type_str == 'uint8')
+
         # each output is {h, w}. TBD if input is CHW or HWC though. Once we figure that out we could copy values from
         # the input shape
         output_shape_str = f'ToYCbCr_ppp_{self.step_num}_h, ToYCbCr_ppp_{self.step_num}_w'
         assert(input_type_str == "uint8")
 
         converter_graph = onnx.parser.parse_graph(f'''\
-            RGB_to_YCbCr ({input_type_str}[{input_shape_str}] {self.input_names[0]}) 
-                => ({input_type_str}[{output_shape_str}] {self.output_names[0]},
-                    {input_type_str}[{output_shape_str}] {self.output_names[1]},
-                    {input_type_str}[{output_shape_str}] {self.output_names[2]})  
+            RGB_to_YCbCr (uint8[{input_shape_str}] {self.input_names[0]}) 
+                => (uint8[{output_shape_str}] {self.output_names[0]},
+                    uint8[{output_shape_str}] {self.output_names[1]},
+                    uint8[{output_shape_str}] {self.output_names[2]})  
             {{
                 {','.join(self.output_names)} = ortext.RGBToYCbCr ({self.input_names[0]})
             }}
@@ -760,17 +767,17 @@ class YCbCrToRGB(Step):
         input_type_str0, input_shape_str0 = self._get_input_type_and_shape_strs(graph, 0)
         input_type_str1, input_shape_str1 = self._get_input_type_and_shape_strs(graph, 1)
         input_type_str2, input_shape_str2 = self._get_input_type_and_shape_strs(graph, 2)
-        assert(input_type_str0 == input_type_str1 and input_type_str0 == input_type_str2)
+        assert(input_type_str0 == 'uint8' and input_type_str0 == input_type_str1 and input_type_str0 == input_type_str2)
         assert(len(input_shape_str0.split(',')) == len(input_shape_str1.split(',')) and
                len(input_shape_str0.split(',')) == len(input_shape_str2.split(',')))
 
         output_shape_str = f'3,{input_shape_str0}'
 
         converter_graph = onnx.parser.parse_graph(f'''\
-            YCbCr_to_RGB ({input_type_str0}[{input_shape_str0}] {self.input_names[0]},
-                          {input_type_str1}[{input_shape_str1}] {self.input_names[1]},
-                          {input_type_str2}[{input_shape_str2}] {self.input_names[2]}) 
-                => ({input_type_str0}[{output_shape_str}] {self.output_names[0]})  
+            YCbCr_to_RGB (uint8[{input_shape_str0}] {self.input_names[0]},
+                          uint8[{input_shape_str1}] {self.input_names[1]},
+                          uint8[{input_shape_str2}] {self.input_names[2]}) 
+                => (uint8[{output_shape_str}] {self.output_names[0]})  
             {{
                 {self.output_names[0]} = ortext.YCbCrToRGB ({','.join(self.input_names)})
             }}
@@ -880,6 +887,7 @@ def update_mobilenet():
 
 
 def update_mobilenet2():
+    # ONNX model zoo mobilenet which requires opset update to work
     mobilenet_path = r'D:\temp\prepostprocessor_poc\mobilenetv2-7.onnx'
     mobilenet_withppp_path = r'D:\temp\prepostprocessor_poc\mobilenetv2-7.with_preprocessing.onnx'
 
@@ -893,8 +901,9 @@ def update_superresolution():
 
 
 def main():
+    update_mobilenet()
     update_mobilenet2()
-    #update_superresolution()
+    update_superresolution()
 
 
 if __name__ == '__main__':
