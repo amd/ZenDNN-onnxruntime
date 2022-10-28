@@ -122,7 +122,7 @@ def parse_arguments():
         choices=["cuda", "dnnl", "openvino", "tensorrt", "snpe", "tvm", "None"],
         help="The selected execution provider for this build.",
     )
-    parser.add_argument("--sdk_info", required=False, default="None", type=str, help="dependency SDK information.")
+    parser.add_argument("--sdk_info", required=False, default="", type=str, help="dependency SDK information.")
 
     return parser.parse_args()
 
@@ -273,7 +273,7 @@ def generate_release_notes(list, dependency_sdk_info):
         + "Build: https://aiinfra.visualstudio.com/Lotus/_build/results?buildId="
         + (build_id if build_id is not None else "")
     )
-    
+
     if dependency_sdk_info:
         list.append("Dependency SDK: " + dependency_sdk_info)
 
