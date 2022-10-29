@@ -30,7 +30,7 @@
 #include <cuda.h>
 #include <vector>
 
-#include "contrib_ops/cuda/bert/flash_attention/src/fmha_utils.h"
+#include "contrib_ops/cuda/bert/flash_attention/fmha_utils.h"
 
 constexpr int TOTAL_DIM = 0;
 constexpr int H_DIM = 1;

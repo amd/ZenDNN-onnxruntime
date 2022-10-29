@@ -30,24 +30,10 @@
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
 
-#include "contrib_ops/cuda/bert/flash_attention/src/fmha/utils.h"
-#include "contrib_ops/cuda/bert/flash_attention/src/fp16_switch.h"
+#include "contrib_ops/cuda/bert/flash_attention/utils.h"
+#include "contrib_ops/cuda/bert/flash_attention/fp16_switch.h"
 
 namespace fmha {
-
-// template <typename half2_t>
-// inline __device__ void atomic_add_CAS(half2_t *address, const half2_t val) {
-//     uint32_t *address_as_ui = (uint32_t *)address;
-//     uint32_t old = *address_as_ui;
-//     uint32_t assumed;
-//     do {
-//       assumed = old;
-//       half2_t sum = __hadd2(val, reinterpret_cast<half2_t(&)>(old));
-//       old = atomicCAS(address_as_ui, assumed, reinterpret_cast<uint32_t(&)>(sum));
-//     } while (assumed != old);
-// }
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template<
     // The dimensions of the tile computed by the CTA.

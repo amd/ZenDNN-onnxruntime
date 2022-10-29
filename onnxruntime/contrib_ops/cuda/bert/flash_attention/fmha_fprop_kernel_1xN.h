@@ -28,11 +28,11 @@
 
 #pragma once
 
-#include "contrib_ops/cuda/bert/flash_attention/src/fmha_kernel.h"
-#include "contrib_ops/cuda/bert/flash_attention/src/fmha/kernel_traits.h"
-#include "contrib_ops/cuda/bert/flash_attention/src/fmha/gemm.h"
-#include "contrib_ops/cuda/bert/flash_attention/src/fmha/utils.h"
-#include "contrib_ops/cuda/bert/flash_attention/src/fmha/softmax.h"
+#include "contrib_ops/cuda/bert/flash_attention/fmha_kernel.h"
+#include "contrib_ops/cuda/bert/flash_attention/kernel_traits.h"
+#include "contrib_ops/cuda/bert/flash_attention/gemm.h"
+#include "contrib_ops/cuda/bert/flash_attention/utils.h"
+#include "contrib_ops/cuda/bert/flash_attention/softmax.h"
 
 namespace fmha {
 

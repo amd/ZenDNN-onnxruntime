@@ -27,7 +27,7 @@
 
 #pragma once
 
-#include "contrib_ops/cuda/bert/flash_attention/src/fmha/utils.h"
+#include "contrib_ops/cuda/bert/flash_attention/utils.h"
 
 #include <cutlass/cutlass.h>
 #include <cutlass/gemm/warp/default_mma_tensor_op.h>

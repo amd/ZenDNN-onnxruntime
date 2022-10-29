@@ -27,8 +27,8 @@
 
 #pragma once
 
-#include "contrib_ops/cuda/bert/flash_attention/src/fmha/utils.h"
-#include "contrib_ops/cuda/bert/flash_attention/src/fmha/gemm.h"
+#include "contrib_ops/cuda/bert/flash_attention/utils.h"
+#include "contrib_ops/cuda/bert/flash_attention/gemm.h"
 
 namespace fmha {
 

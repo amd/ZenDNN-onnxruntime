@@ -33,7 +33,7 @@
 #include <cuda_runtime_api.h>
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
-#include "contrib_ops/cuda/bert/flash_attention/src/fp16_switch.h"
+#include "contrib_ops/cuda/bert/flash_attention/fp16_switch.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 

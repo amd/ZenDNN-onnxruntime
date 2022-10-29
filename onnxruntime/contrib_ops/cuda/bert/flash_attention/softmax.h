@@ -278,7 +278,7 @@ struct Softmax_base {
     // }
 
     template <bool encode_dropout_in_sign_bit=false>
-    inline __device__ void apply_dropout_16bits(Philox &ph, uint16_t p_dropout_in_uint16_t) {
+    inline __device__ void apply_dropout_16bits(philox::Philox &ph, uint16_t p_dropout_in_uint16_t) {
         // We encode the dropout pattern in the sign bit of the non-negative
         // softmax to distinguish from pre-existing zeros
         auto encode_dropout = [](bool keep, float val) {
@@ -308,7 +308,7 @@ struct Softmax_base {
     }
 
     template <bool encode_dropout_in_sign_bit=false>
-    inline __device__ void apply_dropout_16bits(Philox &ph, uint16_t p_dropout_in_uint16_t,
+    inline __device__ void apply_dropout_16bits(philox::Philox &ph, uint16_t p_dropout_in_uint16_t,
                                                 unsigned long long philox_subsequence) {
         // We encode the dropout pattern in the sign bit of the non-negative
         // softmax to distinguish from pre-existing zeros
@@ -341,7 +341,7 @@ struct Softmax_base {
     }
 
     template <bool encode_dropout_in_sign_bit=false>
-    inline __device__ void apply_dropout_16bits(Philox &ph0, Philox &ph1, uint16_t p_dropout_in_uint16_t) {
+    inline __device__ void apply_dropout_16bits(philox::Philox &ph0, philox::Philox &ph1, uint16_t p_dropout_in_uint16_t) {
         // We encode the dropout pattern in the sign bit of the non-negative
         // softmax to distinguish from pre-existing zeros
         auto encode_dropout = [](bool keep, float val) {

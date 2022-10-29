@@ -25,14 +25,12 @@
  *
  ******************************************************************************/
 #include <cuda_fp16.h>
-#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
 #include <cuda_bf16.h>
-#endif
 
-#include "contrib_ops/cuda/bert/flash_attention/src/static_switch.h"
-#include "contrib_ops/cuda/bert/flash_attention/src/fp16_switch.h"
-#include "contrib_ops/cuda/bert/flash_attention/src/fmha.h"
-#include "contrib_ops/cuda/bert/flash_attention/src/fmha_fprop_kernel_1xN.h"
+#include "contrib_ops/cuda/bert/flash_attention/static_switch.h"
+#include "contrib_ops/cuda/bert/flash_attention/fp16_switch.h"
+#include "contrib_ops/cuda/bert/flash_attention/fmha.h"
+#include "contrib_ops/cuda/bert/flash_attention/fmha_fprop_kernel_1xN.h"
 
 // Find the number of splits that maximizes the occupancy. For example, if we have
 // batch * n_heads = 48 and we have 108 SMs, having 2 splits (efficiency = 0.89) is
