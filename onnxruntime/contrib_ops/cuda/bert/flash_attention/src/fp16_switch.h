@@ -1,7 +1,7 @@
 // Inspired by https://github.com/NVIDIA/DALI/blob/main/include/dali/core/static_switch.h
 // and https://github.com/pytorch/pytorch/blob/master/aten/src/ATen/Dispatch.h
 
-// modified from static_switch.h 
+// modified from static_switch.h
 // because MSVC cannot handle std::conditional with constexpr variable
 
 #pragma once
@@ -15,13 +15,28 @@
 ///     some_function(...);
 /// });
 /// ```
-#define FP16_SWITCH(COND, ...)                                           \
+
+#define ENABLE_FLASH_ATTENTION_BFLOAT16 0
+
+#if ENABLE_FLASH_ATTENTION_BFLOAT16
+
+#define FP16_SWITCH(COND, ...)                                                       \
     [&] {                                                                            \
         if (COND) {                                                                  \
-            using elem_type = __nv_bfloat16;   \
+            using elem_type = __nv_bfloat16;                                         \
             return __VA_ARGS__();                                                    \
         } else {                                                                     \
-            using elem_type = __half;   \
+            using elem_type = __half;                                                \
             return __VA_ARGS__();                                                    \
         }                                                                            \
     }()
+
+#else
+
+#define FP16_SWITCH(COND, ...)                                                       \
+    [&] {                                                                            \
+            using elem_type = __half;                                                \
+            return __VA_ARGS__();                                                    \
+    }()
+
+#endif

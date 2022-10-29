@@ -1,6 +1,6 @@
 /******************************************************************************
  * Copyright (c) 2011-2021, NVIDIA CORPORATION.  All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -11,7 +11,7 @@
  *     * Neither the name of the NVIDIA CORPORATION nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -30,16 +30,7 @@
 #include <cuda.h>
 #include <vector>
 
-#ifdef OLD_GENERATOR_PATH
-#include <ATen/CUDAGeneratorImpl.h>
-#else
-#include <ATen/cuda/CUDAGeneratorImpl.h>
-#endif
-
-#include <ATen/cuda/CUDAGraphsUtils.cuh>
-
-#include <fmha_utils.h>
-
+#include "contrib_ops/cuda/bert/flash_attention/src/fmha_utils.h"
 
 constexpr int TOTAL_DIM = 0;
 constexpr int H_DIM = 1;
@@ -54,9 +45,7 @@ struct Qkv_params {
     void *__restrict__ v_ptr;
 
     // The stride between rows of the Q, K and V matrices.
-    // size_t qkv_stride_in_elts;
-    // size_t qkv_stride_in_bytes;
-    // TD [2022-04-16]: We're using 32-bit indexing to save registers.
+    // We're using 32-bit indexing to save registers.
     // The code probably won't work for arrays larger than 2GB.
     uint32_t q_row_stride_in_elts;
     uint32_t k_row_stride_in_elts;
@@ -77,19 +66,17 @@ struct FMHA_fprop_params : public Qkv_params {
     void * __restrict__ o_ptr;
 
     // The stride between rows of O.
-    // size_t o_stride_in_elts;
-    // size_t o_stride_in_bytes;
     uint32_t o_row_stride_in_elts;
     uint32_t o_head_stride_in_elts;
     uint32_t o_tmp_row_stride_in_elts;
     uint32_t o_tmp_head_stride_in_elts;
 
-    // The pointer to the O_tmp matrix, which holds O intermediate value during
-    // the loop;
+    // The pointer to the O_tmp matrix, which holds O intermediate value during the loop;
     void *__restrict__ o_tmp_ptr;
 
     // The pointer to the S matrix.
     void * __restrict__ s_ptr;
+
     // The stride between rows of the S matrix.
     // int64_t s_stride_in_bytes;
     uint32_t s_stride_in_bytes;
@@ -123,42 +110,12 @@ struct FMHA_fprop_params : public Qkv_params {
     uint32_t scale_dropout;
 
     // Random state.
-    at::PhiloxCudaState philox_args;
+    void* philox_args;
 
     bool is_bf16;
     bool is_causal;
 
     int num_splits; // How many SMs per attention matrix.
-};
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-struct FMHA_dgrad_params : public FMHA_fprop_params {
-
-    // The dQKV matrices.
-    void *__restrict__ dq_ptr;
-    void *__restrict__ dk_ptr;
-    void *__restrict__ dv_ptr;
-
-    // // To accumulate dK and dV in case we're splitting the bwd along seqlen_q dimension
-    // void *__restrict__ dk_accum_ptr;
-    // void *__restrict__ dv_accum_ptr;
-
-    // The stride between rows of the dQ, dK and dV matrices.
-    // TD [2022-04-16]: We're using 32-bit indexing to save registers.
-    // The code probably won't work for arrays larger than 2GB.
-    uint32_t dq_row_stride_in_elts;
-    uint32_t dk_row_stride_in_elts;
-    uint32_t dv_row_stride_in_elts;
-    uint32_t dq_head_stride_in_elts;
-    uint32_t dk_head_stride_in_elts;
-    uint32_t dv_head_stride_in_elts;
-
-    // The dO matrix. We assume it is contiguous.
-    void * __restrict__ do_ptr;
-
-    // The pointer to the softmax d sum.
-    void * __restrict__ dsoftmax_sum;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -194,11 +151,4 @@ struct Launch_params{
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
-void run_fmha_fp16_sm80(Launch_params<FMHA_fprop_params> &launch_params);
-
-void run_fmha_dgrad_fp16_sm80(FMHA_dgrad_params &params, cudaStream_t stream, const bool configure);
-
-void run_fmha_block_fp16_sm80(Launch_params<FMHA_fprop_params> &launch_params, const bool configure);
-
-void run_fmha_block_dgrad_fp16_sm80(const FMHA_dgrad_params &params, cudaStream_t stream);
+void run_fmha_fp16_sm80(Launch_params<FMHA_fprop_params> &launch_params, const cudaDeviceProp& dprops);

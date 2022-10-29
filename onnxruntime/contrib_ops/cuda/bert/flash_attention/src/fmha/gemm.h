@@ -1,6 +1,6 @@
 /******************************************************************************
  * Copyright (c) 2011-2021, NVIDIA CORPORATION.  All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -11,7 +11,7 @@
  *     * Neither the name of the NVIDIA CORPORATION nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -27,11 +27,12 @@
 
 #pragma once
 
-#include <fmha/utils.h>
+#include "contrib_ops/cuda/bert/flash_attention/src/fmha/utils.h"
 
-#include "cutlass/cutlass.h"
-#include "cutlass/gemm/warp/default_mma_tensor_op.h"
-#include "cutlass/layout/layout.h"
+#include <cutlass/cutlass.h>
+#include <cutlass/gemm/warp/default_mma_tensor_op.h>
+#include <cutlass/gemm/warp/mma_tensor_op_policy.h>
+#include <cutlass/layout/layout.h>
 #include <cutlass/arch/mma.h>
 #include <cutlass/array.h>
 #include <cutlass/numeric_types.h>

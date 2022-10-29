@@ -1,6 +1,6 @@
 /******************************************************************************
  * Copyright (c) 2011-2021, NVIDIA CORPORATION.  All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -11,7 +11,7 @@
  *     * Neither the name of the NVIDIA CORPORATION nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -33,6 +33,7 @@
 #include <cuda_runtime_api.h>
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
+#include "contrib_ops/cuda/bert/flash_attention/src/fp16_switch.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -55,6 +56,8 @@ enum Data_type { DATA_TYPE_FP16, DATA_TYPE_BF16, DATA_TYPE_FP32, DATA_TYPE_INT32
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
 static inline void set_alpha( uint32_t &alpha, float norm, Data_type dtype ) {
     if( dtype == DATA_TYPE_FP16 ) {
         half x = __float2half_rn( norm );
@@ -75,7 +78,7 @@ static inline void set_alpha( uint32_t &alpha, float norm, Data_type dtype ) {
         assert( false );
     }
 }
-
+#pragma GCC diagnostic pop
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static inline size_t get_size_in_bytes( size_t n, Data_type dtype ) {
@@ -97,4 +100,3 @@ static inline size_t get_size_in_bytes( size_t n, Data_type dtype ) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-

@@ -3,14 +3,15 @@
 #pragma once
 // Philox CUDA.
 
-namespace {
+namespace fmha {
+namespace philox {
 
 class Philox {
-public:
+ public:
   __device__ inline Philox(unsigned long long seed,
                            unsigned long long subsequence,
                            unsigned long long offset)
-    : key(reinterpret_cast<const uint2&>(seed)) {
+      : key(reinterpret_cast<const uint2&>(seed)) {
     //key.x = (unsigned int)seed;
     //key.y = (unsigned int)(seed >> 32);
     //counter = make_uint4(0, 0, 0, 0);
@@ -19,7 +20,7 @@ public:
     //STATE = 0;
     //incr_n(offset / 4);
 
-    ull2 * tmp = reinterpret_cast<ull2*>(&counter);
+    ull2* tmp = reinterpret_cast<ull2*>(&counter);
     tmp->x = offset / 4;
     tmp->y = subsequence;
     // if ((threadIdx.x == 0) && (blockIdx.x == 0) && (blockIdx.y == 0)) {
@@ -30,8 +31,8 @@ public:
   __device__ inline uint4 operator()() {
     uint4 counter_ = counter;
     uint2 key_ = key;
-    // 7-round philox
-    #pragma unroll
+// 7-round philox
+#pragma unroll
     for (int i = 0; i < 6; i++) {
       counter_ = single_round(counter_, key_);
       key_.x += (kPhilox10A);
@@ -48,14 +49,14 @@ public:
 
   __device__ inline uint4 operator()(const unsigned long long subsequence) {
     uint4 counter_ = counter;
-    ull2 * tmp = reinterpret_cast<ull2*>(&counter_);
+    ull2* tmp = reinterpret_cast<ull2*>(&counter_);
     tmp->y = subsequence;
     // if ((threadIdx.x % 32 == 0) && (blockIdx.x == 0) && (blockIdx.y == 0)) {
     //     printf("tidx = %d, counter_: %u, %u, %u, %u\n", threadIdx.x, counter_.x, counter_.y, counter_.z, counter_.w);
     // }
     uint2 key_ = key;
-    // 7-round philox
-    #pragma unroll
+// 7-round philox
+#pragma unroll
     for (int i = 0; i < 6; i++) {
       counter_ = single_round(counter_, key_);
       key_.x += (kPhilox10A);
@@ -69,10 +70,10 @@ public:
     return output;
   }
 
-private:
+ private:
   struct ull2 {
-      uint64_t x;
-      uint64_t y;
+    uint64_t x;
+    uint64_t y;
   };
   uint4 counter;
   const uint2 key;
@@ -93,13 +94,13 @@ private:
 
   __device__ uint4 incr(uint4 ctr) {
     uint4 res;
-    asm ("add.cc.u32      %0, %4, %8;\n\t"
-         "addc.cc.u32     %1, %5, %9;\n\t"
-         "addc.cc.u32     %2, %6, %10;\n\t"
-         "addc.u32        %3, %7, %11;\n\t"
-         : "=r"(res.x), "=r"(res.y), "=r"(res.z), "=r"(res.w)
-         : "r"(ctr.x), "r"(ctr.y), "r"(ctr.z), "r"(ctr.w),
-           "n"(1), "n"(0), "n"(0), "n"(0));
+    asm("add.cc.u32      %0, %4, %8;\n\t"
+        "addc.cc.u32     %1, %5, %9;\n\t"
+        "addc.cc.u32     %2, %6, %10;\n\t"
+        "addc.u32        %3, %7, %11;\n\t"
+        : "=r"(res.x), "=r"(res.y), "=r"(res.z), "=r"(res.w)
+        : "r"(ctr.x), "r"(ctr.y), "r"(ctr.z), "r"(ctr.w),
+          "n"(1), "n"(0), "n"(0), "n"(0));
     return res;
   }
 
@@ -120,11 +121,11 @@ private:
   // }
 
   __device__ uint2 mulhilo32(const unsigned int a, const unsigned int b) {
-    uint2 *res;
+    uint2* res;
     unsigned long long tmp;
-    asm ("mul.wide.u32      %0, %1, %2;\n\t"
-          : "=l"(tmp)
-          : "r"(a), "r"(b));
+    asm("mul.wide.u32      %0, %1, %2;\n\t"
+        : "=l"(tmp)
+        : "r"(a), "r"(b));
     res = (uint2*)(&tmp);
     return *res;
   }
@@ -137,7 +138,7 @@ private:
     //uint4 ret = {hi1 ^ ctr.y ^ key.x, lo1, hi0 ^ ctr.w ^ key.y, lo0};
     uint2 res0 = mulhilo32(kPhiloxSA, ctr.x);
     uint2 res1 = mulhilo32(kPhiloxSB, ctr.z);
-    uint4 ret = {res1.y ^ ctr.y ^ key.x, res1.x, res0.y ^ ctr.w ^ key.y, res0.x};  
+    uint4 ret = {res1.y ^ ctr.y ^ key.x, res1.x, res0.y ^ ctr.w ^ key.y, res0.x};
     return ret;
   }
 
@@ -154,4 +155,5 @@ __device__ __inline__ float4 uniform4(const uint4 x) {
                      x.w * M_RAN_INVM32);
 }
 
-} // namespace
+}  // namespace philox
+}  // namespace fmha

@@ -26,12 +26,9 @@
  *
  ******************************************************************************/
 
-// #include <torch/extension.h>
-// #include <ATen/cuda/CUDAContext.h>
-// #include <c10/cuda/CUDAGuard.h>
+#include "contrib_ops/cuda/bert/flash_attention/src/fmha.h"
 
-#include "fmha.h"
-
+/*
 // #define CHECK_SHAPE(x, ...) TORCH_CHECK(x.sizes() == torch::IntArrayRef({__VA_ARGS__}), #x " must have shape (" #__VA_ARGS__ ")")
 
 
@@ -52,7 +49,6 @@ void set_params_fprop(FMHA_fprop_params &params,
                       void *o_tmp_d,
                       void *s_d,
                       void *softmax_lse_d,
-                      float p_dropout,
                       float softmax_scale,
                       bool is_causal,
                       int num_splits) {
@@ -69,10 +65,10 @@ void set_params_fprop(FMHA_fprop_params &params,
     params.q_ptr = q.data_ptr();
     params.k_ptr = k.data_ptr();
     params.v_ptr = v.data_ptr();
-    params.q_row_stride_in_elts = q.stride(0);
+    params.q_row_stride_in_elts = q.stride(0); // num_heads * head_size
     params.k_row_stride_in_elts = k.stride(0);
     params.v_row_stride_in_elts = v.stride(0);
-    params.q_head_stride_in_elts = q.stride(1);
+    params.q_head_stride_in_elts = q.stride(1); // head_size
     params.k_head_stride_in_elts = k.stride(1);
     params.v_head_stride_in_elts = v.stride(1);
     params.o_ptr = out.data_ptr();
@@ -106,22 +102,10 @@ void set_params_fprop(FMHA_fprop_params &params,
     params.scale_bmm1f = scale_bmm1;
     set_alpha(params.scale_bmm1, scale_bmm1, data_type);
 
-    // Set this to probability of keeping an element to simplify things.
-    params.p_dropout = 1.f - p_dropout;
-    // Convert p from float to int so we don't have to convert the random uint to float to compare.
-    // [Minor] We want to round down since when we do the comparison we use <= instead of <
-    params.p_dropout_in_uint = uint32_t(std::floor(params.p_dropout * 4294967295.0));
-    params.p_dropout_in_uint16_t = uint16_t(std::floor(params.p_dropout * 65535.0));
-    params.rp_dropout = 1.f / params.p_dropout;
-    params.scale_bmm1_rp_dropout = params.rp_dropout * params.scale_bmm1f;
-    // TORCH_CHECK(p_dropout < 1.f);
-    set_alpha(params.scale_dropout, params.rp_dropout, data_type);
-
     params.is_causal = is_causal;
     params.num_splits = num_splits;
 }
 
-/*
 std::vector<at::Tensor>
 mha_fwd(const at::Tensor &q,         // total_q x num_heads x head_size, total_q := \sum_{i=0}^{b} s_i
         const at::Tensor &k,         // total_k x num_heads x head_size, total_k := \sum_{i=0}^{b} s_i
@@ -131,7 +115,6 @@ mha_fwd(const at::Tensor &q,         // total_q x num_heads x head_size, total_q
         const at::Tensor &cu_seqlens_k,  // b+1
         const int max_seqlen_q_,
         const int max_seqlen_k_,
-        const float p_dropout,
         const float softmax_scale,
         const bool zero_tensors,
         const bool is_causal,
@@ -145,8 +128,7 @@ mha_fwd(const at::Tensor &q,         // total_q x num_heads x head_size, total_q
     bool is_sm8x = dprops->major == 8 && dprops->minor >= 0;
     TORCH_CHECK(is_sm8x || is_sm75);
     auto stream = at::cuda::getCurrentCUDAStream().stream();
-    bool is_dropout = p_dropout > 0.0;
-    Launch_params<FMHA_fprop_params> launch_params(dprops, stream, is_dropout, return_softmax);
+    Launch_params<FMHA_fprop_params> launch_params(dprops, stream, return_softmax);
 
     auto q_dtype = q.dtype();
     TORCH_CHECK(q_dtype == torch::kFloat16 || (is_sm8x && q_dtype == torch::kBFloat16));
@@ -221,9 +203,6 @@ mha_fwd(const at::Tensor &q,         // total_q x num_heads x head_size, total_q
         if (return_softmax) {s.zero_();}
     }
 
-    auto gen = at::get_generator_or_default<at::CUDAGeneratorImpl>(
-        gen_, at::cuda::detail::getDefaultCUDAGenerator());
-
     set_params_fprop(launch_params.params,
                      batch_size,
                      max_seqlen_q,
@@ -236,7 +215,6 @@ mha_fwd(const at::Tensor &q,         // total_q x num_heads x head_size, total_q
                      loop ? o_tmp.data_ptr() : nullptr,
                      return_softmax ? s.data_ptr() : nullptr,
                      softmax_lse.data_ptr(),
-                     p_dropout,
                      softmax_scale,
                      is_causal,
                      num_splits);
@@ -244,16 +222,8 @@ mha_fwd(const at::Tensor &q,         // total_q x num_heads x head_size, total_q
     // number of times random will be generated per thread, to offset philox counter in thc random
     // state
     // We use a custom RNG that increases the offset by batch_size * nheads * 32.
-    int64_t counter_offset = launch_params.params.b * launch_params.params.h * 32;
-    at::PhiloxCudaState rng_engine_inputs;
 
-    if( is_dropout ) {
-        // See Note [Acquire lock when using random generators]
-        std::lock_guard<std::mutex> lock(gen->mutex_);
-        launch_params.params.philox_args = gen->philox_cuda_state(counter_offset);
-    }
-
-    run_fmha_fp16_sm80(launch_params);
+    run_fmha_fp16_sm80(launch_params, dprops);
 
     std::vector<at::Tensor> result = {softmax_lse};
     if (return_softmax) {result.push_back(s);}

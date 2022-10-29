@@ -1,7 +1,7 @@
 /***************************************************************************************************
  * Copyright (c) 2022, Tri Dao.
  * Copyright (c) 2011-2021, NVIDIA CORPORATION.  All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -12,7 +12,7 @@
  *     * Neither the name of the NVIDIA CORPORATION nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -28,12 +28,56 @@
 
 #pragma once
 
-#include "fmha_kernel.h"
-#include <fmha/kernel_traits.h>
-#include <fmha/gemm.h>
-#include <fmha/utils.h>
+#include "contrib_ops/cuda/bert/flash_attention/src/fmha_kernel.h"
+#include "contrib_ops/cuda/bert/flash_attention/src/fmha/kernel_traits.h"
+#include "contrib_ops/cuda/bert/flash_attention/src/fmha/gemm.h"
+#include "contrib_ops/cuda/bert/flash_attention/src/fmha/utils.h"
+#include "contrib_ops/cuda/bert/flash_attention/src/fmha/softmax.h"
 
 namespace fmha {
+
+namespace philox {
+struct PhiloxCudaState {
+  PhiloxCudaState() = default;
+
+  // Called if graph capture is not underway
+  PhiloxCudaState(uint64_t seed,
+                  uint64_t offset) {
+    seed_.val = seed;
+    offset_.val = offset;
+  }
+
+  // Called if graph capture is underway
+  PhiloxCudaState(int64_t* seed,
+                  int64_t* offset_extragraph,
+                  uint32_t offset_intragraph) {
+    seed_.ptr = seed;
+    offset_.ptr = offset_extragraph;
+    offset_intragraph_ = offset_intragraph;
+    captured_ = true;
+  }
+
+  union Payload {
+    uint64_t val;
+    int64_t* ptr;
+  };
+
+  Payload seed_;
+  Payload offset_;
+  uint32_t offset_intragraph_ = 0;
+  bool captured_ = false;
+};
+
+__device__ __forceinline__ std::tuple<uint64_t, uint64_t>
+unpack(PhiloxCudaState arg) {
+  if (arg.captured_) {
+    return std::make_tuple(static_cast<uint64_t>(*arg.seed_.ptr), static_cast<uint64_t>(*(arg.offset_.ptr) + arg.offset_intragraph_));
+  } else {
+    return std::make_tuple(arg.seed_.val, arg.offset_.val);
+  }
+}
+
+}  // namespace philox
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -53,7 +97,7 @@ struct Gemm_Q_K_base {
 
     static constexpr int SMEM_BYTES_SOFTMAX = Cta_tile_p::M * Cta_tile_p::WARPS_N * sizeof(float) * 2;
 
-    __device__ inline Gemm_Q_K_base(char * smem_ptr_q, char * smem_ptr_k, const int tidx) 
+    __device__ inline Gemm_Q_K_base(char * smem_ptr_q, char * smem_ptr_k, const int tidx)
         : smem_q(smem_ptr_q, tidx)
         , smem_k(smem_ptr_k, tidx) {
 
@@ -93,11 +137,11 @@ struct Gemm_Q_K : public Gemm_Q_K_base<Kernel_traits> {
 
     // Q | K / V
     //   | O | SOFTMAX
-    static constexpr int SMEM_BYTES = Smem_tile_q::BYTES_PER_TILE 
+    static constexpr int SMEM_BYTES = Smem_tile_q::BYTES_PER_TILE
                                     + std::max((SHARE_SMEM_FOR_K_AND_V ? 1 : 2) * Smem_tile_k::BYTES_PER_TILE,
                                                Smem_tile_o::BYTES_PER_TILE + Base::SMEM_BYTES_SOFTMAX);
 
-    __device__ inline Gemm_Q_K(char * smem_, const int tidx) 
+    __device__ inline Gemm_Q_K(char * smem_, const int tidx)
         : Base(smem_, smem_ + Smem_tile_q::BYTES_PER_TILE, tidx) {
     }
 
@@ -157,10 +201,10 @@ struct Gemm_Q_K<Kernel_traits, false, elem_type_> : public Gemm_Q_K_base<Kernel_
     // If V_IN_REGS and SHARE_SMEM_FOR_K_AND_V:      Q | K/V | O | SOFTMAX
     // If !V_IN_REGS (then !SHARE_SMEM_FOR_K_AND_V): Q | K   | V | O | SOFTMAX
     static constexpr int SMEM_BYTES = Smem_tile_q::BYTES_PER_TILE
-                                    + (SHARE_SMEM_FOR_K_AND_V ? 1 : 2) * Smem_tile_k::BYTES_PER_TILE 
+                                    + (SHARE_SMEM_FOR_K_AND_V ? 1 : 2) * Smem_tile_k::BYTES_PER_TILE
                                     + Smem_tile_o::BYTES_PER_TILE + Base::SMEM_BYTES_SOFTMAX;
 
-    __device__ inline Gemm_Q_K(char * smem_, const int tidx) 
+    __device__ inline Gemm_Q_K(char * smem_, const int tidx)
       : Base(smem_, smem_ + Smem_tile_q::BYTES_PER_TILE, tidx) {
     }
 
@@ -202,8 +246,10 @@ inline __device__ void device_1xN_(const Params &params, const int bidb, const i
 #if defined(__CUDA_ARCH__) &&  __CUDA_ARCH__ >= 800
     using elem_type = typename Kernel_traits::elem_type;
 #else
+#ifndef NDEBUG
     constexpr bool is_fp16_type = std::is_same<typename Kernel_traits::elem_type, __half>::value;
     assert(is_fp16_type);
+#endif
     using elem_type = __half;
 #endif
 
@@ -289,9 +335,6 @@ inline __device__ void device_1xN_(const Params &params, const int bidb, const i
         gmem_s.move(begin + blockIdx.z);
     }
     gmem_softmax_lse.move(begin + blockIdx.z);
-    // if ((threadIdx.x == 0) && (blockIdx.x == 0) && (blockIdx.y == 0)) {
-    //     printf("begin = %d, steps = %d\n", begin, steps);
-    // }
 
     fmha::Mask<Cta_tile_p, Is_causal> mask(binfo, tidx, loop_step_idx);
 
@@ -303,7 +346,7 @@ inline __device__ void device_1xN_(const Params &params, const int bidb, const i
                        params.d, binfo, tidx, false);
     // The base pointer of smem_v;
     char *smem_v_ = &smem_[Gemm1::SMEM_OFFSET_V];
-    
+
     // Allocate the shared memory tile loader for V. We use the same as K so be careful!!!
     Smem_tile_v smem_v(smem_v_, tidx);
 
@@ -334,12 +377,6 @@ inline __device__ void device_1xN_(const Params &params, const int bidb, const i
     gmem_q.commit(gemm_q_k.smem_q);
     gmem_v.commit(smem_v);
 
-    // const uint32_t scale_bmm1 = reinterpret_cast<const uint32_t&>(params.scale_bmm1);
-    // #pragma unroll
-    // for(int it=0;it < Gmem_tile_k::LDGS;it++){
-    //     gmem_k.fetch_[it] = fmha::hmul8(scale_bmm1, gmem_k.fetch_[it]);
-    // }
-
     // Commit the data for K to shared memory.
     if( !Kernel_traits::SHARE_SMEM_FOR_K_AND_V ) {
         gmem_k.commit(gemm_q_k.smem_k);
@@ -369,7 +406,7 @@ inline __device__ void device_1xN_(const Params &params, const int bidb, const i
         __syncthreads();
     }
 
-    // Load the fragments for K. 
+    // Load the fragments for K.
     gemm_q_k.load_k();
 
     // Create the object to do the softmax.
@@ -379,9 +416,6 @@ inline __device__ void device_1xN_(const Params &params, const int bidb, const i
 
     // Load over the entire sequence length.
     for (int l = blockIdx.z; l < steps; l += step_stride) {
-        // if ((threadIdx.x == 0) && (blockIdx.x == 0) && (blockIdx.y == 0) && (blockIdx.z <= 1)) {
-        //     printf("l = %d\n", l);
-        // }
         if ((begin + l) * Cta_tile_p::M >= binfo.actual_seqlen_q) break;
 
         // Declare the accumulators for the 1st gemm.
@@ -391,9 +425,6 @@ inline __device__ void device_1xN_(const Params &params, const int bidb, const i
         // Do this part of P = Q * K^T.
         gemm_q_k(acc_p);
 
-        // if ((threadIdx.x == 0) && (blockIdx.x == 0) && (blockIdx.y == 0) && (l == 0))  {
-        //     printf("acc_p=%.6f, %.6f\n", acc_p[0][0].elt(0), acc_p[0][0].elt(1));
-        // }
 
         uint4 out[Gmem_tile_o::STGS_PER_LOOP];
         if (!Is_first) { gmem_o_tmp.load(out, 0); }
@@ -418,16 +449,11 @@ inline __device__ void device_1xN_(const Params &params, const int bidb, const i
             // if we share K and V, it could be that V was not fully read yet but we write into smem for reduction
             __syncthreads();
         }
-        // if (!Is_first) {
-        //     if ((threadIdx.x == 0) && (blockIdx.x == 0) && (blockIdx.y == 0) && (l >= 0))  {
-        //         printf("p_prev_lse=%.6f, %.6f\n", p_prev_lse[0], p_prev_lse[1]);
-        //     }
-        // }
+
         // Compute the max.
         float p_max[Mma_tile_p::MMAS_M * 2];
         if (!Is_first) {
             smem_softmax_lse.store_pair(p_prev_lse);
-            // for (int mi = 0; mi < Mma_tile_p::MMAS_M * 2; mi++) { p_max[mi] = p_prev_lse[mi]; }
             for (int mi = 0; mi < Mma_tile_p::MMAS_M * 2; mi++) { p_max[mi] = p_prev_lse[mi] / params.scale_bmm1f; }
         }
 
@@ -441,58 +467,17 @@ inline __device__ void device_1xN_(const Params &params, const int bidb, const i
 
         softmax.template reduce_max</*zero_init=*/Is_first>(p_max);
 
-        // if ((threadIdx.x == 0) && (l == 38)) {
-        //     printf("loop_step_idx %d, p_max = %.6f, %.6f., p_prev_lse = %.6f, %.6f\n", loop_step_idx, p_max[0], p_max[1], Is_first ? -10000.f : p_prev_lse[0], Is_first ? -10000.f : p_prev_lse[1]);
-        // }
-
-        // if (!Is_first) {
-        //     if ((threadIdx.x == 0) && (blockIdx.x == 0) && (blockIdx.y == 0) && (l == 0))  {
-        //         printf("after reduce_max=%.6f, %.6f\n", softmax.elt_[0][0], softmax.elt_[0][1]);
-        //     }
-        // }
-
         // Compute the exponential value.
-        // softmax.apply_exp(p_max);
         softmax.scale_apply_exp(p_max, params.scale_bmm1f);
 
-        // if (!Is_first) {
-        //     if ((threadIdx.x == 0) && (blockIdx.x == 0) && (blockIdx.y == 0) && (l == 0))  {
-        //         printf("after apply_exp=%.6f, %.6f\n", softmax.elt_[0][0], softmax.elt_[0][1]);
-        //     }
-        // }
 
         // Compute the sum.
         float p_sum[Mma_tile_p::MMAS_M * 2];
-        // if (!Is_first) {
-        //     int warp = tidx / Cta_tile_p::THREADS_PER_WARP;
-        //     int lane = tidx % Cta_tile_p::THREADS_PER_WARP;
-        //     for (int mi = 0; mi < Mma_tile_p::MMAS_M * 2; mi++) {
-        //         p_sum[mi] = ((warp == 0) && (lane % 4 == 0)) ? expf(p_prev_lse[mi] - p_max[mi]) : 0;
-        //     }
-        // }
-        // softmax.reduce_sum(p_sum);
+
         softmax.reduce_sum_before_sync_(p_sum);
-        // softmax.template reduce_sum_before_sync_</*zero_init=*/Is_first>(p_sum);
-
-        // float p_sum_log[Mma_tile_p::MMAS_M * 2];
-        // for (int mi = 0; mi  < Mma_tile_p::MMAS_M * 2; ++mi) {
-        //     float sum = p_sum[mi];
-        //     // p_sum_log[mi] = (sum == 0.f || sum != sum) ? INFINITY : p_max[mi] + __logf(sum);
-        //     constexpr float kLog2e = M_LOG2E;
-        //     p_sum_log[mi] = (sum == 0.f || sum != sum) ? INFINITY : p_max[mi] * kLog2e + __log2f(sum);
-        // }
-        // // gmem_softmax_lse.store(reinterpret_cast<uint32_t(&)[Mma_tile_p::MMAS_M * 2]>(p_sum));
-        // gmem_softmax_lse.store(reinterpret_cast<uint32_t(&)[Mma_tile_p::MMAS_M * 2]>(p_sum_log));
-        // gmem_softmax_lse.move();
-
-        // // Finalize softmax on the accumulators of P^T.
-        // softmax.scale(p_sum);
 
         constexpr bool encode_dropout_in_sign_bit = Return_softmax;
         if (Is_dropout) {
-            // softmax.template apply_dropout<encode_dropout_in_sign_bit>(ph, params.p_dropout_in_uint);
-            // softmax.template apply_dropout<encode_dropout_in_sign_bit>(ph, ph1, params.p_dropout_in_uint);
-            // softmax.template apply_dropout_16bits<encode_dropout_in_sign_bit>(ph, ph1, params.p_dropout_in_uint16_t);
             unsigned int warp_idx = threadIdx.x / 32;
             // TODO: this should change after we rearrange the warps (e.g. cutlass branch)
             unsigned int block_col_idx = loop_step_idx * Cta_tile_p::N / 16 + warp_idx;
@@ -536,16 +521,7 @@ inline __device__ void device_1xN_(const Params &params, const int bidb, const i
         #pragma unroll
         for( int ki = 0; ki < Mma_tile_o::MMAS_K; ++ki ) {
             fmha::gemm_cl<elem_type>(acc_o, frag_p[ki], frag_v[ki]);
-            // if ((threadIdx.x == 4) && (blockIdx.x == 0) && (blockIdx.y == 0) && (l == 0))  {
-            //     float2 tmp_p = __half22float2(reinterpret_cast<__half2 &>(frag_p[ki]));
-            //     float2 tmp_v = __half22float2(reinterpret_cast<__half2 &>(frag_v[ki]));
-            //     printf("Per warp, threadIdx.x = %d, frag_p = %.6f, %.6f, frag_v = %.6f, %.6f, acc_o=%.6f\n", threadIdx.x, tmp_p.x, tmp_p.y, tmp_v.x, tmp_v.y, acc_o[0][0].elt(0));
-            // }
         }
-
-        // if ((threadIdx.x % 32 == 16) && (blockIdx.x == 0) && (blockIdx.y == 0) && (l == 0))  {
-        //     printf("Per warp, threadIdx.x = %d, acc_o=%.6f\n", threadIdx.x, acc_o[0][2].elt(0));
-        // }
 
         // The mapping from tidx to rows changes between the softmax and the
         // O-reduction. So we recalculate the max.
@@ -563,11 +539,6 @@ inline __device__ void device_1xN_(const Params &params, const int bidb, const i
         if (!Is_first) {
             smem_softmax_lse.load(p_prev_scale_o, rows);
         }
-        // if (!Is_first) {
-        //     if ((threadIdx.x == 0) && (blockIdx.x == 0) && (blockIdx.y == 0) && (l == 0))  {
-        //         printf("p_prev_scale_o=%.6f\n", p_prev_scale_o[0]);
-        //     }
-        // }
 
         static_assert(Gmem_tile_o::LOOPS == 1);
 
@@ -592,14 +563,7 @@ inline __device__ void device_1xN_(const Params &params, const int bidb, const i
         for (int jj = 0; jj < Gmem_tile_o::STGS_PER_LOOP; jj++) {
             float sum = p_sum_o[jj][0];
             p_sum_log[jj][0] = (sum == 0.f || sum != sum) ? -INFINITY : p_max_o[jj][0] + __logf(sum);
-            // if (sum == 0.f || sum != sum) {
-            //     printf("loop_step_idx = %d, l = %d, tidx = %d, sum = %.6f, p_max_o = %.6f\n", loop_step_idx, l, tidx, sum, p_max_o[jj][0]);
-            // }
-            // if (Is_first) {
-            //     if ((threadIdx.x == 0) && (blockIdx.x == 0) && (blockIdx.y == 0) && (l == 0))  {
-            //         printf("p_sum_log=%.6f\n", p_sum_log[jj][0]);
-            //     }
-            // }
+
             if (tidx % Gmem_tile_o::THREADS_PER_ROW == 0) {
                 gmem_softmax_lse.store_row(
                     reinterpret_cast<uint32_t(&)[Mma_tile_p::MMAS_M]>(p_sum_log[jj]), rows[jj]);
@@ -628,12 +592,6 @@ inline __device__ void device_1xN_(const Params &params, const int bidb, const i
             }
             out[jj] = fmha::fmul4(out[jj], inv_sum);
         }
-
-        // if (Is_dropout && Is_last) {
-        //     for (int jj = 0; jj < Gmem_tile_o::STGS_PER_LOOP; jj++) {
-        //         out[jj] = fmha::fmul4(out[jj], params.rp_dropout);
-        //     }
-        // }
 
         // Output the values.
         if (is_final_write) {
@@ -675,8 +633,9 @@ inline __device__ void device_1xN_loop(const Params &params) {
     // (within a warp). We use the subsequence to store the location of the 16 x 16 blocks within
     // the attention matrix. This way, as long as we have the batch, head, and the location of
     // the 16 x 16 block within the attention matrix, we can generate the exact same dropout pattern.
-    auto seeds = at::cuda::philox::unpack(params.philox_args);
-    Philox ph(std::get<0>(seeds), 0, std::get<1>(seeds) + (bidb * params.h + bidh) * 32 + tidx % 32);
+    philox::PhiloxCudaState* arg = reinterpret_cast<philox::PhiloxCudaState*>(params.philox_args);
+    auto seeds = philox::unpack(*arg);
+    philox::Philox ph(std::get<0>(seeds), 0, std::get<1>(seeds) + (bidb * params.h + bidh) * 32 + tidx % 32);
     constexpr int M = Kernel_traits::Cta_tile_p::M;
     const int STEPS = (params.seqlen_q + M - 1) / M;
 
@@ -696,4 +655,3 @@ inline __device__ void device_1xN_loop(const Params &params) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 } // namespace fmha
-

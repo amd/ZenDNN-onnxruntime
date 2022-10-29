@@ -1,6 +1,6 @@
 /******************************************************************************
  * Copyright (c) 2011-2021, NVIDIA CORPORATION.  All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -11,7 +11,7 @@
  *     * Neither the name of the NVIDIA CORPORATION nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -30,7 +30,8 @@
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
 
-#include <fmha/utils.h>
+#include "contrib_ops/cuda/bert/flash_attention/src/fmha/utils.h"
+#include "contrib_ops/cuda/bert/flash_attention/src/fp16_switch.h"
 
 namespace fmha {
 
@@ -153,7 +154,11 @@ struct Gmem_tile_qkv {
         int row_ = tidx_ / THREADS_PER_ROW;
         #pragma unroll
         for( int ii = 0; ii < LDGS; ++ii ) {
+#if ENABLE_FLASH_ATTENTION_BFLOAT16
             using elem2_type = typename std::conditional<std::is_same<elem_type, __half>::value, __half2, __nv_bfloat162>::type;
+#else
+            using elem2_type = __half2;
+#endif
             // char *ptr_ = ptr + (int64_t)ii * ROWS_PER_LDG * row_stride_in_bytes;
             elem2_type *ptr_ = reinterpret_cast<elem2_type *>(ptr + (uint32_t)ii * ROWS_PER_LDG * row_stride_in_bytes);
             if (col_predicate && (row_ + ii * ROWS_PER_LDG) < min(ROWS, actual_seqlen)) {
@@ -373,7 +378,7 @@ struct Gmem_tile_mma_sd {
 
     // Ctor.
     template<typename Params>
-    inline __device__ Gmem_tile_mma_sd(void *ptr, const Params &params, const int bidb, const int bidh, const int tidx) 
+    inline __device__ Gmem_tile_mma_sd(void *ptr, const Params &params, const int bidb, const int bidh, const int tidx)
         : ptr_(static_cast<char *>(ptr)) {
 
         // The block index.
@@ -424,7 +429,7 @@ struct Gmem_tile_mma_s : public Base {
 
     // Ctor.
     template< typename Params, typename Block_info >
-    inline __device__ Gmem_tile_mma_s(const Params &params, const Block_info& binfo, const int tidx) 
+    inline __device__ Gmem_tile_mma_s(const Params &params, const Block_info& binfo, const int tidx)
         : Base(params.s_ptr, params, binfo.bidb, binfo.bidh, tidx) {
     }
 
@@ -496,7 +501,7 @@ struct Gmem_summary_stats {
         uint32_t bidx = bidb * params.h + bidh;
 
         // Extract the position in the warp.
-        int warp = tidx / Cta_tile::THREADS_PER_WARP;
+        //int warp = tidx / Cta_tile::THREADS_PER_WARP;
         int lane = tidx % Cta_tile::THREADS_PER_WARP;
 
         // The distance between two blocks (in bytes).
@@ -582,4 +587,3 @@ struct Gmem_summary_stats {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 }  // namespace fmha
-

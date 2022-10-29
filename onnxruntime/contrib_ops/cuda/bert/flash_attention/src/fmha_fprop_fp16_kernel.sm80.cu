@@ -1,6 +1,6 @@
 /******************************************************************************
  * Copyright (c) 2011-2021, NVIDIA CORPORATION.  All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -11,7 +11,7 @@
  *     * Neither the name of the NVIDIA CORPORATION nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -24,14 +24,15 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  ******************************************************************************/
-
 #include <cuda_fp16.h>
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
 #include <cuda_bf16.h>
+#endif
 
-#include "static_switch.h"
-#include "fp16_switch.h"
-#include "fmha.h"
-#include "fmha_fprop_kernel_1xN.h"
+#include "contrib_ops/cuda/bert/flash_attention/src/static_switch.h"
+#include "contrib_ops/cuda/bert/flash_attention/src/fp16_switch.h"
+#include "contrib_ops/cuda/bert/flash_attention/src/fmha.h"
+#include "contrib_ops/cuda/bert/flash_attention/src/fmha_fprop_kernel_1xN.h"
 
 // Find the number of splits that maximizes the occupancy. For example, if we have
 // batch * n_heads = 48 and we have 108 SMs, having 2 splits (efficiency = 0.89) is
@@ -60,12 +61,12 @@ int num_splits_heuristic_fwd(int batch_nheads, int num_SMs, int ctas_per_sm, int
 }
 
 template<typename Kernel_traits, bool Is_dropout, bool Is_causal, bool Return_softmax>
-__global__ void fmha_fprop_fp16_sm80_loop_kernel(FMHA_fprop_params params) {
+__global__ void fmha_fprop_fp16_sm80_loop_kernel(const FMHA_fprop_params& params) {
     fmha::device_1xN_loop<Kernel_traits, Is_dropout, Is_causal, Return_softmax>(params);
 }
 
 template<typename Kernel_traits>
-void run_fmha_fp16_sm80_loop_(Launch_params<FMHA_fprop_params> &launch_params) {
+void run_fmha_fp16_sm80_loop_(Launch_params<FMHA_fprop_params> &launch_params, const cudaDeviceProp& dprops) {
     constexpr int blocksize_c = Kernel_traits::Cta_tile_p::N;
     const int loop_steps = (launch_params.params.seqlen_k + blocksize_c - 1) / blocksize_c;
 
@@ -94,11 +95,10 @@ void run_fmha_fp16_sm80_loop_(Launch_params<FMHA_fprop_params> &launch_params) {
             int ctas_per_sm;
             cudaError status_ = cudaOccupancyMaxActiveBlocksPerMultiprocessor(
                 &ctas_per_sm, kernel, Kernel_traits::THREADS, smem_size);
-            auto dprops = at::cuda::getCurrentDeviceProperties();
-            // printf("CTAS_PER_SM = %d, nSMs = %d\n", ctas_per_sm, dprops->multiProcessorCount);
+            // printf("CTAS_PER_SM = %d, nSMs = %d\n", ctas_per_sm, dprops.multiProcessorCount);
             constexpr int M = Kernel_traits::Cta_tile_p::M;
             launch_params.params.num_splits = num_splits_heuristic_fwd(
-                launch_params.params.b * launch_params.params.h, dprops->multiProcessorCount,
+                launch_params.params.b * launch_params.params.h, dprops.multiProcessorCount,
                 ctas_per_sm,
                 /*max_splits=*/std::min(30, (launch_params.params.seqlen_q + M - 1 / M))
             );
@@ -111,24 +111,23 @@ void run_fmha_fp16_sm80_loop_(Launch_params<FMHA_fprop_params> &launch_params) {
     });
 }
 
-void run_fmha_fp16_sm80(Launch_params<FMHA_fprop_params> &launch_params) {
+void run_fmha_fp16_sm80(Launch_params<FMHA_fprop_params> &launch_params, const cudaDeviceProp& dprops) {
     FP16_SWITCH(launch_params.params.is_bf16, [&] {
-        auto dprops = at::cuda::getCurrentDeviceProperties();
         if (launch_params.params.d <= 32) {
             if (launch_params.params.seqlen_k == 128) {
                 using Kernel_traits = FMHA_kernel_traits<128, 32, 16, 1, 4, 0x08u, elem_type>;
-                run_fmha_fp16_sm80_loop_<Kernel_traits>(launch_params);
+                run_fmha_fp16_sm80_loop_<Kernel_traits>(launch_params, dprops);
             } else if (launch_params.params.seqlen_k >= 256) {
                 using Kernel_traits = FMHA_kernel_traits<256, 32, 16, 1, 4, 0x08u, elem_type>;
-                run_fmha_fp16_sm80_loop_<Kernel_traits>(launch_params);
+                run_fmha_fp16_sm80_loop_<Kernel_traits>(launch_params, dprops);
             }
         } else if (launch_params.params.d <= 64) {
             if (launch_params.params.seqlen_k == 128) {
                 using Kernel_traits = FMHA_kernel_traits<128, 64, 16, 1, 4, 0x08u, elem_type>;
-                run_fmha_fp16_sm80_loop_<Kernel_traits>(launch_params);
+                run_fmha_fp16_sm80_loop_<Kernel_traits>(launch_params, dprops);
             } else if (launch_params.params.seqlen_k >= 256) {
                 using Kernel_traits = FMHA_kernel_traits<256, 64, 16, 1, 4, 0x08u, elem_type>;
-                run_fmha_fp16_sm80_loop_<Kernel_traits>(launch_params);
+                run_fmha_fp16_sm80_loop_<Kernel_traits>(launch_params, dprops);
             }
         } else if (launch_params.params.d <= 128) {
             // TD [2022-10-21]: Previously for SM80 we use block size 256 and keep K in shared memory
@@ -140,7 +139,7 @@ void run_fmha_fp16_sm80(Launch_params<FMHA_fprop_params> &launch_params) {
             // For causal=True, block size 128 seems always faster (for small & large batch size).
             // So we're just gonna use block size 128 for simplicity.
             using Kernel_traits = FMHA_kernel_traits<128, 128, 16, 1, 4, 0x08u, elem_type>;
-            run_fmha_fp16_sm80_loop_<Kernel_traits>(launch_params);
+            run_fmha_fp16_sm80_loop_<Kernel_traits>(launch_params, dprops);
         }
         // if (launch_params.params.d == 64) {
         //     // using Kernel_traits = FMHA_kernel_traits<128, 64, 16, 1, 4, 0x08u, elem_type>;

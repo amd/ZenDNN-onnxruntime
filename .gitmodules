@@ -79,5 +79,5 @@
 	path = cmake/external/XNNPACK
 	url = https://github.com/google/XNNPACK.git
 [submodule "onnxruntime/contrib_ops/cuda/bert/flash_attention/cutlass"]
-	path = onnxruntime/contrib_ops/cuda/bert/flash_attention/cutlass
+	path = cmake/external/cutlass
 	url = https://github.com/NVIDIA/cutlass.git

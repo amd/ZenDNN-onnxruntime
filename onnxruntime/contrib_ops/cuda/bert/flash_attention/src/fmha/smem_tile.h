@@ -27,9 +27,8 @@
 
 #pragma once
 
-#include "utils.h"
-#include <fmha/utils.h>
-#include <fmha/gemm.h>
+#include "contrib_ops/cuda/bert/flash_attention/src/fmha/utils.h"
+#include "contrib_ops/cuda/bert/flash_attention/src/fmha/gemm.h"
 
 namespace fmha {
 
@@ -1649,7 +1648,7 @@ struct Smem_tile_dp_sum {
     inline __device__ void store_pair(const float (&sum)[MMAS_M * 2]) {
         float *smem_write = smem_;
         // Extract the position in the warp.
-        int warp = tidx_ / Cta_tile::THREADS_PER_WARP;
+        //int warp = tidx_ / Cta_tile::THREADS_PER_WARP;
         int lane = tidx_ % Cta_tile::THREADS_PER_WARP;
         int row = lane / 4;
         #pragma unroll

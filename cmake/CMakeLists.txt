@@ -145,6 +145,8 @@ option(onnxruntime_RUN_MODELTEST_IN_DEBUG_MODE "Run model tests even in debug mo
 # build configuration for fuzz testing is in onnxruntime_fuzz_test.cmake
 option(onnxruntime_FUZZ_TEST "Enable Fuzz testing" OFF)
 
+option(onnxruntime_ENABLE_FLASH_ATTENTION "Enable flash attention" ON)
+
 # training options
 option(onnxruntime_ENABLE_NVTX_PROFILE "Enable NVTX profile." OFF)
 option(onnxruntime_ENABLE_MEMORY_PROFILE "Enable memory profile." OFF)
@@ -1818,17 +1820,21 @@ if (onnxruntime_USE_CUDA)
         set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_87,code=sm_87") # AGX Orin, NX Orin
       endif()
     else()
-      # the following compute capabilities are removed in CUDA 11 Toolkit
-      if (CMAKE_CUDA_COMPILER_VERSION VERSION_LESS 11)
-        set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_30,code=sm_30") # K series
-      endif()
-      # 37, 50 still work in CUDA 11 but are marked deprecated and will be removed in future CUDA version.
-      set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_37,code=sm_37") # K80
-      set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_50,code=sm_50") # M series
+      if (onnxruntime_ENABLE_FLASH_ATTENTION)
+        message( STATUS "Only enable SM75 and SM80 for flash attention")
+      else()
+        # the following compute capabilities are removed in CUDA 11 Toolkit
+        if (CMAKE_CUDA_COMPILER_VERSION VERSION_LESS 11)
+          set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_30,code=sm_30") # K series
+        endif()
+        # 37, 50 still work in CUDA 11 but are marked deprecated and will be removed in future CUDA version.
+        set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_37,code=sm_37") # K80
+        set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_50,code=sm_50") # M series
 
-      set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_52,code=sm_52") # M60
-      set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_60,code=sm_60") # P series
-      set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_70,code=sm_70") # V series
+        set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_52,code=sm_52") # M60
+        set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_60,code=sm_60") # P series
+        set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_70,code=sm_70") # V series
+      endif()
       set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_75,code=sm_75") # T series
       if (CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 11)
         set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_80,code=sm_80") # A series
@@ -1849,6 +1855,21 @@ if (onnxruntime_USE_CUDA)
 
   if (onnxruntime_ENABLE_CUDA_LINE_NUMBER_INFO)
     add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:--generate-line-info>")
+  endif()
+
+  if (onnxruntime_ENABLE_FLASH_ATTENTION)
+    # To get parity with flash attention. TODO: remove these
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -fno-strict-aliasing")
+    add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:-fno-strict-aliasing>")
+    add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:-O3>")
+    add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:-std=c++17>")
+    add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:-U__CUDA_NO_HALF_OPERATORS__>")
+    add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:-U__CUDA_NO_HALF_CONVERSIONS__>")
+    add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>")
+    add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:--expt-extended-lambda>")
+    add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>")
+    add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:--ptxas-options=-v>")
+    add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:-lineinfo>")
   endif()
 endif()
 
