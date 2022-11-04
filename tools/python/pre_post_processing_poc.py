@@ -37,6 +37,12 @@ TENSOR_TYPE_TO_ONNX_GRAPH_TYPE = {
 PRE_POST_PROCESSING_ONNX_OPSET = 16
 
 
+def get_opset_imports():
+    return {'': PRE_POST_PROCESSING_ONNX_OPSET,
+            'com.microsoft.ext': 1,
+            'ai.onnx.contrib': 1}
+
+
 # Create an checker context that includes the ort-ext domain so that custom ops don't cause failure
 def _create_custom_op_checker_context():
     context = onnx.checker.C.CheckerContext()
@@ -44,7 +50,7 @@ def _create_custom_op_checker_context():
 
     # arbitrary default of ONNX v16 and example custom op domain.
     onnx_version = PRE_POST_PROCESSING_ONNX_OPSET
-    context.opset_imports = {'': onnx_version, 'ortext': 1}
+    context.opset_imports = get_opset_imports()
 
     return context
 
@@ -256,7 +262,8 @@ class PrePostProcessor:
         # update to the ONNX opset we're using
         model_opset = [entry.version for entry in model.opset_import
                        if entry.domain == '' or entry.domain == 'ai.onnx'][0]
-        if (model_opset > PRE_POST_PROCESSING_ONNX_OPSET):
+
+        if model_opset > PRE_POST_PROCESSING_ONNX_OPSET:
             # It will probably work if the user updates PRE_POST_PROCESSING_ONNX_OPSET to match the model
             # but there are no guarantees.
             # Would only break if ONNX operators used in the pre/post processing graphs have had spec changes.
@@ -349,9 +356,14 @@ class PrePostProcessor:
             graph = onnx.compose.merge_graphs(graph, post_process_graph, io_map)
 
         new_model = onnx.helper.make_model(graph)
-        custom_op_import = new_model.opset_import.add()
-        custom_op_import.domain = 'ortext'
-        custom_op_import.version = 1
+
+        for domain, opset in get_opset_imports().items():
+            # skip onnx domain
+            if domain:
+                custom_op_import = new_model.opset_import.add()
+                custom_op_import.domain = domain
+                custom_op_import.version = opset
+
         onnx.checker.check_model(new_model)
 
         if Step.debug:
@@ -424,25 +436,56 @@ class PrePostProcessor:
 
             return match
 
+
 #
 # Pre/Post processing steps
 #
-class ConvertImageToRGB(Step):
+class ConvertImageToBGR(Step):
     def __init__(self, name: str = None):
-        super().__init__(['image'], ['rgb_data'], name)
+        super().__init__(['image'], ['bgr_data'], name)
 
     def _create_graph_for_step(self, graph: onnx.GraphProto):
         input_type_str, input_shape_str = self._get_input_type_and_shape_strs(graph, 0)
         assert(input_type_str == 'uint8')
-        output_shape_str = f'torgb_ppp_{self.step_num}_h, torgb_ppp_{self.step_num}_w, torgb_ppp_{self.step_num}_c'
+        output_shape_str = f'to_bgr_ppp_{self.step_num}_h, to_bgr_ppp_{self.step_num}_w, 3'
 
         converter_graph = onnx.parser.parse_graph(f'''\
-            convert_to_rgb (uint8[{input_shape_str}] {self.input_names[0]}) 
-                => (uint8[{output_shape_str}C] {self.output_names[0]})  
+            image_to_bgr (uint8[{input_shape_str}] {self.input_names[0]}) 
+                => (uint8[{output_shape_str}] {self.output_names[0]})  
             {{
-                {self.output_names[0]} = ortext.ConvertImageToRGB ({self.input_names[0]})
+                {self.output_names[0]} =  com.microsoft.ext.DecodeImage({self.input_names[0]})
             }}
             ''')
+
+        onnx.checker.check_graph(converter_graph, Step._custom_op_checker_context)
+        return converter_graph
+
+
+class ConvertBGRToImage(Step):
+    def __init__(self, image_format: str = 'jpg', name: str = None):
+        super().__init__(['bgr_data'], ['image'], name)
+        assert(image_format == 'jpg' or image_format == 'png')
+        self.format_ = image_format
+
+    def _create_graph_for_step(self, graph: onnx.GraphProto):
+        input_type_str, input_shape_str = self._get_input_type_and_shape_strs(graph, 0)
+        assert(input_type_str == 'uint8')
+        output_shape_str = f'to_image_ppp_{self.step_num}_num_bytes'
+
+        converter_graph = onnx.parser.parse_graph(f'''\
+            bgr_to_image (uint8[{input_shape_str}] {self.input_names[0]}) 
+                => (uint8[{output_shape_str}] {self.output_names[0]})  
+            {{
+                {self.output_names[0]} = com.microsoft.ext.EncodeImage ({self.input_names[0]})
+            }}
+            ''')
+
+        # as this is a custom op we have to add the attribute for format directly to the node as parse_graph
+        # doesn't know the type to validate it.
+        format_attr = converter_graph.node[0].attribute.add()
+        format_attr.name = "format"
+        format_attr.type = onnx.AttributeProto.AttributeType.STRING
+        format_attr.s = bytes(self.format_, 'utf-8')
 
         onnx.checker.check_graph(converter_graph, Step._custom_op_checker_context)
         return converter_graph
@@ -546,7 +589,7 @@ class ImageBytesToFloat(Step):
     Convert uint8 image data to float by dividing by 255.
     """
     def __init__(self, name: str = None):
-        super().__init__(['data'], ['flaot_data'], name)
+        super().__init__(['data'], ['float_data'], name)
 
     def _create_graph_for_step(self, graph: onnx.GraphProto):
         input_type_str, input_shape_str = self._get_input_type_and_shape_strs(graph, 0)
@@ -722,36 +765,84 @@ class Transpose(Step):
         return transpose_graph
 
 
-class NhwcToNchw(Transpose):
+class ChannelsLastToChannelsFirst(Transpose):
+    def __init__(self, has_batch_dim: bool = False, name: str = None):
+        # TODO: this could be inferred from the input shape rank
+        perms = [0, 3, 1, 2] if has_batch_dim else [2, 0, 1]
+        super().__init__(perms, name)
+
+
+class Softmax(Step):
     def __init__(self, name: str = None):
-        super().__init__([0, 3, 1, 2], name)
-
-
-class HwcToChw(Transpose):
-    def __init__(self, name: str = None):
-        super().__init__([2, 0, 1], name)
-
-
-class RGBToYCbCr(Step):
-    def __init__(self, name: str = None):
-        super().__init__(['rgb_data'], ['Y', 'Cb', 'Cr'], name)
+        super().__init__(['data'], ['probabilities'], name)
 
     def _create_graph_for_step(self, graph: onnx.GraphProto):
         input_type_str, input_shape_str = self._get_input_type_and_shape_strs(graph, 0)
-        assert(input_type_str == 'uint8')
+
+        softmax_graph = onnx.parser.parse_graph(f'''\
+            softmax ({input_type_str}[{input_shape_str}] {self.input_names[0]}) 
+                => ({input_type_str}[{input_shape_str}] {self.output_names[0]})
+            {{
+                {self.output_names[0]} = Softmax ({self.input_names[0]})
+            }}
+            ''')
+
+        onnx.checker.check_graph(softmax_graph, Step._custom_op_checker_context)
+        return softmax_graph
+
+
+class BGRToYCbCr(Step):
+    def __init__(self, name: str = None):
+        super().__init__(['bgr_data'], ['Y', 'Cb', 'Cr'], name)
+
+    def _create_graph_for_step(self, graph: onnx.GraphProto):
+        input_type_str, input_shape_str = self._get_input_type_and_shape_strs(graph, 0)
+        # input should be uint8 data HWC
+        input_dims = input_shape_str.split(',')
+        assert(input_type_str == 'uint8' and len(input_dims) == 3 and input_dims[2] == '3')
+
+        # https://github.com/Lornatang/SRGAN-PyTorch/blob/main/imgproc.py#L354
+        #         image = np.matmul(image, [[24.966, 112.0, -18.214],
+        #                                   [128.553, -74.203, -93.786],
+        #                                   [65.481, -37.797, 112.0]]) + [16, 128, 128]
+
+        weights_shape = "3, 3"
+        weights = '''24.966, 112.0, -18.214, \
+                    128.553, -74.203, -93.786, 
+                    65.481, -37.797, 112.0'''
+
+        bias_shape = "3"
+        bias = "16.0, 128.0, 128.0"
 
         # each output is {h, w}. TBD if input is CHW or HWC though. Once we figure that out we could copy values from
         # the input shape
-        output_shape_str = f'ToYCbCr_ppp_{self.step_num}_h, ToYCbCr_ppp_{self.step_num}_w'
+        output_shape_str = f'bgr_to_YCbCr_ppp_{self.step_num}_h, ToYCbCr_ppp_{self.step_num}_w'
         assert(input_type_str == "uint8")
 
+        # convert to float for MatMul
+        # apply weights and bias
+        # normalize range by dividing by 255
+        # split into channels. shape will be {h, w, 1}
+        # remove the trailing '1' so output is {h, w}
         converter_graph = onnx.parser.parse_graph(f'''\
-            RGB_to_YCbCr (uint8[{input_shape_str}] {self.input_names[0]}) 
-                => (uint8[{output_shape_str}] {self.output_names[0]},
-                    uint8[{output_shape_str}] {self.output_names[1]},
-                    uint8[{output_shape_str}] {self.output_names[2]})  
+            BGR_to_YCbCr (uint8[{input_shape_str}] {self.input_names[0]})
+                => (float[{output_shape_str}] {self.output_names[0]},
+                    float[{output_shape_str}] {self.output_names[1]},
+                    float[{output_shape_str}] {self.output_names[2]})  
             {{
-                {','.join(self.output_names)} = ortext.RGBToYCbCr ({self.input_names[0]})
+                kWeights = Constant <value = float[{weights_shape}] {{{weights}}}> ()
+                kBias = Constant <value = float[{bias_shape}] {{{bias}}}> ()
+                k255 = Constant <value = float[1] {{255.0}}> ()
+                kMinus1 = Constant <value = int64[1] {{-1}}> ()
+
+                float_bgr = Cast <to = 1> ({self.input_names[0]})
+                mm_out = MatMul(float_bgr, kWeights)
+                add_bias = Add(mm_out, kBias)
+                norm = Div(add_bias, k255)
+                split_Y, split_Cb, split_Cr = Split <axis = -1>(norm)
+                {self.output_names[0]} = Squeeze (split_Y, kMinus1)
+                {self.output_names[1]} = Squeeze (split_Cb, kMinus1)
+                {self.output_names[2]} = Squeeze (split_Cr, kMinus1)
             }}
             ''')
 
@@ -759,32 +850,100 @@ class RGBToYCbCr(Step):
         return converter_graph
 
 
-class YCbCrToRGB(Step):
+class YCbCrToBGR(Step):
     def __init__(self, name: str = None):
-        super().__init__(['Y', 'Cb', 'Cr'], ['rgb_data'], name)
+        super().__init__(['Y', 'Cb', 'Cr'], ['bgr_data'], name)
 
     def _create_graph_for_step(self, graph: onnx.GraphProto):
         input_type_str0, input_shape_str0 = self._get_input_type_and_shape_strs(graph, 0)
         input_type_str1, input_shape_str1 = self._get_input_type_and_shape_strs(graph, 1)
         input_type_str2, input_shape_str2 = self._get_input_type_and_shape_strs(graph, 2)
-        assert(input_type_str0 == 'uint8' and input_type_str0 == input_type_str1 and input_type_str0 == input_type_str2)
-        assert(len(input_shape_str0.split(',')) == len(input_shape_str1.split(',')) and
-               len(input_shape_str0.split(',')) == len(input_shape_str2.split(',')))
+        assert(input_type_str0 == 'float' and input_type_str1 == 'float' and input_type_str2 == 'float')
+        assert(len(input_shape_str0.split(',')) == 2 and
+               len(input_shape_str1.split(',')) == 2 and
+               len(input_shape_str2.split(',')) == 2)
 
-        output_shape_str = f'3,{input_shape_str0}'
+        output_shape_str = f'{input_shape_str0}, 3'
 
+        # https://github.com/Lornatang/SRGAN-PyTorch/blob/edef4ddad317273868295c5639c9700c29153fc4/imgproc.py#L386
+        #     image *= 255
+        #     image = np.matmul(image, [[0.00456621, 0.00456621, 0.00456621],
+        #                               [0.00791071, -0.00153632, 0],
+        #                               [0, -0.00318811, 0.00625893]]) * 255.0 + [-276.836, 135.576, -222.921]
+        #     image /= 255
+        weights_shape = "3, 3"
+        weights = '''0.00456621, 0.00456621, 0.00456621, \
+                     0.00791071, -0.00153632, 0,        
+                     0, -0.00318811, 0.00625893 '''
+
+        bias_shape = "3"
+        bias = "-276.836, 135.576, -222.92"
+
+        # unsqueeze the {h, w} Cb and Cr inputs to {h, w, 1}
+        # merge Y, Cb, Cr data on channels axis
+        # apply the calculations. assuming the extra *255 and /255 around adding the bias is for accuracy reasons
+        # cast result to uint8
         converter_graph = onnx.parser.parse_graph(f'''\
             YCbCr_to_RGB (uint8[{input_shape_str0}] {self.input_names[0]},
                           uint8[{input_shape_str1}] {self.input_names[1]},
                           uint8[{input_shape_str2}] {self.input_names[2]}) 
                 => (uint8[{output_shape_str}] {self.output_names[0]})  
             {{
-                {self.output_names[0]} = ortext.YCbCrToRGB ({','.join(self.input_names)})
+                kWeights = Constant <value = float[{weights_shape}] {{{weights}}}> ()
+                kBias = Constant <value = float[{bias_shape}] {{{bias}}}> ()
+                kMinus1 = Constant <value = int64[1] {{-1}}> ()
+                k255 = Constant <value = float[1] {{255.0}}> ()
+
+                Y1 = Unsqueeze({self.input_names[0]}, kMinus1)
+                Cb1 = Unsqueeze({self.input_names[1]}, kMinus1)
+                Cr1 = Unsqueeze({self.input_names[2]}, kMinus1)
+                YCbCr1 = Concat <axis = -1>(Y1, Cb1, Cr1)
+                denorm = Mul(YCbCr1, k255)
+                mm_out = MatMul(denorm, kWeights)
+                mm_out_x255 = Mul(mm_out, k255)
+                add_bias = Add(mm_out_x255, kBias)
+                div_255 = Div(add_bias, k255)
+                {self.output_names[0]} = Cast <to = 2>(div_255)
             }}
             ''')
 
         onnx.checker.check_graph(converter_graph, Step._custom_op_checker_context)
         return converter_graph
+
+
+class ReverseAxis(Step):
+    def __init__(self, axis: int = -1, dim_value: int = -1, name: str = None):
+        super().__init__(['data'], ['updated_data'], name)
+        self.axis_ = axis
+        self.dim_value_ = dim_value
+
+    def _create_graph_for_step(self, graph: onnx.GraphProto):
+        input_type_str, input_shape_str = self._get_input_type_and_shape_strs(graph, 0)
+        input_dims = input_shape_str.split(',')
+        split_dim = input_dims[self.axis_]
+
+        if split_dim.isdigit():
+            dim_value = int(split_dim)
+            if self.dim_value_ != -1:
+                assert(dim_value == self.dim_value_)
+            else:
+                self.dim_value_ = dim_value
+
+        split_outs = []
+        for i in range(0, self.dim_value_):
+            split_outs.append(f'split_out_{i}')
+
+        reverse_graph = onnx.parser.parse_graph(f'''\
+            reverse_axis ({input_type_str}[{input_shape_str}] {self.input_names[0]})
+                => ({input_type_str}[{input_shape_str}] {self.output_names[0]})  
+            {{
+                {','.join(split_outs)} = Split <axis = {self.axis_}> ({self.input_names[0]})
+                {self.output_names[0]} = Concat <axis = {self.axis_}> ({','.join(reversed(split_outs))})
+            }}
+            ''')
+
+        onnx.checker.check_graph(reverse_graph)
+        return reverse_graph
 
 
 def create_value_info_for_image_bytes(name: str):
@@ -811,17 +970,23 @@ def mobilenet(model_file: Path, output_file: Path, model_source: ModelSource = M
         # https://github.com/tensorflow/examples/blob/9eb657f949c2e8ec8592a9576811db38a86dcbc0/lite/examples/image_classification/metadata/metadata_writer_for_image_classifier.py#L64
         normalization_params = [(0.5, 0.5)]
 
-    runner = PrePostProcessor(inputs)
-    runner.add_pre_processing([
-        ConvertImageToRGB(),  # custom op to convert jpg/png to RGB (output is HWC)
+    pipeline = PrePostProcessor(inputs)
+    pipeline.add_pre_processing([
+        ConvertImageToBGR(),  # custom op to convert jpg/png to BGR (output is HWC)
         Resize(256, 256),
         CenterCrop(244, 244),
         ImageBytesToFloat(),
+        ChannelsLastToChannelsFirst(),  # BGR in CHW layout
         Normalize(normalization_params),
+        ReverseAxis(axis=0, dim_value=3, name="BGR_to_RGB"),  # RGB in CHW layout
         Unsqueeze([0])  # add batch dim of 1 to match model input shape
     ])
 
-    new_model = runner.run(model)
+    pipeline.add_post_processing([
+        Softmax()
+    ])
+
+    new_model = pipeline.run(model)
 
     onnx.save_model(new_model, str(output_file.resolve()))
 
@@ -851,12 +1016,11 @@ def superresolution(model_file: Path, output_file: Path):
 
     pipeline = PrePostProcessor(inputs)
     pipeline.add_pre_processing([
-        ConvertImageToRGB(),  # jpg/png image to RGB (HWC)
+        ConvertImageToBGR(),  # jpg/png image to BGR in HWC layout
         Resize(h_in, w_in),
         CenterCrop(h_in, w_in),
-        RGBToYCbCr(),         # this produces Y, Cb and Cr outputs. each has shape {h_in, w_in}
-        ImageBytesToFloat(),  # we only need to process the Y channel from the previous step so default mapping is fine
-        Unsqueeze([0, 1]),    # add batch and channels dim so shape is {1, h_in, w_in}
+        BGRToYCbCr(),  # this produces Y, Cb and Cr outputs. each has shape {h_in, w_in}. only Y is input to model
+        Unsqueeze([0, 1], "UnsqueezeY"),    # add batch and channels dim so shape is {1, 1, h_in, w_in}
     ])
 
     # Post-processing is complicated here. resize the Cb and Cr outputs from the pre-processing to match
@@ -864,15 +1028,16 @@ def superresolution(model_file: Path, output_file: Path):
 
     # create the Steps we need to use in the manual connections
     pipeline.add_post_processing([
-        FloatToImageBytes(),
         Squeeze([0, 1], 'RemoveBatchAndChannelsDims'),
         # Verbose example with param names for IoMapEntry to clarify
-        (Resize(h_out, w_out, 'HW', 'Resize_Cb'), [IoMapEntry(producer='RGBToYCbCr', producer_idx=1, consumer_idx=0)]),
-        (Resize(h_out, w_out, 'HW', 'Resize_Cr'), [IoMapEntry('RGBToYCbCr', 2, 0)]),
-        (YCbCrToRGB(), [IoMapEntry('RemoveBatchAndChannelsDims', 0, 0),  # Y' with shape {h, w}
+        (Resize(h_out, w_out, 'HW', 'Resize_Cb'), [IoMapEntry(producer='BGRToYCbCr', producer_idx=1, consumer_idx=0)]),
+        (Resize(h_out, w_out, 'HW', 'Resize_Cr'), [IoMapEntry('BGRToYCbCr', 2, 0)]),
+        (YCbCrToBGR(), [IoMapEntry('RemoveBatchAndChannelsDims', 0, 0),  # Y' with shape {h, w}
                         IoMapEntry('Resize_Cb', 0, 1),
                         IoMapEntry('Resize_Cr', 0, 2)]),
-        # TODO: Convert from RGB to original input format (jpg/png)
+        # jpg or png are supported. could detect image type in pre-processing,
+        # make it an extra output of ConvertImageToBGR and pass through. Or user could hardcode output format.
+        ConvertBGRToImage(image_format='jpg')
     ])
 
     new_model = pipeline.run(model)
