@@ -195,7 +195,10 @@ class ORTModule(torch.nn.Module):
         # they do not show up in _modules because they are abstracted away behind another class,
         # TorchModule. In order to apply changes to those sub-modules, delegate the task to _torch_module
         # which will recursively update the flattened_module and the original module.
-        self._torch_module.train(mode)
+        # when training, mode is True, and the call to function "train" is recursively executed on all sub-modules,
+        # which is very time consuming. So add a condition to avoid this.
+        if self._torch_module.is_training() != mode:
+            self._torch_module.train(mode)
         return self
 
     def state_dict(self, destination=None, prefix="", keep_vars=False):
