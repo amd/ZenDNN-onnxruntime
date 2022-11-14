@@ -36,6 +36,7 @@
 #include "core/optimizer/dropout_elimination.h"
 #include "core/optimizer/dynamic_quantize_matmul_fusion.h"
 #include "core/optimizer/embed_layer_norm_fusion.h"
+#include "core/optimizer/elementwise_fusion.h"
 #include "core/optimizer/expand_elimination.h"
 #include "core/optimizer/fast_gelu_fusion.h"
 #include "core/optimizer/free_dim_override_transformer.h"
@@ -299,6 +300,8 @@ InlinedVector<std::unique_ptr<GraphTransformer>> GenerateTransformers(
         transformers.emplace_back(std::make_unique<Avx2WeightS8ToU8Transformer>(cpu_ep));
       }
 #endif
+
+      transformers.emplace_back(std::make_unique<ElementwiseFusion>(cuda_rocm_eps));
 
 #endif
       // The QDQFinalCleanupTransformer must run AFTER other transformers that fuse Q/DQ nodes. Otherwise, their

@@ -2622,6 +2622,18 @@ This op functions in much the same was as Dropout-11 and Dropout-13 do, execpt t
                       "Allow inputs and outputs to be any kind of tensor.");
 #endif
 
+  ONNX_CONTRIB_OPERATOR_SCHEMA(FusedElementwise)
+      .SetDomain(kMSDomain)
+      .SinceVersion(1)
+      .Attr("op_types", "Op types.", AttributeProto::STRINGS)
+      .AllowUncheckedAttributes()
+      .Input(0, "input", "Input tensors.", "T", OpSchema::Variadic)
+      .Output(0, "output", "The output.", "T")
+      .TypeConstraint("T", OpSchema::all_tensor_types_with_bfloat(),
+                      "Allow inputs and outputs to be any kind of tensor.")
+      .TypeAndShapeInferenceFunction(
+          [](ONNX_NAMESPACE::InferenceContext& ctx) { propagateShapeAndTypeFromFirstInput(ctx); });
+
 #ifndef _OPSCHEMA_LIB_
   // Register the NCHWc schemas if supported by the platform.
   if (MlasNchwcGetBlockSize() > 1) {
