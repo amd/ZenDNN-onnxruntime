@@ -166,7 +166,7 @@ std::optional<std::vector<int64_t>> ApiValueInfo::Shape() const {
   const auto dims = shape.GetDims();
   std::vector<int64_t> result;
   result.reserve(dims.size());
-  result.assign(dims.cbegin(), dims.cend());
+  result.assign(dims.begin(), dims.end());
   return result;
 }
 
@@ -253,7 +253,7 @@ void ApiValueInfo::UnsqueezeDims(const std::vector<int64_t>& axes) {
 std::vector<int64_t> ApiTensor::Shape() const {
   TensorShape shape = utils::GetTensorShapeFromTensorProto(tensor_proto_);
   const auto dims = shape.GetDims();
-  return std::vector<int64_t>{dims.cbegin(), dims.cend()};
+  return std::vector<int64_t>{dims.begin(), dims.end()};
 }
 
 size_t ApiTensor::NumElements() const {
@@ -909,7 +909,18 @@ Status TransformLayoutForEP(Graph& graph, bool& modified, const IExecutionProvid
         onnx_layout_transformation::WrapTransposesAroundNode(*api_graph, *node, {&input_perm}, {&output_perm});
       }
 
-      onnx_layout_transformation::SwapNodeOpTypeAndDomain(*api_graph, *node, node->OpType(), kMSInternalNHWCDomain);
+      [[maybe_unused]] auto new_node_ref =
+        onnx_layout_transformation::SwapNodeOpTypeAndDomain(*api_graph, *node, node->OpType(), kMSInternalNHWCDomain);
+
+#if !defined(ORT_MINIMAL_BUILD)
+      // Set the schema if one is available. This keeps the node equivalent with the state of the original ONNX
+      // node (if possible - some replacement nodes do not have a schema).
+      //
+      Node& new_node = NodeFromApiNode(*new_node_ref);
+      // add schema if available.
+      // not guaranteed to be (compiling EP doesn't need schemas, not available in minimal build
+      graph.SetOpSchemaFromRegistryForNode(new_node);
+#endif
       modified = true;
     }
   }

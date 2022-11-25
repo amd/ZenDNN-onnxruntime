@@ -15,6 +15,8 @@
 #include "core/framework/kernel_registry.h"
 #include "core/providers/shared/node_unit/node_unit.h"
 
+#include "xnnpack_init.h"
+
 namespace onnxruntime {
 
 namespace xnnpack {
@@ -49,11 +51,18 @@ class ONNX_OPERATOR_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kMSInternalNHWC
 class ONNX_OPERATOR_KERNEL_CLASS_NAME(kXnnpackExecutionProvider,
                                       kDynamicDomainByCreate, 1, QLinearSoftmax);
 
+class ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kOnnxDomain, 7, 12, Gemm);
+class ONNX_OPERATOR_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kOnnxDomain, 13, Gemm);
+
+class ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kOnnxDomain, 1, 12, MatMul);
+class ONNX_OPERATOR_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kOnnxDomain, 13, MatMul);
+
 std::unique_ptr<KernelRegistry> RegisterKernels() {
   auto kernel_registry = std::make_unique<onnxruntime::KernelRegistry>();
 
   static const BuildKernelCreateInfoFn function_table[] = {
       BuildKernelCreateInfo<void>,  // default entry to avoid the list becoming empty after ops-reducing
+
       KERNEL_CREATE_INFO(11, Conv),
       KERNEL_CREATE_INFO_VERSIONED(11, 11, MaxPool),
       KERNEL_CREATE_INFO(12, MaxPool),
@@ -63,6 +72,14 @@ std::unique_ptr<KernelRegistry> RegisterKernels() {
           ONNX_OPERATOR_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kOnnxDomain, 13, Softmax)>,
       BuildKernelCreateInfo<
           ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kOnnxDomain, 1, 12, Softmax)>,
+      BuildKernelCreateInfo<
+          ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kOnnxDomain, 7, 12, Gemm)>,
+      BuildKernelCreateInfo<
+          ONNX_OPERATOR_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kOnnxDomain, 13, Gemm)>,
+        BuildKernelCreateInfo<
+          ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kOnnxDomain, 1, 12, MatMul)>,
+      BuildKernelCreateInfo<
+          ONNX_OPERATOR_KERNEL_CLASS_NAME(kXnnpackExecutionProvider, kOnnxDomain, 13, MatMul)>,
 
       //  quantization op
       KERNEL_CREATE_INFO_TYPED(10, uint8_t, QLinearConv),
@@ -97,8 +114,12 @@ XnnpackExecutionProvider::XnnpackExecutionProvider(const XnnpackExecutionProvide
 
 // implement RegisterAllocator to test/validate sharing the CPU EP's allocator
 void XnnpackExecutionProvider::RegisterAllocator(AllocatorManager& allocator_manager) {
-  OrtDevice cpu_device{OrtDevice::CPU, OrtDevice::MemType::DEFAULT, DEFAULT_CPU_ALLOCATOR_DEVICE_ID};
+  const OrtDevice cpu_device{OrtDevice::CPU, OrtDevice::MemType::DEFAULT, DEFAULT_CPU_ALLOCATOR_DEVICE_ID};
 
+  // for one reason, we have to store allocator and keep it alive among the whole life cycle of process.
+  // 1. xnn_initialize only take effect at the first call,it means the first allocator is shared
+  // by all following xnnpack EP sessions. A static allocator is used to extend its life cycle.
+  const auto& [stored_allocator, xnn_allocator] = GetStoredAllocator();
   // if EP is used in multiple inference sessions we may already have an allocator. if so use that.
   auto cpu_alloc = GetAllocator(cpu_device.Id(), OrtMemTypeDefault);
   if (!cpu_alloc) {
@@ -107,13 +128,14 @@ void XnnpackExecutionProvider::RegisterAllocator(AllocatorManager& allocator_man
 
     if (!cpu_alloc) {
       // create our allocator
-      AllocatorCreationInfo allocator_info(
+      const AllocatorCreationInfo allocator_info(
           [](int) {
+            // lazy create the allocator
             return std::make_unique<CPUAllocator>(OrtMemoryInfo(kXnnpackExecutionProvider,
                                                                 OrtAllocatorType::OrtDeviceAllocator));
           });
-
-      cpu_alloc = CreateAllocator(allocator_info);
+      // only the first time we create the allocator do we pass in the xnn_allocator
+      cpu_alloc = stored_allocator ? stored_allocator : CreateAllocator(allocator_info);
       // enable sharing of our allocator
       allocator_manager.InsertAllocator(cpu_alloc);
     }
@@ -121,9 +143,12 @@ void XnnpackExecutionProvider::RegisterAllocator(AllocatorManager& allocator_man
     InsertAllocator(cpu_alloc);
   }
 
-  // TODO: Create `struct xnn_allocator` that wraps cpu_allocator, and provide in the call to xnn_initialize so that
-  //       xnnpack is using the ORT allocator.
-  xnn_status st = xnn_initialize(nullptr);
+  if (!stored_allocator) {
+    stored_allocator = cpu_alloc;
+  }
+
+  xnn_allocator->context = cpu_alloc.get();
+  const xnn_status st = xnn_initialize(xnn_allocator);
   if (st != xnn_status_success) {
     ORT_THROW("XNNPACK initialization failed with status ", st);
   }
