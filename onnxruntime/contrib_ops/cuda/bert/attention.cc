@@ -120,7 +120,6 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
   }
 
   cublasHandle_t cublas = CublasHandle();
-  constexpr size_t element_size = sizeof(T);
 
   IAllocatorUniquePtr<T> gemm_buffer;
   if (weights != nullptr) {
@@ -128,8 +127,7 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
     int m = batch_size * sequence_length;
     int n = (parameters.hidden_size + parameters.hidden_size + parameters.v_hidden_size);
     int k = parameters.input_hidden_size;
-    size_t gemm_buffer_size = static_cast<size_t>(batch_size) * sequence_length * n * element_size;
-    gemm_buffer = GetScratchBuffer<T>(gemm_buffer_size);
+    gemm_buffer = GetScratchBuffer<T>(static_cast<size_t>(m) * n);
 
     typedef typename ToCudaType<T>::MappedType CudaT;
     CudaT one = ToCudaType<T>::FromFloat(1.0f);
@@ -143,6 +141,7 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
         &zero, reinterpret_cast<CudaT*>(gemm_buffer.get()), n, device_prop));
   }
 
+  constexpr size_t element_size = sizeof(T);
   size_t workSpaceSize = GetAttentionWorkspaceSize(element_size,
                                                    parameters.batch_size,
                                                    parameters.num_heads,
