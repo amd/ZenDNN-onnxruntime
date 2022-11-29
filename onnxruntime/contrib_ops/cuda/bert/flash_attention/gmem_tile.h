@@ -135,47 +135,6 @@ struct Gmem_tile_qkv {
         }
     }
 
-    template <typename elem_type>
-    inline __device__ void atomic_add(const uint4 (&data)[LDGS]) {
-        int row_ = tidx_ / THREADS_PER_ROW;
-        #pragma unroll
-        for( int ii = 0; ii < LDGS; ++ii ) {
-#if ENABLE_FLASH_ATTENTION_BFLOAT16
-            using elem2_type = typename std::conditional<std::is_same<elem_type, __half>::value, __half2, __nv_bfloat162>::type;
-#else
-            using elem2_type = __half2;
-#endif
-            // char *ptr_ = ptr + (int64_t)ii * ROWS_PER_LDG * row_stride_in_bytes;
-            elem2_type *ptr_ = reinterpret_cast<elem2_type *>(ptr + (uint32_t)ii * ROWS_PER_LDG * row_stride_in_bytes);
-            if (col_predicate && (row_ + ii * ROWS_PER_LDG) < min(ROWS, actual_seqlen)) {
-                #pragma unroll
-                for (int jj = 0; jj < 4; ++jj) {
-                    atomicAdd(ptr_ + jj, reinterpret_cast<const elem2_type(&)[4]>(data[ii])[jj]);
-                    // atomic_add_CAS(ptr_ + jj, reinterpret_cast<const elem2_type(&)[4]>(data[ii])[jj]);
-                }
-            }
-        }
-    }
-
-    // Not being used. This only supports converting from fp16 -> fp32 for now (not bf16 -> fp32).
-    inline __device__ void atomic_add_float(const uint4 (&data)[LDGS]) {
-        static_assert(BYTES_PER_ELEMENT == 4);  // Only support fp32
-        int row_ = tidx_ / THREADS_PER_ROW;
-        #pragma unroll
-        for( int ii = 0; ii < LDGS; ++ii ) {
-            // char *ptr_ = ptr + (int64_t)ii * ROWS_PER_LDG * row_stride_in_bytes;
-            float *ptr_ = reinterpret_cast<float *>(ptr + (uint32_t)ii * ROWS_PER_LDG * row_stride_in_bytes);
-            if (col_predicate && (row_ + ii * ROWS_PER_LDG) < min(ROWS, actual_seqlen)) {
-                #pragma unroll
-                for (int jj = 0; jj < 4; ++jj) {
-                    const float2 data_f = fmha::half2_unpack<__half>(reinterpret_cast<const uint32_t(&)[4]>(data[ii])[jj]);
-                    atomicAdd(ptr_ + jj * 2, data_f.x);
-                    atomicAdd(ptr_ + jj * 2 + 1, data_f.y);
-                }
-            }
-        }
-    }
-
     inline __device__ void move(const int steps = 1) {
         // ptr += (int64_t)ROWS * row_stride_in_bytes * steps;
         ptr += (uint32_t)ROWS * row_stride_in_bytes * steps;
@@ -292,6 +251,27 @@ struct Gmem_tile_o {
                 uint2 out = fmha::float4_pack<elem_type>(x, y, z, w);
                 if( !HAS_INCOMPLETE_STG || (jj < STGS - 1 || this->is_active_for_last_stg_) ) {
                     fmha::stg(this->ptr_ + jj * ROWS_PER_STG * this->row_stride_in_bytes, out);
+                }
+            }
+        }
+    }
+
+    // Store data to global memory with atomicAdd.
+    inline __device__ void atomic_add(const uint4 (&src)[STGS_PER_LOOP], int mi) {
+        static_assert(BYTES_PER_ELEMENT == 4);  // Only do atomic add on floats
+        int row_ = tidx_ / THREADS_PER_ROW;
+        #pragma unroll
+        for( int ii = 0; ii < STGS_PER_LOOP; ++ii ) {
+            int jj = mi * STGS_PER_LOOP + ii;
+            if ((!col_predicate) || (row_ + jj * ROWS_PER_STG >= this->actual_seqlen_q)) {
+                break;
+            }
+
+            if( !HAS_INCOMPLETE_STG || (jj < STGS - 1 || this->is_active_for_last_stg_) ) {
+                float *ptr_ = reinterpret_cast<float *>(this->ptr_ + jj * ROWS_PER_STG * this->row_stride_in_bytes);
+                #pragma unroll
+                for (int jj = 0; jj < 4; ++jj) {
+                    atomicAdd(ptr_ + jj, reinterpret_cast<const float(&)[4]>(src[ii])[jj]);
                 }
             }
         }

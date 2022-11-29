@@ -122,7 +122,7 @@ struct FMHA_fprop_params : public Qkv_params {
 
 template<typename Kernel_params>
 struct Launch_params{
-    Launch_params(cudaDeviceProp * props_,
+    Launch_params(const cudaDeviceProp * props_,
                   cudaStream_t stream_,
                   bool is_dropout_,
                   bool return_softmax_)
@@ -135,7 +135,7 @@ struct Launch_params{
 
     size_t elts_per_thread;
 
-    cudaDeviceProp * props;
+    const cudaDeviceProp * props;
 
     cudaStream_t stream;
 
@@ -151,4 +151,6 @@ struct Launch_params{
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-void run_fmha_fp16_sm80(Launch_params<FMHA_fprop_params> &launch_params, const cudaDeviceProp& dprops);
+void run_fmha_fwd_hdim32(Launch_params<FMHA_fprop_params> &launch_params);
+void run_fmha_fwd_hdim64(Launch_params<FMHA_fprop_params> &launch_params);
+void run_fmha_fwd_hdim128(Launch_params<FMHA_fprop_params> &launch_params);
