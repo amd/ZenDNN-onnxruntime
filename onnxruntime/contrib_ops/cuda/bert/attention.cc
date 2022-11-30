@@ -32,6 +32,9 @@ REGISTER_KERNEL_TYPED(MLFloat16)
 // Environment variable to disable fused attention kernel. Default is false.
 constexpr const char* kDisableFusedAttention = "ORT_DISABLE_FUSED_ATTENTION";
 
+// Environment variable to enable flash attention. Default is false.
+constexpr const char* kEnableFlashAttention = "ORT_ENABLE_FLASH_ATTENTION";
+
 static inline bool HasFusedFp16Kernel(int sm, int head_size, int sequence_length) {
   if (!(sm == kSM_70 || sm == kSM_75 || sm == kSM_80 || sm == kSM_86)) {
     return false;
@@ -51,9 +54,23 @@ static inline bool HasFusedFp16Kernel(int sm, int head_size, int sequence_length
   return true;
 }
 
+static inline bool HasFlashAttentionKernel(int sm, int head_size) {
+  if (!(sm == kSM_75 || sm == kSM_80 || sm == kSM_86)) {
+    return false;
+  }
+
+  // Head size can be 8, 16, 24, ..., 128
+  if (head_size > 128 || head_size % 8 != 0) {
+    return false;
+  }
+
+  return true;
+}
+
 template <typename T>
 Attention<T>::Attention(const OpKernelInfo& info) : CudaKernel(info), AttentionBase(info, false, false) {
   disable_fused_runner_ = sizeof(T) != 2 || ParseEnvironmentVariableWithDefault<bool>(kDisableFusedAttention, false);
+  enable_flash_attention_ = sizeof(T) == 2 && ParseEnvironmentVariableWithDefault<bool>(kEnableFlashAttention, false);
 }
 
 template <typename T>
@@ -96,7 +113,24 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
 
   // Check whether we can use fused kernel
   int sm = device_prop.major * 10 + device_prop.minor;
-  bool use_fused_runner = (!disable_fused_runner_ &&
+
+#if defined(CUDA_VERSION) && CUDA_VERSION >= 11040
+  parameters.use_flash_attention = enable_flash_attention_ &&
+                                   nullptr != weights &&
+                                   nullptr != mask_index && mask_index->Shape().NumDimensions() == 1 &&
+                                   nullptr == past &&
+                                   nullptr == present &&
+                                   nullptr == extra_add_qk &&
+                                   !is_unidirectional_ &&
+                                   parameters.hidden_size == parameters.v_hidden_size &&
+                                   parameters.sequence_length == parameters.kv_sequence_length &&
+                                   HasFlashAttentionKernel(sm, parameters.head_size);
+#else
+  parameters.use_flash_attention = false;
+#endif
+
+  bool use_fused_runner = (!parameters.use_flash_attention &&
+                           !disable_fused_runner_ &&
                            nullptr != mask_index && mask_index->Shape().NumDimensions() == 1 &&
                            nullptr == past &&
                            nullptr == present &&
@@ -119,28 +153,6 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
     }
   }
 
-  cublasHandle_t cublas = CublasHandle();
-
-  IAllocatorUniquePtr<T> gemm_buffer;
-  if (weights != nullptr) {
-    // Use GEMM for fully connection.
-    int m = batch_size * sequence_length;
-    int n = (parameters.hidden_size + parameters.hidden_size + parameters.v_hidden_size);
-    int k = parameters.input_hidden_size;
-    gemm_buffer = GetScratchBuffer<T>(static_cast<size_t>(m) * n);
-
-    typedef typename ToCudaType<T>::MappedType CudaT;
-    CudaT one = ToCudaType<T>::FromFloat(1.0f);
-    CudaT zero = ToCudaType<T>::FromFloat(0.0f);
-
-    // Gemm, note that CUDA assumes col-major, so result(N, M) = 1 * weights x input + 1 x B.
-    CUBLAS_RETURN_IF_ERROR(cublasGemmHelper(
-        cublas, CUBLAS_OP_N, CUBLAS_OP_N, n, m, k, &one,
-        reinterpret_cast<const CudaT*>(weights->Data<T>()), n,
-        reinterpret_cast<const CudaT*>(input->Data<T>()), k,
-        &zero, reinterpret_cast<CudaT*>(gemm_buffer.get()), n, device_prop));
-  }
-
   constexpr size_t element_size = sizeof(T);
   size_t workSpaceSize = GetAttentionWorkspaceSize(element_size,
                                                    parameters.batch_size,
@@ -150,14 +162,82 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
                                                    parameters.sequence_length,
                                                    parameters.kv_sequence_length,
                                                    parameters.total_sequence_length,
-                                                   fused_runner);
-
+                                                   fused_runner,
+                                                   parameters.use_flash_attention);
   auto work_space = GetScratchBuffer<void>(workSpaceSize);
+
+  cublasHandle_t cublas = CublasHandle();
+
+  typedef typename ToCudaType<T>::MappedType CudaT;
+  const CudaT* bias_ptr = reinterpret_cast<const CudaT*>(bias->Data<T>());
+
+  IAllocatorUniquePtr<T> gemm_buffer;
+  if (weights != nullptr) {
+    int m = batch_size * sequence_length;
+    int n = (parameters.hidden_size + parameters.hidden_size + parameters.v_hidden_size);
+    int k = parameters.input_hidden_size;
+    gemm_buffer = GetScratchBuffer<T>(static_cast<size_t>(m) * n);
+
+    CudaT one = ToCudaType<T>::FromFloat(1.0f);
+    CudaT zero = ToCudaType<T>::FromFloat(0.0f);
+
+#if defined(CUDA_VERSION) && CUDA_VERSION >= 11040
+    if (parameters.use_flash_attention) {
+      // Bias shape is (N), broadcast using B(N, M) = 1 * bias(N, 1) x ones(1, M) + 0 * B.
+      CUBLAS_RETURN_IF_ERROR(cublasGemmHelper(
+          cublas, CUBLAS_OP_N, CUBLAS_OP_N, n, m, 1, &one,
+          reinterpret_cast<const CudaT*>(bias->Data<T>()), n,
+          GetConstOnes<CudaT>(m), 1,
+          &zero, reinterpret_cast<CudaT*>(gemm_buffer.get()), n, device_prop));
+
+      // Gemm, note that CUDA assumes col-major, so result(N, M) = 1 * weights x input + 1 x B.
+      CUBLAS_RETURN_IF_ERROR(cublasGemmHelper(
+          cublas, CUBLAS_OP_N, CUBLAS_OP_N, n, m, k, &one,
+          reinterpret_cast<const CudaT*>(weights->Data<T>()), n,
+          reinterpret_cast<const CudaT*>(input->Data<T>()), k,
+          &one, reinterpret_cast<CudaT*>(gemm_buffer.get()), n, device_prop));
+
+      bias_ptr = nullptr; // bias processed
+      /*
+      // use cublasLt to compute fused MatMul + Add bias for input projection for Q/K/V
+      float alpha = 1.0f;
+      float beta = 0.0f;
+      CUBLAS_RETURN_IF_ERROR(cublasLtGemmBiasHelper(
+          CublasLtHandle(),
+          CUBLAS_OP_N,
+          CUBLAS_OP_N,
+          n,
+          m,
+          k,
+          &alpha,
+          reinterpret_cast<const CudaT*>(weights->Data<T>()),
+          n,
+          reinterpret_cast<const CudaT*>(input->Data<T>()),
+          k,
+          &beta,
+          reinterpret_cast<CudaT*>(gemm_buffer.get()),
+          n,
+          reinterpret_cast<void*>(work_space.get()),
+          workSpaceSize,
+          Stream(),
+          reinterpret_cast<const CudaT*>(bias->Data<T>())));
+      */
+    } else
+#endif
+    {
+      // Gemm, note that CUDA assumes col-major, so result(N, M) = 1 * weights x input + 1 x B.
+      CUBLAS_RETURN_IF_ERROR(cublasGemmHelper(
+          cublas, CUBLAS_OP_N, CUBLAS_OP_N, n, m, k, &one,
+          reinterpret_cast<const CudaT*>(weights->Data<T>()), n,
+          reinterpret_cast<const CudaT*>(input->Data<T>()), k,
+          &zero, reinterpret_cast<CudaT*>(gemm_buffer.get()), n, device_prop));
+    }
+  }
 
   typedef typename ToCudaType<T>::MappedType CudaT;
   AttentionData<CudaT> data;
   data.gemm_buffer = (nullptr == weights) ? nullptr : reinterpret_cast<const CudaT*>(gemm_buffer.get());
-  data.bias = reinterpret_cast<const CudaT*>(bias->Data<T>());
+  data.bias = bias_ptr;
   data.query = (nullptr != weights) ? nullptr : reinterpret_cast<const CudaT*>(input->Data<T>());
   data.key = (nullptr == key) ? nullptr : reinterpret_cast<const CudaT*>(key->Data<T>());
   data.value = (nullptr == value) ? nullptr : reinterpret_cast<const CudaT*>(value->Data<T>());

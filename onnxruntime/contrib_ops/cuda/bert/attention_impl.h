@@ -27,7 +27,8 @@ size_t GetAttentionWorkspaceSize(
     size_t sequence_length,
     size_t kv_sequence_length,
     size_t total_sequence_length,
-    void* fused_runner);
+    void* fused_runner,
+    bool use_flash_attention = false);
 
 template <typename T>
 struct AttentionData {
