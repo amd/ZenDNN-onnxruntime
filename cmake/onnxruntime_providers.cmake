@@ -1433,7 +1433,11 @@ if (onnxruntime_USE_ROCM)
   endif()
 
   include(composable_kernel)
-  target_link_libraries(onnxruntime_providers_rocm PRIVATE onnxruntime_composable_kernel_includes device_gemm_instance)
+  target_link_libraries(onnxruntime_providers_rocm PRIVATE
+    onnxruntime_composable_kernel_includes
+    device_gemm_instance
+    device_batched_gemm_instance
+  )
 
   if(UNIX)
     set_property(TARGET onnxruntime_providers_rocm APPEND_STRING PROPERTY LINK_FLAGS "-Xlinker --version-script=${ONNXRUNTIME_ROOT}/core/providers/rocm/version_script.lds -Xlinker --gc-sections")
