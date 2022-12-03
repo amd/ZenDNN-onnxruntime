@@ -29,22 +29,6 @@
 #include "contrib_ops/cuda/bert/flash_attention/fmha.h"
 #include "contrib_ops/cuda/bert/flash_attention/flash_attention.h"
 
-// #define CHECK_SHAPE(x, ...) ORT_ENFORCE(x->Shape().AsShapeVector() == onnxruntime::TensorShapeVector({__VA_ARGS__}), #x " must have shape (" #__VA_ARGS__ ")")
-
-// int64_t get_stride(const onnxruntime::TensorShape& input_shape, size_t axis){
-//     size_t rank = input_shape.NumDimensions();
-//     auto input_dimensions = input_shape.GetDims();
-
-//     ORT_ENFORCE(axis < rank);
-
-//     int64_t stride = 1;
-//     for(size_t i = axis + 1; i < rank; i++){
-//         stride *= input_dimensions[i];
-//     }
-
-//     return stride;
-// }
-
 void set_params_fprop(FMHA_fprop_params& params,
                       const size_t batch_size,
                       const size_t seqlen_q,
@@ -89,7 +73,7 @@ void set_params_fprop(FMHA_fprop_params& params,
   params.cu_seqlens_k = static_cast<int*>(cu_seqlens_k_d);
 
   params.s_ptr = nullptr; // softmax
-  params.s_stride_in_bytes = get_size_in_bytes(batch_size * num_heads * seqlen_k, DATA_TYPE_FP16);
+  params.s_stride_in_bytes = batch_size * num_heads * seqlen_k * 2; // 2 is bytes of float16
   params.softmax_lse_ptr = softmax_lse_d;  // softmax sum
 
   params.b = batch_size;
