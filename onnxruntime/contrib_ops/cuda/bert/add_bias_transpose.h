@@ -20,6 +20,9 @@ namespace cuda {
 // format 2:
 //     input :  (batch_size, sequence_length, num_matrices, num_heads, head_size)
 //     output:  (batch_size, sequence_length, num_heads, num_matrices, head_size)
+// format 3:
+//     input :  (batch_size, sequence_length, num_matrices, num_heads, head_size)
+//     output:  (num_matrices, batch_size, sequence_length, num_heads, head_size)
 
 template <typename T>
 void LaunchAddBiasTranspose(

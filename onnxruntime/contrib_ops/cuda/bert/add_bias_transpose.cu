@@ -38,8 +38,9 @@ namespace cuda {
 
 template <typename T>
 __global__ void AddBiasTransposeTrt(const T* input, const T* biases, T* output) {
-  // Input:  BxSxMxNxH (Format 2)
-  // Output: BxSxNxMxH
+  // Format 2 for TensorRT fused attention (H <= 1024)
+  //     Input:  BxSxMxNxH
+  //     Output: BxSxNxMxH
   // B is batch_size, S is sequence_length, M is number of matrices, N is num_heads, H is head_size
 
   int n = threadIdx.y;
@@ -65,6 +66,7 @@ __global__ void AddBiasTransposeTrt(const T* input, const T* biases, T* output) 
 
 template <typename T>
 __global__ void AddBiasTransposeTrtLarge(const int head_size, const T* input, const T* biases, T* output) {
+  // Format 2 for TensorRT fused attention (H > 1024)
   int n = threadIdx.y;
   int s = blockIdx.x;
   int b = blockIdx.y;
@@ -90,10 +92,11 @@ __global__ void AddBiasTransposeTrtLarge(const int head_size, const T* input, co
 
 template <typename T>
 __global__ void AddBiasTransposeTrt(const T* query, const T* key, const T* value, const T* biases, T* output) {
-  // Q:  BxSxNxH
-  // K:  BxSxNxH
-  // V:  BxSxNxH
-  // Output: BxSxNxMxH
+  // Separated Q/K/V inputs for TensorRT fused attention (H <= 1024)
+  //     Q:  BxSxNxH
+  //     K:  BxSxNxH
+  //     V:  BxSxNxH
+  //     Output: BxSxNxMxH
   // B is batch_size, S is sequence_length, M is number of matrices (3), N is num_heads, H is head_size
 
   int n = threadIdx.y;
@@ -120,6 +123,7 @@ __global__ void AddBiasTransposeTrt(const T* query, const T* key, const T* value
 template <typename T>
 __global__ void AddBiasTransposeTrtLarge(const int head_size,
                                          const T* query, const T* key, const T* value, const T* biases, T* output) {
+  // Separated Q/K/V inputs for TensorRT fused attention (H > 1024)
   int n = threadIdx.y;
   int s = blockIdx.x;
   int b = blockIdx.y;
@@ -145,8 +149,9 @@ __global__ void AddBiasTransposeTrtLarge(const int head_size,
 
 template <typename T>
 __global__ void AddBiasTransposeQKV(const T* input, const T* biases, T* output) {
-  // Input:  BxSxMxNxH  (Format 1)
-  // Output: MxBxNxSxH
+  // Format 1 for unfused attention
+  //     Input:  BxSxMxNxH
+  //     Output: MxBxNxSxH
   // B is batch_size, S is sequence_length, M is number of matrices, N is num_heads, H is head_size
 
   int n = threadIdx.y;
@@ -175,9 +180,10 @@ __global__ void AddBiasTransposeQKV(const T* input, const T* biases, T* output) 
 
 template <typename T>
 __global__ void AddBiasTransposeQKV(const T* input, const T* biases, T* output, int v_head_size) {
-  // Input:  BxSxMxNxH  (Format 1)
-  // Output: MxBxNxSxH
-  // B is batch_size, S is sequence_length, M is number of matrices, N is num_heads, H is head_size
+  // Format 1 for unfused attention
+  //     Input:  BxSx(NxH + NxH + NxH_v)  (Packed QKV where K and V has different hidden sizes)
+  //     Output: BxNxSxH + BxNxSxH + BxNxSxH_v
+  // B is batch_size, S is sequence_length, N is num_heads, H is qk_head_size, H_v is v_head_size
 
   int n = threadIdx.y;        // head_num_id
   int s = blockIdx.x;         // sequence_id
@@ -221,6 +227,9 @@ __global__ void AddBiasTransposeQKV(const T* input, const T* biases, T* output, 
 
 template <typename T>
 __global__ void AddBiasTransposeQKVLarge(const int head_size, const T* input, const T* biases, T* output) {
+  // Format 1 for unfused attention (H > 1024)
+  //     Input:  BxSxMxNxH   (Packed QKV)
+  //     Output: MxBxNxSxH
   int n = threadIdx.y;
   int s = blockIdx.x;
   int b = blockIdx.y;
@@ -247,8 +256,9 @@ __global__ void AddBiasTransposeQKVLarge(const int head_size, const T* input, co
 
 template <typename T>
 __global__ void AddBiasTranspose(const T* input, const T* biases, T* output) {
-  // Input:  MxBxSxNxH (Format 0)
-  // Output: MxBxNxSxH
+  // Format 0 for Separated Q, K, V (H <= 1024)
+  //    Input:  MxBxSxNxH
+  //    Output: MxBxNxSxH
   // B is batch_size, S is sequence_length, M is number of matrices, N is num_heads, H is head_size
 
   int n = threadIdx.y;
@@ -276,6 +286,7 @@ __global__ void AddBiasTranspose(const T* input, const T* biases, T* output) {
 
 template <typename T>
 __global__ void AddBiasTransposeLarge(const int head_size, const T* input, const T* biases, T* output) {
+  // Format 0 for Separated Q, K, V (H > 1024)
   int n = threadIdx.y;
   int s = blockIdx.x;
   int b = blockIdx.y;
@@ -302,6 +313,37 @@ __global__ void AddBiasTransposeLarge(const int head_size, const T* input, const
 }
 
 template <typename T>
+__global__ void AddBias(const T* input, const T* biases, T* output) {
+  // Format 3 for flash attention (H <= 1024)
+  //     Input:  BxSxMxNxH (packed QKV)
+  //     Output: MxBxSxNxH
+  // B is batch_size, S is sequence_length, M is number of matrices, N is num_heads, H is head_size
+
+  int n = threadIdx.y;
+  int s = blockIdx.x;
+  int b = blockIdx.y;
+  int m = blockIdx.z;  // matrix id
+
+  const int head_size = blockDim.x;
+  const int num_heads = blockDim.y;
+
+  const int sequence_length = gridDim.x;
+  const int batch_size = gridDim.y;
+  const int M = gridDim.z;
+  const int H = head_size;
+  const int NH = num_heads * head_size;
+  const int NHS = NH * sequence_length;
+
+  int in_offset = n * H + (m + s * M) * NH + b * NHS * M;
+  const int out_offset = n * H + s * NH + b * NHS + m * NHS * batch_size;
+
+  const int h = threadIdx.x;
+  if (h < head_size) {
+    output[out_offset + h] = input[in_offset + h] + biases[m * NH + n * H + h];
+  }
+}
+
+template <typename T>
 void InvokeAddBiasTranspose(
     cudaStream_t stream, const int num_matrices, const int format, const int max_threads_per_block,
     const int batch_size, const int sequence_length, const int num_heads, const int qk_head_size,
@@ -317,7 +359,9 @@ void InvokeAddBiasTranspose(
       } else {
         AddBiasTransposeQKV<T><<<grid, block, 0, stream>>>(input, biases, output, v_head_size);
       }
-    } else {
+    } else if (format == 3) {
+      AddBias<T><<<grid, block, 0, stream>>>(input, biases, output);
+    } else {  // format 0
       AddBiasTranspose<T><<<grid, block, 0, stream>>>(input, biases, output);
     }
   } else {
@@ -330,7 +374,9 @@ void InvokeAddBiasTranspose(
       } else {
         ORT_THROW("AddBiasTranspose (format 1) not implemented for hidden_size > max_threads_per_block");
       }
-    } else {
+    } else if (format == 3) {
+      ORT_THROW("AddBiasTranspose (format 3) not implemented for hidden_size > max_threads_per_block");
+    } else {  // format 0
       AddBiasTransposeLarge<T><<<grid, block, 0, stream>>>(qk_head_size, input, biases, output);
     }
   }

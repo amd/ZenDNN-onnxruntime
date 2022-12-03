@@ -52,6 +52,12 @@ static size_t AlignTo(size_t a, size_t b) {
   return CeilDiv(a, b) * b;
 }
 
+size_t AlignSize(size_t bytes) {
+  constexpr size_t alignment = 256;
+  const size_t bytesAligned = AlignTo(bytes, alignment);
+  return bytesAligned;
+}
+
 size_t GetAttentionScratchSize(
     size_t element_size,
     size_t batch_size,
@@ -59,18 +65,13 @@ size_t GetAttentionScratchSize(
     size_t sequence_length,
     size_t total_sequence_length) {
   const size_t bytes = element_size * batch_size * num_heads * sequence_length * total_sequence_length;
-
-  constexpr size_t alignment = 256;
-  const size_t bytesAligned = AlignTo(bytes, alignment);
-  return bytesAligned;
+  return AlignSize(bytes);
 }
 
-size_t GetSequenceOffsetSize(int batch_size) {
+size_t GetSequenceOffsetSize(int batch_size, bool has_padding) {
   // There are batch_size + 1 offsets Without padding (or padding removed), and 2 * batch_size + 1 with padding.
-  size_t bytes = sizeof(int) * (2 * batch_size + 1);
-  constexpr size_t alignment = 256;
-  const size_t bytesAligned = AlignTo(bytes, alignment);
-  return bytesAligned;
+  size_t bytes = sizeof(int) * ((has_padding ? 2 * batch_size : batch_size) + 1);
+  return AlignSize(bytes);;
 }
 
 size_t GetAttentionWorkspaceSize(
@@ -88,16 +89,19 @@ size_t GetAttentionWorkspaceSize(
                            ((sequence_length * kv_sequence_length) * qk_head_size + kv_sequence_length * v_head_size);
 
   if (use_flash_attention) {
-    // There are batch_size + 1 offsets Without padding (or padding removed), and 2 * batch_size + 1 with padding.
-    size_t sequence_offset_bytes = GetSequenceOffsetSize(batch_size);
+    // constexpr bool has_padding = false;  // padding are removed for flash attention
+    // const int batch_count = has_padding ? 2 * batch_size : batch_size;
+    // size_t sequence_offset_bytes = GetSequenceOffsetSize(batch_size, has_padding);
+
     int total_q = batch_size * sequence_length;
-    int workspace_bytes = get_flash_attention_workspace_size(sequence_length, kv_sequence_length,
-                                                             2 * batch_size, total_q, num_heads, qk_head_size);
-    return qkv_bytes + sequence_offset_bytes + workspace_bytes;
+    int max_seqlen_k_ = total_sequence_length;
+    int o_tmp_bytes = get_o_tmp_size(max_seqlen_k_, total_q, num_heads, qk_head_size, v_head_size);
+
+    return qkv_bytes + o_tmp_bytes;
   }
 
   if (fused_runner != nullptr) {
-    size_t sequence_offset_bytes = GetSequenceOffsetSize(batch_size);
+    size_t sequence_offset_bytes = GetSequenceOffsetSize(batch_size, true);
     return qkv_bytes + sequence_offset_bytes;
   }
 
@@ -141,22 +145,20 @@ Status QkvToContext(
   bool use_fused_kernel = (nullptr != fused_runner && data.bias != nullptr);
 
   if (nullptr != data.gemm_buffer) {
-    if (!parameters.use_flash_attention) { // Skip it for flash attention since bias was added and transpose not needed.
-      if (data.bias == nullptr) {
-        // gemm_buffer should be BxSx3xNxH => qkv: 3xBxNxSxH
-        ORT_ENFORCE(qk_head_size == v_head_size);
-        ORT_RETURN_IF_ERROR(LaunchTransQkv(stream, 3, sequence_length, batch_size, qk_head_size, num_heads,
-                                           max_threads_per_block, false, data.gemm_buffer, qkv));
-      } else {
-        const int format = (use_fused_kernel ? 2 : 1);
-        // format 1: BxSx(NH + NH + NH_v) => BxNxSxH + BxNxSxH + BxNxSxH_v
-        // format 2: BxSx(NH + NH + NH) => BxSxNx(H + H + H)
-        LaunchAddBiasTranspose(stream, 3, format, max_threads_per_block,
-                               batch_size, sequence_length, num_heads, qk_head_size,
-                               data.gemm_buffer, data.bias, qkv,
-                               true, v_head_size);
-        CUDA_RETURN_IF_ERROR(cudaGetLastError());
-      }
+    if (data.bias == nullptr) {
+      // gemm_buffer should be BxSx3xNxH => qkv: 3xBxNxSxH
+      ORT_ENFORCE(qk_head_size == v_head_size);
+      ORT_RETURN_IF_ERROR(LaunchTransQkv(stream, 3, sequence_length, batch_size, qk_head_size, num_heads,
+                                          max_threads_per_block, false, data.gemm_buffer, qkv));
+    } else {
+      const int format = (use_fused_kernel ? 2 : 1);
+      // format 1: BxSx(NH + NH + NH_v) => BxNxSxH + BxNxSxH + BxNxSxH_v
+      // format 2: BxSx(NH + NH + NH) => BxSxNx(H + H + H)
+      LaunchAddBiasTranspose(stream, 3, format, max_threads_per_block,
+                              batch_size, sequence_length, num_heads, qk_head_size,
+                              data.gemm_buffer, data.bias, qkv,
+                              true, v_head_size);
+      CUDA_RETURN_IF_ERROR(cudaGetLastError());
     }
   } else {  // gemm_buffer == nullptr
     ORT_ENFORCE(data.query != nullptr && data.key != nullptr && data.value != nullptr && data.bias != nullptr);
@@ -197,43 +199,20 @@ Status QkvToContext(
   const float rsqrt_head_size = 1.f / sqrt(static_cast<float>(qk_head_size));
 
   T* scratch1 = qkv + elements_q + elements_k + elements_v;
-  if (parameters.use_flash_attention || use_fused_kernel) {
+
+  if (use_fused_kernel) {
     int* sequence_offset = reinterpret_cast<int*>(scratch1);
     LaunchTrtSequenceOffset(sequence_offset, data.mask_index, batch_size, sequence_length, stream);
     CUDA_RETURN_IF_ERROR(cudaGetLastError());
 
-    if (use_fused_kernel) {
-      FusedMHARunnerFP16v2* fused_fp16_runner = reinterpret_cast<FusedMHARunnerFP16v2*>(fused_runner);
+    FusedMHARunnerFP16v2* fused_fp16_runner = reinterpret_cast<FusedMHARunnerFP16v2*>(fused_runner);
 
-      const int S = fused_fp16_runner->getSFromMaxSeqLen(sequence_length);
-      // B = 2 * batch_size when there is padding in input, and B = batch_size when padding is removed.
-      const int B = 2 * batch_size;
-      fused_fp16_runner->setup(S, B);
+    const int S = fused_fp16_runner->getSFromMaxSeqLen(sequence_length);
+    // B = 2 * batch_size when there is padding in input, and B = batch_size when padding is removed.
+    const int B = 2 * batch_size;
+    fused_fp16_runner->setup(S, B);
 
-      fused_fp16_runner->run(qkv, nullptr, sequence_offset, data.output, nullptr, stream);
-    } else { // flash attention
-
-      void* workspace = reinterpret_cast<void*>(reinterpret_cast<char*>(scratch1) + GetSequenceOffsetSize(batch_size));
-      fmha_forward(prop, stream,
-                   q,
-                   k,
-                   v,
-                   data.output,
-                   sequence_offset,
-                   sequence_offset,
-                   workspace,
-                   2 * batch_size,
-                   num_heads,
-                   qk_head_size,
-                   batch_size * sequence_length,  // total_q
-                   sequence_length,               // max_seqlen_q_,
-                   kv_sequence_length,            // max_seqlen_k_,
-                   rsqrt_head_size,               // softmax_scale,
-                   false,                         // zero_tensors,
-                   false,                         // is_causal,
-                   0                              // num_splits
-      );
-    }
+    fused_fp16_runner->run(qkv, nullptr, sequence_offset, data.output, nullptr, stream);
     return Status::OK();
   }
 

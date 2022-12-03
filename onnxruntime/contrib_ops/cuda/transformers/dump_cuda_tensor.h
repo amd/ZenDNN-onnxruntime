@@ -8,6 +8,8 @@
 #include "core/framework/ort_value.h"
 #include "contrib_ops/cpu/transformers/generation_shared.h"
 
+#define DEBUG_GENERATION 1
+
 namespace onnxruntime {
 namespace contrib {
 namespace cuda {
@@ -15,7 +17,7 @@ namespace transformers {
 
 class CudaTensorConsoleDumper : public onnxruntime::contrib::transformers::IConsoleDumper {
  public:
-  CudaTensorConsoleDumper() = default;
+  CudaTensorConsoleDumper() : _snippet_threshold(0) {}
   virtual ~CudaTensorConsoleDumper() {}
   void Print(const char* name, const float* tensor, int dim0, int dim1) const override;
   void Print(const char* name, const MLFloat16* tensor, int dim0, int dim1) const override;
@@ -29,6 +31,9 @@ class CudaTensorConsoleDumper : public onnxruntime::contrib::transformers::ICons
   void Print(const char* name, const OrtValue& value) const override;
   void Print(const char* name, int index, bool end_line) const override;
   void Print(const char* name, const std::string& value, bool end_line) const override;
+
+private:
+  int _snippet_threshold;
 };
 
 }  // namespace transformers

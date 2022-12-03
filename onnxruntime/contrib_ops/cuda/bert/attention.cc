@@ -6,6 +6,11 @@
 #include "core/platform/env_var_utils.h"
 #include "contrib_ops/cuda/bert/attention_impl.h"
 #include "contrib_ops/cuda/bert/attention.h"
+#include "contrib_ops/cuda/bert/bert_padding.h"
+#include "contrib_ops/cuda/bert/flash_attention/flash_attention.h"
+#include "contrib_ops/cuda/bert/add_bias_transpose.h"
+#include "contrib_ops/cuda/bert/tensorrt_fused_multihead_attention/mha_runner.h"
+#include "contrib_ops/cuda/transformers/dump_cuda_tensor.h"
 
 using namespace onnxruntime::cuda;
 using namespace ::onnxruntime::common;
@@ -34,6 +39,9 @@ constexpr const char* kDisableFusedAttention = "ORT_DISABLE_FUSED_ATTENTION";
 
 // Environment variable to enable flash attention. Default is false.
 constexpr const char* kEnableFlashAttention = "ORT_ENABLE_FLASH_ATTENTION";
+
+// Environment variable to enable flash attention. Default is false.
+constexpr const char* kEnableDumpAttention = "ORT_DUMP_ATTENTION";
 
 static inline bool HasFusedFp16Kernel(int sm, int head_size, int sequence_length) {
   if (!(sm == kSM_70 || sm == kSM_75 || sm == kSM_80 || sm == kSM_86)) {
@@ -71,6 +79,7 @@ template <typename T>
 Attention<T>::Attention(const OpKernelInfo& info) : CudaKernel(info), AttentionBase(info, false, false) {
   disable_fused_runner_ = sizeof(T) != 2 || ParseEnvironmentVariableWithDefault<bool>(kDisableFusedAttention, false);
   enable_flash_attention_ = sizeof(T) == 2 && ParseEnvironmentVariableWithDefault<bool>(kEnableFlashAttention, false);
+  enable_dump_ = ParseEnvironmentVariableWithDefault<bool>(kEnableDumpAttention, false);
 }
 
 template <typename T>
@@ -83,6 +92,11 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
   const Tensor* extra_add_qk = context->Input<Tensor>(5);
   const Tensor* key = context->Input<Tensor>(6);
   const Tensor* value = context->Input<Tensor>(7);
+
+  transformers::CudaTensorConsoleDumper dumper;
+  if (!this->enable_dump_) {
+    dumper.Disable();
+  }
 
   auto& device_prop = GetDeviceProp();
   AttentionParameters parameters;
@@ -114,42 +128,39 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
   // Check whether we can use fused kernel
   int sm = device_prop.major * 10 + device_prop.minor;
 
-#if defined(CUDA_VERSION) && CUDA_VERSION >= 11040
-  parameters.use_flash_attention = enable_flash_attention_ &&
-                                   nullptr != weights &&
-                                   nullptr != mask_index && mask_index->Shape().NumDimensions() == 1 &&
-                                   nullptr == past &&
-                                   nullptr == present &&
-                                   nullptr == extra_add_qk &&
-                                   !is_unidirectional_ &&
-                                   parameters.hidden_size == parameters.v_hidden_size &&
-                                   parameters.sequence_length == parameters.kv_sequence_length &&
-                                   HasFlashAttentionKernel(sm, parameters.head_size);
-#else
-  parameters.use_flash_attention = false;
-#endif
-
-  bool use_fused_runner = (!parameters.use_flash_attention &&
-                           !disable_fused_runner_ &&
-                           nullptr != mask_index && mask_index->Shape().NumDimensions() == 1 &&
-                           nullptr == past &&
-                           nullptr == present &&
-                           nullptr == extra_add_qk &&
-                           !is_unidirectional_ &&
-                           parameters.hidden_size == parameters.v_hidden_size &&
-                           parameters.sequence_length == parameters.kv_sequence_length &&
-                           HasFusedFp16Kernel(sm, parameters.head_size, sequence_length));
+  bool use_flash_attention = enable_flash_attention_ &&
+                             nullptr != weights &&
+                             nullptr != mask_index && mask_index->Shape().NumDimensions() == 1 &&
+                             nullptr == past &&
+                             nullptr == present &&
+                             nullptr == extra_add_qk &&
+                             !is_unidirectional_ &&
+                             parameters.hidden_size == parameters.v_hidden_size &&
+                             parameters.sequence_length == parameters.kv_sequence_length &&
+                             HasFlashAttentionKernel(sm, parameters.head_size);
 
   MHARunner* fused_runner = nullptr;
-  if (use_fused_runner) {
-    if (nullptr == fused_fp16_runner_.get()) {
-      fused_fp16_runner_.reset(new FusedMHARunnerFP16v2(num_heads_, parameters.head_size, sm));
-    }
+  if (!use_flash_attention) {
+    bool use_fused_runner = (!disable_fused_runner_ &&
+                             nullptr != mask_index && mask_index->Shape().NumDimensions() == 1 &&
+                             nullptr == past &&
+                             nullptr == present &&
+                             nullptr == extra_add_qk &&
+                             !is_unidirectional_ &&
+                             parameters.hidden_size == parameters.v_hidden_size &&
+                             parameters.sequence_length == parameters.kv_sequence_length &&
+                             HasFusedFp16Kernel(sm, parameters.head_size, sequence_length));
 
-    // In case some kernel not loaded due to shared memory limit, we need to double check here.
-    const int S = fused_fp16_runner_->getSFromMaxSeqLen(sequence_length);
-    if (fused_fp16_runner_->isValid(S)) {
-      fused_runner = fused_fp16_runner_.get();
+    if (use_fused_runner) {
+      if (nullptr == fused_fp16_runner_.get()) {
+        fused_fp16_runner_.reset(new FusedMHARunnerFP16v2(num_heads_, parameters.head_size, sm));
+      }
+
+      // In case some kernel not loaded due to shared memory limit, we need to double check here.
+      const int S = fused_fp16_runner_->getSFromMaxSeqLen(sequence_length);
+      if (fused_fp16_runner_->isValid(S)) {
+        fused_runner = fused_fp16_runner_.get();
+      }
     }
   }
 
@@ -163,15 +174,15 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
                                                    parameters.kv_sequence_length,
                                                    parameters.total_sequence_length,
                                                    fused_runner,
-                                                   parameters.use_flash_attention);
+                                                   use_flash_attention);
   auto work_space = GetScratchBuffer<void>(workSpaceSize);
 
   cublasHandle_t cublas = CublasHandle();
 
   typedef typename ToCudaType<T>::MappedType CudaT;
-  const CudaT* bias_ptr = reinterpret_cast<const CudaT*>(bias->Data<T>());
 
   IAllocatorUniquePtr<T> gemm_buffer;
+  //if (!use_flash_attention && weights != nullptr) {
   if (weights != nullptr) {
     int m = batch_size * sequence_length;
     int n = (parameters.hidden_size + parameters.hidden_size + parameters.v_hidden_size);
@@ -181,63 +192,21 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
     CudaT one = ToCudaType<T>::FromFloat(1.0f);
     CudaT zero = ToCudaType<T>::FromFloat(0.0f);
 
-#if defined(CUDA_VERSION) && CUDA_VERSION >= 11040
-    if (parameters.use_flash_attention) {
-      // Bias shape is (N), broadcast using B(N, M) = 1 * bias(N, 1) x ones(1, M) + 0 * B.
-      CUBLAS_RETURN_IF_ERROR(cublasGemmHelper(
-          cublas, CUBLAS_OP_N, CUBLAS_OP_N, n, m, 1, &one,
-          reinterpret_cast<const CudaT*>(bias->Data<T>()), n,
-          GetConstOnes<CudaT>(m), 1,
-          &zero, reinterpret_cast<CudaT*>(gemm_buffer.get()), n, device_prop));
+    // Gemm, note that CUDA assumes col-major, so result(N, M) = 1 * weights x input + 1 x bias
+    // The bias part is not included here since we fuse bias, transpose and output 3 matrice into one cuda kernel.
+    CUBLAS_RETURN_IF_ERROR(cublasGemmHelper(
+        cublas, CUBLAS_OP_N, CUBLAS_OP_N, n, m, k, &one,
+        reinterpret_cast<const CudaT*>(weights->Data<T>()), n,
+        reinterpret_cast<const CudaT*>(input->Data<T>()), k,
+        &zero, reinterpret_cast<CudaT*>(gemm_buffer.get()), n, device_prop));
 
-      // Gemm, note that CUDA assumes col-major, so result(N, M) = 1 * weights x input + 1 x B.
-      CUBLAS_RETURN_IF_ERROR(cublasGemmHelper(
-          cublas, CUBLAS_OP_N, CUBLAS_OP_N, n, m, k, &one,
-          reinterpret_cast<const CudaT*>(weights->Data<T>()), n,
-          reinterpret_cast<const CudaT*>(input->Data<T>()), k,
-          &one, reinterpret_cast<CudaT*>(gemm_buffer.get()), n, device_prop));
-
-      bias_ptr = nullptr; // bias processed
-      /*
-      // use cublasLt to compute fused MatMul + Add bias for input projection for Q/K/V
-      float alpha = 1.0f;
-      float beta = 0.0f;
-      CUBLAS_RETURN_IF_ERROR(cublasLtGemmBiasHelper(
-          CublasLtHandle(),
-          CUBLAS_OP_N,
-          CUBLAS_OP_N,
-          n,
-          m,
-          k,
-          &alpha,
-          reinterpret_cast<const CudaT*>(weights->Data<T>()),
-          n,
-          reinterpret_cast<const CudaT*>(input->Data<T>()),
-          k,
-          &beta,
-          reinterpret_cast<CudaT*>(gemm_buffer.get()),
-          n,
-          reinterpret_cast<void*>(work_space.get()),
-          workSpaceSize,
-          Stream(),
-          reinterpret_cast<const CudaT*>(bias->Data<T>())));
-      */
-    } else
-#endif
-    {
-      // Gemm, note that CUDA assumes col-major, so result(N, M) = 1 * weights x input + 1 x B.
-      CUBLAS_RETURN_IF_ERROR(cublasGemmHelper(
-          cublas, CUBLAS_OP_N, CUBLAS_OP_N, n, m, k, &one,
-          reinterpret_cast<const CudaT*>(weights->Data<T>()), n,
-          reinterpret_cast<const CudaT*>(input->Data<T>()), k,
-          &zero, reinterpret_cast<CudaT*>(gemm_buffer.get()), n, device_prop));
-    }
+    dumper.Print("gemm_buffer", gemm_buffer.get(), m, n);
   }
 
   typedef typename ToCudaType<T>::MappedType CudaT;
   AttentionData<CudaT> data;
   data.gemm_buffer = (nullptr == weights) ? nullptr : reinterpret_cast<const CudaT*>(gemm_buffer.get());
-  data.bias = bias_ptr;
+  data.bias = reinterpret_cast<const CudaT*>(bias->Data<T>());
   data.query = (nullptr != weights) ? nullptr : reinterpret_cast<const CudaT*>(input->Data<T>());
   data.key = (nullptr == key) ? nullptr : reinterpret_cast<const CudaT*>(key->Data<T>());
   data.value = (nullptr == value) ? nullptr : reinterpret_cast<const CudaT*>(value->Data<T>());
@@ -249,7 +218,161 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
   data.output = reinterpret_cast<CudaT*>(output->MutableData<T>());
   data.present = (nullptr == present) ? nullptr : reinterpret_cast<CudaT*>(present->MutableData<T>());
 
-  return QkvToContext<CudaT>(device_prop, cublas, Stream(), parameters, data, reinterpret_cast<void*>(fused_runner));
+  auto stream = Stream();
+  if (!use_flash_attention)
+  {
+    auto status = QkvToContext<CudaT>(device_prop, cublas, stream, parameters, data, reinterpret_cast<void*>(fused_runner));
+    dumper.Print("output", output->MutableData<T>(), batch_size, sequence_length, parameters.v_hidden_size);
+    return status;
+  }
+
+  // Remove padding for flash attention
+  auto token_count_buffer = GetScratchBuffer<int>(2);
+  auto token_offset_buffer = GetScratchBuffer<int>(batch_size * sequence_length);
+  auto cumulated_seq_len_buffer = GetScratchBuffer<int>(batch_size + 1);
+
+  LaunchGetTokenOffset(token_count_buffer.get(),
+                       token_offset_buffer.get(),
+                       cumulated_seq_len_buffer.get(),
+                       data.mask_index,
+                       batch_size,
+                       sequence_length,
+                       stream);
+
+
+  dumper.Print("token_count", token_count_buffer.get(), 1, 2);
+  dumper.Print("token_offset", token_offset_buffer.get(), batch_size, sequence_length);
+  dumper.Print("cumulated_seq_len", cumulated_seq_len_buffer.get(), 1, batch_size + 1);
+
+  // Copy token_count to CPU
+  auto pinned_buffer = AllocateBufferOnCPUPinned<int>(2);
+  int* token_count_pinned = pinned_buffer.get();
+  CUDA_RETURN_IF_ERROR(cudaMemcpyAsync(token_count_pinned, token_count_buffer.get(), sizeof(int) * 2,
+                                       cudaMemcpyDeviceToHost, stream));
+  // Wait until token_count is copied to host.
+  CUDA_RETURN_IF_ERROR(cudaStreamSynchronize(stream));
+  int total_token_count = token_count_pinned[0];
+  int max_token_count = token_count_pinned[1];
+
+  auto compressed_input_buffer = GetScratchBuffer<T>(total_token_count * parameters.input_hidden_size);
+
+  typedef typename ToCudaType<T>::MappedType CudaT;
+  LaunchRemovePadding<CudaT>(
+        reinterpret_cast<CudaT*>(compressed_input_buffer.get()),
+        reinterpret_cast<const CudaT*>(input->Data<T>()),
+        token_offset_buffer.get(),
+        total_token_count,
+        parameters.input_hidden_size,
+        stream);
+
+  dumper.Print("compressed_input", compressed_input_buffer.get(), total_token_count, parameters.input_hidden_size);
+
+  int m = total_token_count;
+  int n = (parameters.hidden_size + parameters.hidden_size + parameters.v_hidden_size);
+  int k = parameters.input_hidden_size;
+  gemm_buffer = GetScratchBuffer<T>(static_cast<size_t>(m) * n);
+
+  CudaT one = ToCudaType<T>::FromFloat(1.0f);
+  CudaT zero = ToCudaType<T>::FromFloat(0.0f);
+
+  // Gemm, note that CUDA assumes col-major, so result(N, M) = 1 * weights x compressed_input + 1 x bias
+  // The bias part is not included here since we fuse bias and output 3 matrice into one cuda kernel.
+  CUBLAS_RETURN_IF_ERROR(cublasGemmHelper(
+      cublas, CUBLAS_OP_N, CUBLAS_OP_N, n, m, k, &one,
+      reinterpret_cast<const CudaT*>(weights->Data<T>()), n,
+      reinterpret_cast<const CudaT*>(compressed_input_buffer.get()), k,
+      &zero, reinterpret_cast<CudaT*>(gemm_buffer.get()), n, device_prop));
+
+  dumper.Print("gemm_buffer", gemm_buffer.get(), m, n);
+
+
+  int max_seqlen_q_ = max_token_count;
+  size_t softmax_lse_bytes = get_softmax_lse_size(max_seqlen_q_, batch_size, parameters.num_heads);
+  auto softmax_lse_buffer = GetScratchBuffer<void>(softmax_lse_bytes);
+
+  auto fmha_output_buffer = GetScratchBuffer<T>(static_cast<size_t>(total_token_count) * parameters.v_hidden_size);
+
+  const size_t elements_q = static_cast<size_t>(total_token_count) * static_cast<size_t>(parameters.hidden_size);
+  const size_t elements_k = static_cast<size_t>(total_token_count) * static_cast<size_t>(parameters.hidden_size);
+  const size_t elements_v = static_cast<size_t>(total_token_count) * static_cast<size_t>(parameters.v_hidden_size);
+
+  CudaT* q_data = data.workspace;
+  CudaT* k_data = q_data + elements_q;
+  CudaT* v_data = k_data + elements_k;
+  CudaT* o_tmp_buffer = v_data + elements_v;
+
+  const int format = 3;
+  // format 3: BxSx(NH + NH + NH_v) => BxSxNxH + BxSxNxH + BxSxNxH_v
+  LaunchAddBiasTranspose(stream, 3, format, device_prop.maxThreadsPerBlock,
+                         1, total_token_count, parameters.num_heads, parameters.head_size,
+                         data.gemm_buffer, data.bias, data.workspace,
+                         true, -1);
+
+  dumper.Print("q", reinterpret_cast<T*>(q_data), total_token_count, parameters.hidden_size);
+  dumper.Print("k", reinterpret_cast<T*>(k_data), total_token_count, parameters.hidden_size);
+  dumper.Print("v", reinterpret_cast<T*>(k_data), total_token_count, parameters.v_hidden_size);
+
+  const float rsqrt_head_size = 1.f / sqrt(static_cast<float>(parameters.head_size));
+
+  fmha_forward(device_prop,
+               stream,
+               reinterpret_cast<void*>(q_data),
+               reinterpret_cast<void*>(k_data),
+               reinterpret_cast<void*>(v_data),
+               reinterpret_cast<void*>(fmha_output_buffer.get()),
+               cumulated_seq_len_buffer.get(),
+               cumulated_seq_len_buffer.get(),
+               reinterpret_cast<void*>(softmax_lse_buffer.get()),
+               reinterpret_cast<void*>(o_tmp_buffer),
+               batch_size,
+               parameters.num_heads,
+               parameters.head_size,
+               parameters.v_head_size,
+               total_token_count,  // total_q
+               max_token_count,    // max_seqlen_q_,
+               max_token_count,    // max_seqlen_k_,
+               rsqrt_head_size,    // softmax_scale,
+               false,              // zero_tensors,
+               false,              // is_causal,
+               0                   // num_splits
+  );
+
+
+  /*
+  const int format = 2; //1xTx(NH + NH + NH) => 1xTxNx(H + H + H)
+  LaunchAddBiasTranspose(stream, 3, format, device_prop.maxThreadsPerBlock,
+                         1, total_token_count, parameters.num_heads, parameters.head_size,
+                         data.gemm_buffer, data.bias, data.workspace,
+                         true, -1);
+
+  dumper.Print("qkv", reinterpret_cast<const T*>(data.workspace), total_token_count, parameters.num_heads, 3 * parameters.head_size);
+
+  FusedMHARunnerFP16v2* fused_fp16_runner = reinterpret_cast<FusedMHARunnerFP16v2*>(fused_runner);
+
+  const int S = fused_fp16_runner->getSFromMaxSeqLen(max_token_count);
+  // B = 2 * batch_size when there is padding in input, and B = batch_size when padding is removed.
+  const int B = batch_size;
+  fused_fp16_runner->setup(S, B);
+
+  fused_fp16_runner->run(data.workspace, nullptr, cumulated_seq_len_buffer.get(), output_buffer.get(), nullptr, stream);
+  */
+
+  dumper.Print("fmha_output", fmha_output_buffer.get(), total_token_count, parameters.v_hidden_size);
+
+  // Restore padding
+  LaunchRestorePadding<CudaT>(
+      reinterpret_cast<CudaT*>(output->MutableData<T>()),
+      reinterpret_cast<const CudaT*>(fmha_output_buffer.get()),
+      token_offset_buffer.get(),
+      total_token_count,
+      parameters.v_hidden_size,
+      batch_size,
+      sequence_length,
+      stream);
+
+  dumper.Print("output", output->MutableData<T>(), batch_size, sequence_length, parameters.v_hidden_size);
+
+  return Status::OK();
 }
 
 }  // namespace cuda

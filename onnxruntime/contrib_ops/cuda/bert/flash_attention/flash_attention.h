@@ -1,7 +1,9 @@
 #include "core/providers/cuda/cuda_common.h"
 #include "core/framework/float16.h"
 
-size_t get_flash_attention_workspace_size(int max_seqlen_q_, int max_seqlen_k_, int batch_size, int total_q, int num_heads, int head_size);
+size_t get_softmax_lse_size(int max_seqlen_q_, int batch_size, int num_heads);
+
+size_t get_o_tmp_size(int max_seqlen_k_, int total_q, int num_heads, int head_size, int v_head_size);
 
 void fmha_forward(const cudaDeviceProp& dprops,
                   cudaStream_t stream,
@@ -11,10 +13,12 @@ void fmha_forward(const cudaDeviceProp& dprops,
                   void* out,  // shape: (total_q, num_heads, head_size)
                   int32_t* cu_seqlens_q,     // shape: (batch_size + 1)
                   int32_t* cu_seqlens_k,     // shape: (batch_size + 1)
-                  void* workspace,
+                  void* softmax_lse_buffer,
+                  void* o_tmp_buffer,
                   const int batch_size,
                   const int num_heads,
                   const int head_size,
+                  const int v_head_size,
                   const int total_q,
                   const int max_seqlen_q_,
                   const int max_seqlen_k_,
