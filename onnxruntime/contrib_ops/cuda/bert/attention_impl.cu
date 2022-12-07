@@ -86,7 +86,7 @@ size_t GetAttentionWorkspaceSize(
     void* fused_runner,
     bool use_flash_attention) {
   const size_t qkv_bytes = element_size * batch_size * num_heads *
-                           ((sequence_length * kv_sequence_length) * qk_head_size + kv_sequence_length * v_head_size);
+                           ((sequence_length + kv_sequence_length) * qk_head_size + kv_sequence_length * v_head_size);
 
   if (use_flash_attention) {
     // constexpr bool has_padding = false;  // padding are removed for flash attention
@@ -209,7 +209,7 @@ Status QkvToContext(
 
     const int S = fused_fp16_runner->getSFromMaxSeqLen(sequence_length);
     // B = 2 * batch_size when there is padding in input, and B = batch_size when padding is removed.
-    const int B = 2 * batch_size;
+    const int B = (nullptr == data.mask_index ? batch_size : 2 * batch_size);
     fused_fp16_runner->setup(S, B);
 
     fused_fp16_runner->run(qkv, nullptr, sequence_offset, data.output, nullptr, stream);

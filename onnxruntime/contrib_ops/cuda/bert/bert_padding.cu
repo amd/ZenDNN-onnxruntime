@@ -327,14 +327,40 @@ __global__ void __launch_bounds__(kMAX_THREADS_PER_BLOCK)
   }
 }
 
+// When there is no attention mask, the sequence offset is like
+// 0, sequence_length, 2 * sequence_length, 3 * sequence_length, .... ,batch_size * sequence_length
+__global__ void __launch_bounds__(kMAX_THREADS_PER_BLOCK)
+    getTrtSequenceOffsetNoMask(int* trt_mha_padding_offset,
+                               const int batch_size,
+                               const int sequence_length) {
+  extern __shared__ int tmp_offset[];
+  if (threadIdx.x == 0) {
+    tmp_offset[0] = 0;
+    for (int i = 0; i < batch_size; i++) {
+      tmp_offset[i + 1] = sequence_length * (i + 1);
+    }
+  }
+  __syncthreads();
+
+  for (int i = threadIdx.x; i < batch_size + 1; i += blockDim.x) {
+    trt_mha_padding_offset[i] = tmp_offset[i];
+  }
+}
+
 // Get sequence offset for TensorRT fused attention when we keep the padding
 void LaunchTrtSequenceOffset(int* trt_mha_padding_offset,
                              const int* sequence_token_count,
                              const int batch_size,
                              const int sequence_length,
                              cudaStream_t stream) {
-  getTrtSequenceOffset<<<1, kMAX_THREADS_PER_BLOCK, sizeof(int) * (2 * batch_size + 1), stream>>>(
-      trt_mha_padding_offset, sequence_token_count, batch_size, sequence_length);
+  if (nullptr == sequence_token_count) {
+    getTrtSequenceOffsetNoMask<<<1, kMAX_THREADS_PER_BLOCK, sizeof(int) * (batch_size + 1), stream>>>(
+      trt_mha_padding_offset, batch_size, sequence_length);
+  }
+  else {
+    getTrtSequenceOffset<<<1, kMAX_THREADS_PER_BLOCK, sizeof(int) * (2 * batch_size + 1), stream>>>(
+        trt_mha_padding_offset, sequence_token_count, batch_size, sequence_length);
+  }
 }
 
 }  // namespace cuda

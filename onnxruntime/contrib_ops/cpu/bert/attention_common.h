@@ -22,5 +22,19 @@ struct AttentionParameters {
   bool is_unidirectional;
 };
 
+namespace attention {
+// Environment variable to disable fused attention kernel. Default is false.
+constexpr const char* kDisableFusedAttention = "ORT_DISABLE_FUSED_ATTENTION";
+
+// Environment variable to enable flash attention. Default is false.
+constexpr const char* kEnableFlashAttention = "ORT_ENABLE_FLASH_ATTENTION";
+
+// Environment variable to enable removing padding and restore padding. Default is false.
+constexpr const char* kEnableUnpadAttention = "ORT_ENABLE_UNPAD_ATTENTION";
+
+// Environment variable to enable flash attention. Default is false.
+constexpr const char* kEnableDumpAttention = "ORT_DUMP_ATTENTION";
+}  // namespace attention
+
 }  // namespace contrib
 }  // namespace onnxruntime
