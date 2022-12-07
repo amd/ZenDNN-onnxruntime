@@ -1,6 +1,6 @@
 /******************************************************************************
  * Copyright (c) 2011-2021, NVIDIA CORPORATION.  All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *     * Redistributions of source code must retain the above copyright
@@ -11,7 +11,7 @@
  *     * Neither the name of the NVIDIA CORPORATION nor the
  *       names of its contributors may be used to endorse or promote products
  *       derived from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -25,9 +25,13 @@
  *
  ******************************************************************************/
 
+#pragma once
+
 #include <cuda_fp16.h>
 
-#pragma once
+namespace onnxruntime {
+namespace cuda {
+namespace fmha {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -113,4 +117,6 @@ struct FMHA_kernel_traits {
     static_assert(Smem_tile_q::BYTES_PER_TILE + Smem_tile_o::BYTES_PER_TILE <= BYTES_PER_SMEM, "");
 };
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
+}  // namespace fmha
+}  // namespace cuda
+}  // namespace onnxruntime

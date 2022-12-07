@@ -7,10 +7,13 @@
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
 
-#include "contrib_ops/cuda/bert/flash_attention/static_switch.h"
-#include "contrib_ops/cuda/bert/flash_attention/fp16_switch.h"
 #include "contrib_ops/cuda/bert/flash_attention/fmha.h"
 #include "contrib_ops/cuda/bert/flash_attention/fmha_fprop_kernel_1xN.h"
+#include "core/providers/cuda/cuda_common.h"
+
+namespace onnxruntime {
+namespace cuda {
+namespace fmha {
 
 // Find the number of splits that maximizes the occupancy. For example, if we have
 // batch * n_heads = 48 and we have 108 SMs, having 2 splits (efficiency = 0.89) is
@@ -45,7 +48,7 @@ __global__ void fmha_fwd_loop_kernel(FMHA_fprop_params params) {
 }
 
 template<typename Kernel_traits>
-void run_fmha_fwd_loop(Launch_params<FMHA_fprop_params> &launch_params) {
+Status run_fmha_fwd_loop(Launch_params<FMHA_fprop_params> &launch_params) {
     constexpr int blocksize_c = Kernel_traits::Cta_tile_p::N;
     const int loop_steps = (launch_params.params.seqlen_k + blocksize_c - 1) / blocksize_c;
 
@@ -63,7 +66,7 @@ void run_fmha_fwd_loop(Launch_params<FMHA_fprop_params> &launch_params) {
                ? &fmha_fwd_loop_kernel<Kernel_traits, false, true>
                : &fmha_fwd_loop_kernel<Kernel_traits, false, false>);
         if( smem_size >= 48 * 1024 ) {
-            FMHA_CHECK_CUDA(cudaFuncSetAttribute(
+            CUDA_RETURN_IF_ERROR(cudaFuncSetAttribute(
                 kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_size));
         }
         // Automatically set num_splits to maximize occupancy
@@ -83,6 +86,12 @@ void run_fmha_fwd_loop(Launch_params<FMHA_fprop_params> &launch_params) {
         dim3 grid(launch_params.params.b, launch_params.params.h, launch_params.params.num_splits);
         kernel<<<grid, Kernel_traits::THREADS, smem_size, launch_params.stream>>>(
             launch_params.params);
-        FMHA_CHECK_CUDA(cudaPeekAtLastError());
+        CUDA_RETURN_IF_ERROR(cudaPeekAtLastError());
     }
+
+    return Status::OK();
 }
+
+}  // namespace fmha
+}  // namespace cuda
+}  // namespace onnxruntime

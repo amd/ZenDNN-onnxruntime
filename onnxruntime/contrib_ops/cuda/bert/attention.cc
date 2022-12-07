@@ -253,7 +253,7 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
     dumper.Print("gemm_buffer", gemm_buffer.get(), m, n);
 
     int max_seqlen_q_ = max_token_count;
-    size_t softmax_lse_bytes = get_softmax_lse_size(max_seqlen_q_, batch_size, parameters.num_heads);
+    size_t softmax_lse_bytes = fmha::get_softmax_lse_size(max_seqlen_q_, batch_size, parameters.num_heads);
     auto softmax_lse_buffer = GetScratchBuffer<void>(softmax_lse_bytes);
 
     auto fmha_output_buffer = GetScratchBuffer<T>(static_cast<size_t>(total_token_count) * parameters.v_hidden_size);
@@ -280,27 +280,28 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
 
     const float rsqrt_head_size = 1.f / sqrt(static_cast<float>(parameters.head_size));
 
-    fmha_forward(device_prop,
-                stream,
-                reinterpret_cast<void*>(q_data),
-                reinterpret_cast<void*>(k_data),
-                reinterpret_cast<void*>(v_data),
-                reinterpret_cast<void*>(output->MutableData<T>()),
-                cumulated_seq_len_buffer.get(),
-                cumulated_seq_len_buffer.get(),
-                reinterpret_cast<void*>(softmax_lse_buffer.get()),
-                reinterpret_cast<void*>(o_tmp_buffer),
-                batch_size,
-                parameters.num_heads,
-                parameters.head_size,
-                parameters.v_head_size,
-                total_token_count,  // total_q
-                max_token_count,    // max_seqlen_q_,
-                max_token_count,    // max_seqlen_k_,
-                rsqrt_head_size,    // softmax_scale,
-                false,              // is_causal,
-                0                   // num_splits
-    );
+    ORT_RETURN_IF_ERROR(fmha::fmha_forward(
+        device_prop,
+        stream,
+        reinterpret_cast<void*>(q_data),
+        reinterpret_cast<void*>(k_data),
+        reinterpret_cast<void*>(v_data),
+        reinterpret_cast<void*>(output->MutableData<T>()),
+        cumulated_seq_len_buffer.get(),
+        cumulated_seq_len_buffer.get(),
+        reinterpret_cast<void*>(softmax_lse_buffer.get()),
+        reinterpret_cast<void*>(o_tmp_buffer),
+        batch_size,
+        parameters.num_heads,
+        parameters.head_size,
+        parameters.v_head_size,
+        total_token_count,  // total_q
+        max_token_count,    // max_seqlen_q_,
+        max_token_count,    // max_seqlen_k_,
+        rsqrt_head_size,    // softmax_scale,
+        false,              // is_causal,
+        0                   // num_splits
+    ));
 
     dumper.Print("fmha_output", output->MutableData<T>(), total_token_count, parameters.v_hidden_size);
     return Status::OK();
@@ -369,7 +370,7 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
     dumper.Print("gemm_buffer", gemm_buffer.get(), m, n);
 
     int max_seqlen_q_ = max_token_count;
-    size_t softmax_lse_bytes = get_softmax_lse_size(max_seqlen_q_, batch_size, parameters.num_heads);
+    size_t softmax_lse_bytes = fmha::get_softmax_lse_size(max_seqlen_q_, batch_size, parameters.num_heads);
     auto softmax_lse_buffer = GetScratchBuffer<void>(softmax_lse_bytes);
 
     auto fmha_output_buffer = GetScratchBuffer<T>(static_cast<size_t>(total_token_count) * parameters.v_hidden_size);
@@ -396,27 +397,28 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
 
     const float rsqrt_head_size = 1.f / sqrt(static_cast<float>(parameters.head_size));
 
-    fmha_forward(device_prop,
-                 stream,
-                 reinterpret_cast<void*>(q_data),
-                 reinterpret_cast<void*>(k_data),
-                 reinterpret_cast<void*>(v_data),
-                 reinterpret_cast<void*>(fmha_output_buffer.get()),
-                 cumulated_seq_len_buffer.get(),
-                 cumulated_seq_len_buffer.get(),
-                 reinterpret_cast<void*>(softmax_lse_buffer.get()),
-                 reinterpret_cast<void*>(o_tmp_buffer),
-                 batch_size,
-                 parameters.num_heads,
-                 parameters.head_size,
-                 parameters.v_head_size,
-                 total_token_count,  // total_q
-                 max_token_count,    // max_seqlen_q_,
-                 max_token_count,    // max_seqlen_k_,
-                 rsqrt_head_size,    // softmax_scale,
-                 false,              // is_causal,
-                 0                   // num_splits
-    );
+    ORT_RETURN_IF_ERROR(fmha::fmha_forward(
+        device_prop,
+        stream,
+        reinterpret_cast<void*>(q_data),
+        reinterpret_cast<void*>(k_data),
+        reinterpret_cast<void*>(v_data),
+        reinterpret_cast<void*>(fmha_output_buffer.get()),
+        cumulated_seq_len_buffer.get(),
+        cumulated_seq_len_buffer.get(),
+        reinterpret_cast<void*>(softmax_lse_buffer.get()),
+        reinterpret_cast<void*>(o_tmp_buffer),
+        batch_size,
+        parameters.num_heads,
+        parameters.head_size,
+        parameters.v_head_size,
+        total_token_count,  // total_q
+        max_token_count,    // max_seqlen_q_,
+        max_token_count,    // max_seqlen_k_,
+        rsqrt_head_size,    // softmax_scale,
+        false,              // is_causal,
+        0                   // num_splits
+    ));
 
     dumper.Print("fmha_output", fmha_output_buffer.get(), total_token_count, parameters.v_hidden_size);
 

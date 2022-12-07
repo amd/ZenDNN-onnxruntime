@@ -34,52 +34,9 @@
 #include "contrib_ops/cuda/bert/flash_attention/utils.h"
 #include "contrib_ops/cuda/bert/flash_attention/softmax.h"
 
+namespace onnxruntime {
+namespace cuda {
 namespace fmha {
-
-namespace philox {
-struct PhiloxCudaState {
-  PhiloxCudaState() = default;
-
-  // Called if graph capture is not underway
-  PhiloxCudaState(uint64_t seed,
-                  uint64_t offset) {
-    seed_.val = seed;
-    offset_.val = offset;
-  }
-
-  // Called if graph capture is underway
-  PhiloxCudaState(int64_t* seed,
-                  int64_t* offset_extragraph,
-                  uint32_t offset_intragraph) {
-    seed_.ptr = seed;
-    offset_.ptr = offset_extragraph;
-    offset_intragraph_ = offset_intragraph;
-    captured_ = true;
-  }
-
-  union Payload {
-    uint64_t val;
-    int64_t* ptr;
-  };
-
-  Payload seed_;
-  Payload offset_;
-  uint32_t offset_intragraph_ = 0;
-  bool captured_ = false;
-};
-
-__device__ __forceinline__ std::tuple<uint64_t, uint64_t>
-unpack(PhiloxCudaState arg) {
-  if (arg.captured_) {
-    return std::make_tuple(static_cast<uint64_t>(*arg.seed_.ptr), static_cast<uint64_t>(*(arg.offset_.ptr) + arg.offset_intragraph_));
-  } else {
-    return std::make_tuple(arg.seed_.val, arg.offset_.val);
-  }
-}
-
-}  // namespace philox
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template<typename Kernel_traits>
 struct Gemm_Q_K_base {
@@ -617,6 +574,6 @@ inline __device__ void device_1xN_loop(const Params &params) {
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-} // namespace fmha
+}  // namespace fmha
+}  // namespace cuda
+}  // namespace onnxruntime

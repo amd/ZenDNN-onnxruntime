@@ -95,7 +95,7 @@ size_t GetAttentionWorkspaceSize(
 
     int total_q = batch_size * sequence_length;
     int max_seqlen_k_ = total_sequence_length;
-    int o_tmp_bytes = get_o_tmp_size(max_seqlen_k_, total_q, num_heads, qk_head_size, v_head_size);
+    int o_tmp_bytes = fmha::get_o_tmp_size(max_seqlen_k_, total_q, num_heads, qk_head_size, v_head_size);
 
     return qkv_bytes + o_tmp_bytes;
   }

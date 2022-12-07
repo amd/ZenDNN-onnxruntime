@@ -37,6 +37,8 @@
 #include <cutlass/array.h>
 #include <cutlass/numeric_types.h>
 
+namespace onnxruntime {
+namespace cuda {
 namespace fmha {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -447,6 +449,6 @@ using Cta_tile_with_k_with_padding = Cta_tile_extd<Cta_tile_::M,
                                                    Cta_tile_::WARPS_N,
                                                    Cta_tile_::WARPS_K>;
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
 }  // namespace fmha
+}  // namespace cuda
+}  // namespace onnxruntime

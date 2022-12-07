@@ -25,9 +25,24 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  ******************************************************************************/
-
+#include <cuda_fp16.h>
 #include "contrib_ops/cuda/bert/flash_attention/fmha.h"
 #include "contrib_ops/cuda/bert/flash_attention/flash_attention.h"
+#include "core/common/common.h"
+
+namespace onnxruntime {
+namespace cuda {
+namespace fmha {
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+static inline void set_alpha_fp16(uint32_t& alpha, float norm) {
+  half x = __float2half_rn(norm);
+  uint16_t h = reinterpret_cast<const uint16_t&>(x);
+  ushort2 h2 = {h, h};
+  alpha = reinterpret_cast<const uint32_t&>(h2);
+}
+#pragma GCC diagnostic pop
 
 void set_params_fprop(FMHA_fprop_params& params,
                       const size_t batch_size,
@@ -49,7 +64,6 @@ void set_params_fprop(FMHA_fprop_params& params,
                       int num_splits  // How many SMs per attention matrix.
 ) {
   memset(&params, 0, sizeof(params));
-  params.is_bf16 = false;
 
   params.q_ptr = q;
   params.k_ptr = k;
@@ -84,7 +98,7 @@ void set_params_fprop(FMHA_fprop_params& params,
 
   const float scale_bmm1 = softmax_scale;
   params.scale_bmm1f = scale_bmm1;
-  set_alpha(params.scale_bmm1, scale_bmm1, DATA_TYPE_FP16);
+  set_alpha_fp16(params.scale_bmm1, scale_bmm1);
   params.is_causal = is_causal;
   params.num_splits = num_splits;
 }
@@ -122,17 +136,19 @@ size_t get_o_tmp_size(int max_seqlen_k_, int total_q, int num_heads, int head_si
   return loop ? (sizeof(float) * total_q * num_heads * v_head_size) : 0;
 }
 
-void run_fmha_fwd(Launch_params<FMHA_fprop_params> &launch_params) {
+Status run_fmha_fwd(Launch_params<FMHA_fprop_params> &launch_params) {
     if (launch_params.params.d <= 32) {
-        run_fmha_fwd_hdim32(launch_params);
+        return run_fmha_fwd_hdim32(launch_params);
     } else if (launch_params.params.d <= 64) {
-        run_fmha_fwd_hdim64(launch_params);
+        return run_fmha_fwd_hdim64(launch_params);
     } else if (launch_params.params.d <= 128) {
-        run_fmha_fwd_hdim128(launch_params);
+        return run_fmha_fwd_hdim128(launch_params);
+    } else {
+      return ORT_MAKE_STATUS(ONNXRUNTIME, INVALID_ARGUMENT, "headsize > 128 is not supported by flash attention");
     }
 }
 
-void fmha_forward(const cudaDeviceProp& dprops,
+Status fmha_forward(const cudaDeviceProp& dprops,
                   cudaStream_t stream,
                   void* q,                   // half (total_q, num_heads, head_size)
                   void* k,                   // half (total_k, num_heads, head_size)
@@ -188,5 +204,10 @@ void fmha_forward(const cudaDeviceProp& dprops,
                    is_causal,
                    num_splits);
 
-  run_fmha_fwd(launch_params);
+  return run_fmha_fwd(launch_params);
 }
+
+
+}  // namespace fmha
+}  // namespace cuda
+}  // namespace onnxruntime

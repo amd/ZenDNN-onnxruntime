@@ -30,6 +30,8 @@
 #include <cmath>
 #include <cuda_fp16.h>
 
+namespace onnxruntime {
+namespace cuda {
 namespace fmha {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -62,7 +64,7 @@ struct Smem_tile_reduce {
     // Helper class to distribute MMA tiles reduced over rows per warp over quads.
 
     // The Mma tile.
-    using Mma_tile = fmha::Hmma_tile<Cta_tile>;
+    using Mma_tile = Hmma_tile<Cta_tile>;
 
     // The number of MMAs in M/N dimensions.
     static constexpr int MMAS_M = Mma_tile::MMAS_M;
@@ -498,6 +500,6 @@ struct Softmax : public Softmax_base<Cta_tile, Kernel_traits> {
     Smem_tile_red smem_sum_;
 };
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
 }  // namespace fmha
+}  // namespace cuda
+}  // namespace onnxruntime

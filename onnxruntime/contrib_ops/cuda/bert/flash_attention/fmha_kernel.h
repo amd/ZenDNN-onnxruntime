@@ -34,6 +34,8 @@
 #include "contrib_ops/cuda/bert/flash_attention/mask.h"
 #include "contrib_ops/cuda/bert/flash_attention/softmax.h"
 
+namespace onnxruntime {
+namespace cuda {
 namespace fmha {
 
 template<int THREADS_PER_CTA>
@@ -70,3 +72,5 @@ struct BlockInfoPadded {
 };
 
 }  // namespace fmha
+}  // namespace cuda
+}  // namespace onnxruntime

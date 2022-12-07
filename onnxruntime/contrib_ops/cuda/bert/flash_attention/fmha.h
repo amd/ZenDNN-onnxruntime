@@ -28,15 +28,12 @@
 #pragma once
 
 #include <cuda.h>
-#include <vector>
+#include <cuda_runtime_api.h>
+#include "core/common/status.h"
 
-#include "contrib_ops/cuda/bert/flash_attention/fmha_utils.h"
-
-constexpr int TOTAL_DIM = 0;
-constexpr int H_DIM = 1;
-constexpr int D_DIM = 2;
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
+namespace onnxruntime {
+namespace cuda {
+namespace fmha {
 
 struct Qkv_params {
     // The QKV matrices.
@@ -112,7 +109,6 @@ struct FMHA_fprop_params : public Qkv_params {
     // Random state.
     void* philox_args;
 
-    bool is_bf16;
     bool is_causal;
 
     int num_splits; // How many SMs per attention matrix.
@@ -148,6 +144,10 @@ struct Launch_params{
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-void run_fmha_fwd_hdim32(Launch_params<FMHA_fprop_params> &launch_params);
-void run_fmha_fwd_hdim64(Launch_params<FMHA_fprop_params> &launch_params);
-void run_fmha_fwd_hdim128(Launch_params<FMHA_fprop_params> &launch_params);
+Status run_fmha_fwd_hdim32(Launch_params<FMHA_fprop_params> &launch_params);
+Status run_fmha_fwd_hdim64(Launch_params<FMHA_fprop_params> &launch_params);
+Status run_fmha_fwd_hdim128(Launch_params<FMHA_fprop_params> &launch_params);
+
+}  // namespace fmha
+}  // namespace cuda
+}  // namespace onnxruntime

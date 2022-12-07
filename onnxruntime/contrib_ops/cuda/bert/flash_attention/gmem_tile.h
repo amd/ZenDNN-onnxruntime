@@ -31,8 +31,9 @@
 #include <cuda_bf16.h>
 
 #include "contrib_ops/cuda/bert/flash_attention/utils.h"
-#include "contrib_ops/cuda/bert/flash_attention/fp16_switch.h"
 
+namespace onnxruntime {
+namespace cuda {
 namespace fmha {
 
 template<
@@ -550,6 +551,6 @@ struct Gmem_summary_stats {
     const int tidx_;
 };
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
 }  // namespace fmha
+}  // namespace cuda
+}  // namespace onnxruntime
