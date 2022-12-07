@@ -38,37 +38,35 @@ namespace onnxruntime {
 namespace cuda {
 namespace fmha {
 
-template<int THREADS_PER_CTA>
+template <int THREADS_PER_CTA>
 struct BlockInfoPadded {
+  template <typename Params>
+  __device__ BlockInfoPadded(const Params& params,
+                             const int bidb,
+                             const int bidh,
+                             const int tidx)
+      : bidb(bidb), bidh(bidh), h(params.h) {
+    // The block index.
+    sum_s_k = params.cu_seqlens_k[bidb];
+    actual_seqlen_k = params.cu_seqlens_k[bidb + 1] - sum_s_k;
+    sum_s_q = params.cu_seqlens_q[bidb];
+    actual_seqlen_q = params.cu_seqlens_q[bidb + 1] - sum_s_q;
 
-    template<typename Params>
-    __device__ BlockInfoPadded(const Params &params,
-                               const int bidb,
-                               const int bidh,
-                               const int tidx)
-        : bidb(bidb), bidh(bidh), h(params.h) {
+    tidx_global = (bidb * params.h + bidh) * THREADS_PER_CTA + tidx;
+  }
 
-        // The block index.
-        sum_s_k = params.cu_seqlens_k[bidb];
-        actual_seqlen_k = params.cu_seqlens_k[bidb + 1] - sum_s_k;
-        sum_s_q = params.cu_seqlens_q[bidb];
-        actual_seqlen_q = params.cu_seqlens_q[bidb + 1] - sum_s_q;
+  __device__ bool stop_early(const int start_col = 0) const {
+    return actual_seqlen_k <= start_col;
+  }
 
-        tidx_global = (bidb * params.h + bidh) * THREADS_PER_CTA + tidx;
-    }
-
-    __device__ bool stop_early(const int start_col = 0) const {
-        return actual_seqlen_k <= start_col;
-    }
-
-    int actual_seqlen_q;
-    int actual_seqlen_k;
-    int sum_s_q;
-    int sum_s_k;
-    int bidh;
-    int bidb;
-    int tidx_global;
-    int h;
+  int actual_seqlen_q;
+  int actual_seqlen_k;
+  int sum_s_q;
+  int sum_s_k;
+  int bidh;
+  int bidb;
+  int tidx_global;
+  int h;
 };
 
 }  // namespace fmha

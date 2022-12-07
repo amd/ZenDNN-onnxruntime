@@ -71,24 +71,24 @@ void set_params_fprop(FMHA_fprop_params& params,
   params.o_ptr = out;
   params.o_tmp_ptr = o_tmp_d;
 
-  params.q_row_stride_in_elts = num_heads * head_size; // q.stride(0)
-  params.k_row_stride_in_elts = num_heads * head_size; // k.stride(0)
-  params.v_row_stride_in_elts = num_heads * v_head_size; // v.stride(0)
-  params.o_row_stride_in_elts = num_heads * v_head_size; // o.stride(0)
+  params.q_row_stride_in_elts = num_heads * head_size;    // q.stride(0)
+  params.k_row_stride_in_elts = num_heads * head_size;    // k.stride(0)
+  params.v_row_stride_in_elts = num_heads * v_head_size;  // v.stride(0)
+  params.o_row_stride_in_elts = num_heads * v_head_size;  // o.stride(0)
   params.o_tmp_row_stride_in_elts = num_heads * v_head_size;
 
-  params.q_head_stride_in_elts = head_size; // q.stride(1)
-  params.k_head_stride_in_elts = head_size; // k.stride(1)
-  params.v_head_stride_in_elts = v_head_size; // v.stride(1)
-  params.o_head_stride_in_elts = v_head_size; // o.stride(1)
+  params.q_head_stride_in_elts = head_size;    // q.stride(1)
+  params.k_head_stride_in_elts = head_size;    // k.stride(1)
+  params.v_head_stride_in_elts = v_head_size;  // v.stride(1)
+  params.o_head_stride_in_elts = v_head_size;  // o.stride(1)
   params.o_tmp_head_stride_in_elts = v_head_size;
 
   params.cu_seqlens_q = static_cast<int*>(cu_seqlens_q_d);
   params.cu_seqlens_k = static_cast<int*>(cu_seqlens_k_d);
 
-  params.s_ptr = nullptr; // softmax
-  params.s_stride_in_bytes = batch_size * num_heads * seqlen_k * 2; // 2 is bytes of float16
-  params.softmax_lse_ptr = softmax_lse_d;  // softmax sum
+  params.s_ptr = nullptr;                                            // softmax
+  params.s_stride_in_bytes = batch_size * num_heads * seqlen_k * 2;  // 2 is bytes of float16
+  params.softmax_lse_ptr = softmax_lse_d;                            // softmax sum
 
   params.b = batch_size;
   params.h = num_heads;
@@ -136,38 +136,38 @@ size_t get_o_tmp_size(int max_seqlen_k_, int total_q, int num_heads, int head_si
   return loop ? (sizeof(float) * total_q * num_heads * v_head_size) : 0;
 }
 
-Status run_fmha_fwd(Launch_params<FMHA_fprop_params> &launch_params) {
-    if (launch_params.params.d <= 32) {
-        return run_fmha_fwd_hdim32(launch_params);
-    } else if (launch_params.params.d <= 64) {
-        return run_fmha_fwd_hdim64(launch_params);
-    } else if (launch_params.params.d <= 128) {
-        return run_fmha_fwd_hdim128(launch_params);
-    } else {
-      return ORT_MAKE_STATUS(ONNXRUNTIME, INVALID_ARGUMENT, "headsize > 128 is not supported by flash attention");
-    }
+Status run_fmha_fwd(Launch_params<FMHA_fprop_params>& launch_params) {
+  if (launch_params.params.d <= 32) {
+    return run_fmha_fwd_hdim32(launch_params);
+  } else if (launch_params.params.d <= 64) {
+    return run_fmha_fwd_hdim64(launch_params);
+  } else if (launch_params.params.d <= 128) {
+    return run_fmha_fwd_hdim128(launch_params);
+  } else {
+    return ORT_MAKE_STATUS(ONNXRUNTIME, INVALID_ARGUMENT, "headsize > 128 is not supported by flash attention");
+  }
 }
 
 Status fmha_forward(const cudaDeviceProp& dprops,
-                  cudaStream_t stream,
-                  void* q,                   // half (total_q, num_heads, head_size)
-                  void* k,                   // half (total_k, num_heads, head_size)
-                  void* v,                   // half (total_k, num_heads, v_head_size)
-                  void* out,                 // half (total_q, num_heads, v_head_size)
-                  int32_t* cu_seqlens_q,     // int (batch_size + 1)
-                  int32_t* cu_seqlens_k,     // int (batch_size + 1)
-                  void* softmax_lse_buffer,  // float (batch_size, num_heads, max_seqlen_q)
-                  void* o_tmp_buffer,        // NULL or float (total_q, num_heads, v_head_size)
-                  const int batch_size,
-                  const int num_heads,
-                  const int head_size,
-                  const int v_head_size,
-                  const int total_q,
-                  const int max_seqlen_q_,
-                  const int max_seqlen_k_,
-                  const float softmax_scale,
-                  const bool is_causal,
-                  const int num_splits) {
+                    cudaStream_t stream,
+                    void* q,                   // half (total_q, num_heads, head_size)
+                    void* k,                   // half (total_k, num_heads, head_size)
+                    void* v,                   // half (total_k, num_heads, v_head_size)
+                    void* out,                 // half (total_q, num_heads, v_head_size)
+                    int32_t* cu_seqlens_q,     // int (batch_size + 1)
+                    int32_t* cu_seqlens_k,     // int (batch_size + 1)
+                    void* softmax_lse_buffer,  // float (batch_size, num_heads, max_seqlen_q)
+                    void* o_tmp_buffer,        // NULL or float (total_q, num_heads, v_head_size)
+                    const int batch_size,
+                    const int num_heads,
+                    const int head_size,
+                    const int v_head_size,
+                    const int total_q,
+                    const int max_seqlen_q_,
+                    const int max_seqlen_k_,
+                    const float softmax_scale,
+                    const bool is_causal,
+                    const int num_splits) {
   ORT_UNUSED_PARAMETER(total_q);
 
   bool is_sm75 = dprops.major == 7 && dprops.minor == 5;
@@ -202,7 +202,6 @@ Status fmha_forward(const cudaDeviceProp& dprops,
 
   return run_fmha_fwd(launch_params);
 }
-
 
 }  // namespace fmha
 }  // namespace cuda

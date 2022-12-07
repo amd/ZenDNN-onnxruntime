@@ -36,117 +36,113 @@ namespace cuda {
 namespace fmha {
 
 struct Qkv_params {
-    // The QKV matrices.
-    void *__restrict__ q_ptr;
-    void *__restrict__ k_ptr;
-    void *__restrict__ v_ptr;
+  // The QKV matrices.
+  void* __restrict__ q_ptr;
+  void* __restrict__ k_ptr;
+  void* __restrict__ v_ptr;
 
-    // The stride between rows of the Q, K and V matrices.
-    // We're using 32-bit indexing to save registers.
-    // The code probably won't work for arrays larger than 2GB.
-    uint32_t q_row_stride_in_elts;
-    uint32_t k_row_stride_in_elts;
-    uint32_t v_row_stride_in_elts;
-    uint32_t q_head_stride_in_elts;
-    uint32_t k_head_stride_in_elts;
-    uint32_t v_head_stride_in_elts;
+  // The stride between rows of the Q, K and V matrices.
+  // We're using 32-bit indexing to save registers.
+  // The code probably won't work for arrays larger than 2GB.
+  uint32_t q_row_stride_in_elts;
+  uint32_t k_row_stride_in_elts;
+  uint32_t v_row_stride_in_elts;
+  uint32_t q_head_stride_in_elts;
+  uint32_t k_head_stride_in_elts;
+  uint32_t v_head_stride_in_elts;
 
-    // The number of heads.
-    int h;
+  // The number of heads.
+  int h;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 struct FMHA_fprop_params : public Qkv_params {
+  // The O matrix (output).
+  void* __restrict__ o_ptr;
 
-    // The O matrix (output).
-    void * __restrict__ o_ptr;
+  // The stride between rows of O.
+  uint32_t o_row_stride_in_elts;
+  uint32_t o_head_stride_in_elts;
+  uint32_t o_tmp_row_stride_in_elts;
+  uint32_t o_tmp_head_stride_in_elts;
 
-    // The stride between rows of O.
-    uint32_t o_row_stride_in_elts;
-    uint32_t o_head_stride_in_elts;
-    uint32_t o_tmp_row_stride_in_elts;
-    uint32_t o_tmp_head_stride_in_elts;
+  // The pointer to the O_tmp matrix, which holds O intermediate value during the loop;
+  void* __restrict__ o_tmp_ptr;
 
-    // The pointer to the O_tmp matrix, which holds O intermediate value during the loop;
-    void *__restrict__ o_tmp_ptr;
+  // The pointer to the S matrix.
+  void* __restrict__ s_ptr;
 
-    // The pointer to the S matrix.
-    void * __restrict__ s_ptr;
+  // The stride between rows of the S matrix.
+  // int64_t s_stride_in_bytes;
+  uint32_t s_stride_in_bytes;
 
-    // The stride between rows of the S matrix.
-    // int64_t s_stride_in_bytes;
-    uint32_t s_stride_in_bytes;
+  // The pointer to the softmax sum.
+  void* __restrict__ softmax_lse_ptr;
 
-    // The pointer to the softmax sum.
-    void * __restrict__ softmax_lse_ptr;
+  // The dimensions.
+  int b, seqlen_q, seqlen_k, d;
 
-    // The dimensions.
-    int b, seqlen_q, seqlen_k, d;
+  // The scaling factors for the kernel.
+  float scale_bmm1f;
+  uint32_t scale_bmm1;
 
-    // The scaling factors for the kernel.
-    float scale_bmm1f;
-    uint32_t scale_bmm1;
+  // array of length b+1 holding starting offset of each sequence.
+  int* __restrict__ cu_seqlens_q;
+  int* __restrict__ cu_seqlens_k;
 
-    // array of length b+1 holding starting offset of each sequence.
-    int * __restrict__ cu_seqlens_q;
-    int * __restrict__ cu_seqlens_k;
+  int* __restrict__ blockmask;
 
-    int *__restrict__ blockmask;
+  // The dropout probability (probability of keeping an activation).
+  float p_dropout;
+  uint32_t p_dropout_in_uint;
+  uint16_t p_dropout_in_uint16_t;
 
-    // The dropout probability (probability of keeping an activation).
-    float p_dropout;
-    uint32_t p_dropout_in_uint;
-    uint16_t p_dropout_in_uint16_t;
+  // Scale factor of 1 / (1 - p_dropout).
+  float rp_dropout;
+  float scale_bmm1_rp_dropout;
 
-    // Scale factor of 1 / (1 - p_dropout).
-    float rp_dropout;
-    float scale_bmm1_rp_dropout;
+  // Scale factor of 1 / (1 - p_dropout), in half2.
+  uint32_t scale_dropout;
 
-    // Scale factor of 1 / (1 - p_dropout), in half2.
-    uint32_t scale_dropout;
+  // Random state.
+  void* philox_args;
 
-    // Random state.
-    void* philox_args;
+  bool is_causal;
 
-    bool is_causal;
-
-    int num_splits; // How many SMs per attention matrix.
+  int num_splits;  // How many SMs per attention matrix.
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-template<typename Kernel_params>
-struct Launch_params{
-    Launch_params(const cudaDeviceProp * props_,
-                  cudaStream_t stream_,
-                  bool return_softmax_)
-        : elts_per_thread(0)
-        , props(props_)
-        , stream(stream_)
-        , return_softmax(return_softmax_) {
-    }
+template <typename Kernel_params>
+struct Launch_params {
+  Launch_params(const cudaDeviceProp* props_,
+                cudaStream_t stream_,
+                bool return_softmax_)
+      : elts_per_thread(0), props(props_), stream(stream_), return_softmax(return_softmax_) {
+  }
 
-    size_t elts_per_thread;
+  size_t elts_per_thread;
 
-    const cudaDeviceProp * props;
+  const cudaDeviceProp* props;
 
-    cudaStream_t stream;
+  cudaStream_t stream;
 
-    bool return_softmax;
+  bool return_softmax;
 
-    Kernel_params params;
-    int num_full_heads;
-    int num_main_groups;
-    int heads_last_wave;
-    int main_steps;
-    int rest_steps;
+  Kernel_params params;
+  int num_full_heads;
+  int num_main_groups;
+  int heads_last_wave;
+  int main_steps;
+  int rest_steps;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-Status run_fmha_fwd_hdim32(Launch_params<FMHA_fprop_params> &launch_params);
-Status run_fmha_fwd_hdim64(Launch_params<FMHA_fprop_params> &launch_params);
-Status run_fmha_fwd_hdim128(Launch_params<FMHA_fprop_params> &launch_params);
+Status run_fmha_fwd_hdim32(Launch_params<FMHA_fprop_params>& launch_params);
+Status run_fmha_fwd_hdim64(Launch_params<FMHA_fprop_params>& launch_params);
+Status run_fmha_fwd_hdim128(Launch_params<FMHA_fprop_params>& launch_params);
 
 }  // namespace fmha
 }  // namespace cuda
