@@ -42,7 +42,7 @@ export interface Backend {
    */
   init(): Promise<void>;
 
-  createSessionHandler(uriOrBuffer: string|Uint8Array, options?: InferenceSession.SessionOptions):
+  createSessionHandler(uriOrBuffer: string|string[]|Uint8Array, options?: InferenceSession.SessionOptions):
       Promise<SessionHandler>;
 }
 

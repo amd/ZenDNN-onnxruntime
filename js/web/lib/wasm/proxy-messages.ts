@@ -34,7 +34,7 @@ interface MessageInitOrt extends MessageError {
 
 interface MessageCreateSessionAllocate extends MessageError {
   type: 'create_allocate';
-  in ?: {model: Uint8Array};
+  in ?: {model: Array<Uint8Array>};
   out?: SerializableModeldata;
 }
 

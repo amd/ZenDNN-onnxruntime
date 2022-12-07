@@ -41,8 +41,9 @@ class OnnxruntimeWebAssemblyBackend implements Backend {
     await initWasm();
   }
   createSessionHandler(path: string, options?: InferenceSession.SessionOptions): Promise<SessionHandler>;
+  createSessionHandler(path: string|string[], options?: InferenceSession.SessionOptions): Promise<SessionHandler>;
   createSessionHandler(buffer: Uint8Array, options?: InferenceSession.SessionOptions): Promise<SessionHandler>;
-  async createSessionHandler(pathOrBuffer: string|Uint8Array, options?: InferenceSession.SessionOptions):
+  async createSessionHandler(pathOrBuffer: string|string[]|Uint8Array, options?: InferenceSession.SessionOptions):
       Promise<SessionHandler> {
     const handler = new OnnxruntimeWebAssemblySessionHandler();
     await handler.loadModel(pathOrBuffer, options);

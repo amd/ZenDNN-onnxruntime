@@ -32,11 +32,19 @@ const activeSessions = new Map<number, SessionMetadata>();
  * create an instance of InferenceSession.
  * @returns the metadata of InferenceSession. 0-value handle for failure.
  */
-export const createSessionAllocate = (model: Uint8Array): [number, number] => {
+export const createSessionAllocate = (model: Array<Uint8Array>): [number, number] => {
   const wasm = getInstance();
-  const modelDataOffset = wasm._malloc(model.byteLength);
-  wasm.HEAPU8.set(model, modelDataOffset);
-  return [modelDataOffset, model.byteLength];
+  let total_size = 0;
+  for (let i = 0; i < model.length; i++) {
+    total_size += model[i].length;
+  }
+  const modelDataOffset = wasm._malloc(total_size);
+  let offset = modelDataOffset;
+  for (let i = 0; i < model.length; i++) {
+    wasm.HEAPU8.set(model[i], offset);
+    offset += model[i].length;
+  }
+  return [modelDataOffset, total_size];
 };
 
 export const createSessionFinalize =
@@ -95,7 +103,7 @@ export const createSessionFinalize =
  */
 export const createSession =
     (model: Uint8Array, options?: InferenceSession.SessionOptions): SerializableSessionMetadata => {
-      const modelData: SerializableModeldata = createSessionAllocate(model);
+      const modelData: SerializableModeldata = createSessionAllocate(([model]));
       return createSessionFinalize(modelData, options);
     };
 

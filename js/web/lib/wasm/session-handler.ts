@@ -35,34 +35,47 @@ export class OnnxruntimeWebAssemblySessionHandler implements SessionHandler {
   inputNames: string[];
   outputNames: string[];
 
-  async createSessionAllocate(path: string): Promise<SerializableModeldata> {
+  async _createSessionAllocate(path: string|string[]): Promise<SerializableModeldata> {
     // fetch model from url and move to wasm heap. The arraybufffer that held the http
     // response is freed once we return
-    const response = await fetch(path);
-    const arrayBuffer = await response.arrayBuffer();
-    return createSessionAllocate(new Uint8Array(arrayBuffer));
+    if (!Array.isArray(path)) {
+      path = [path];
+    }
+    var responses = Array();
+    for (var i = 0; i < path.length; i++) {
+      console.log(`fetching model from ${path[i]}`);
+      responses.push(fetch(path[i]));
+    }
+    var total_size = 0;
+    for (var i = 0; i < path.length; i++) {
+      responses[i] = await (await responses[i]).arrayBuffer();
+      total_size += responses[i].byteLength;
+      responses[i] = new Uint8Array(responses[i]);
+      console.log(`got ${path[i]}, total=${total_size}`);
+    }
+    return createSessionAllocate(responses);
   }
 
-  async loadModel(pathOrBuffer: string|Uint8Array, options?: InferenceSession.SessionOptions): Promise<void> {
+  async loadModel(pathOrBuffer: string|string[]|Uint8Array, options?: InferenceSession.SessionOptions): Promise<void> {
     if (!ortInit) {
       await initOrt(env.wasm.numThreads!, getLogLevel(env.logLevel!));
       ortInit = true;
     }
 
-    if (typeof pathOrBuffer === 'string') {
+    if (typeof pathOrBuffer === 'string' || Array.isArray(pathOrBuffer)) {
       if (typeof fetch === 'undefined') {
         // node
-        const model = await promisify(readFile)(pathOrBuffer);
+        const model = await promisify(readFile)(pathOrBuffer as string);
         [this.sessionId, this.inputNames, this.outputNames] = await createSession(model, options);
       } else {
         // browser
         // fetch model and move to wasm heap.
-        const modelData: SerializableModeldata = await this.createSessionAllocate(pathOrBuffer);
+        const modelData: SerializableModeldata = await this._createSessionAllocate(pathOrBuffer);
         // create the session
         [this.sessionId, this.inputNames, this.outputNames] = await createSessionFinalize(modelData, options);
       }
     } else {
-      [this.sessionId, this.inputNames, this.outputNames] = await createSession(pathOrBuffer, options);
+      [this.sessionId, this.inputNames, this.outputNames] = await createSession((pathOrBuffer as Uint8Array), options);
     }
   }
 

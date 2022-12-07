@@ -116,18 +116,18 @@ export class InferenceSession implements InferenceSessionInterface {
   }
 
   static create(path: string, options?: SessionOptions): Promise<InferenceSessionInterface>;
+  static create(path: string[], options?: SessionOptions): Promise<InferenceSessionInterface>;
   static create(buffer: ArrayBufferLike, options?: SessionOptions): Promise<InferenceSessionInterface>;
   static create(buffer: ArrayBufferLike, byteOffset: number, byteLength?: number, options?: SessionOptions):
       Promise<InferenceSessionInterface>;
   static create(buffer: Uint8Array, options?: SessionOptions): Promise<InferenceSessionInterface>;
   static async create(
-      arg0: string|ArrayBufferLike|Uint8Array, arg1?: SessionOptions|number, arg2?: number,
+      arg0: string|string[]|ArrayBufferLike|Uint8Array, arg1?: SessionOptions|number, arg2?: number,
       arg3?: SessionOptions): Promise<InferenceSessionInterface> {
     // either load from a file or buffer
-    let filePathOrUint8Array: string|Uint8Array;
+    let filePathOrUint8Array: string|string[]|Uint8Array;
     let options: SessionOptions = {};
-
-    if (typeof arg0 === 'string') {
+    if (typeof arg0 === 'string' || Array.isArray(arg0)) {
       filePathOrUint8Array = arg0;
       if (typeof arg1 === 'object' && arg1 !== null) {
         options = arg1;
