@@ -184,10 +184,6 @@ Status fmha_forward(const cudaDeviceProp& dprops,
   int max_seqlen_k = get_max_seqlen_k(max_seqlen_k_, head_size, loop);
   int max_seqlen_q = get_max_seqlen_q(max_seqlen_q_);
 
-  if (!loop) {
-    o_tmp_buffer = nullptr;
-  }
-
   set_params_fprop(launch_params.params,
                    batch_size,
                    max_seqlen_q,
@@ -198,7 +194,7 @@ Status fmha_forward(const cudaDeviceProp& dprops,
                    q, k, v, out,
                    cu_seqlens_q,
                    cu_seqlens_k,
-                   o_tmp_buffer,
+                   loop ? o_tmp_buffer : nullptr,
                    softmax_lse_buffer,
                    softmax_scale,
                    is_causal,
