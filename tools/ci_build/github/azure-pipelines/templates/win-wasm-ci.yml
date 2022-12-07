@@ -76,6 +76,7 @@ jobs:
   - script: |
       choco install ccache
       echo "##vso[task.prependpath]C:\ProgramData\chocolatey\lib\ccache\tools"
+      ccache -s
     displayName: Install ccache and update PATH to use linked versions of gcc, cc, etc
   - task: Cache@2
     inputs:
