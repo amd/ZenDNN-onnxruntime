@@ -91,23 +91,6 @@ struct FMHA_fprop_params : public Qkv_params {
   int* __restrict__ cu_seqlens_q;
   int* __restrict__ cu_seqlens_k;
 
-  int* __restrict__ blockmask;
-
-  // The dropout probability (probability of keeping an activation).
-  float p_dropout;
-  uint32_t p_dropout_in_uint;
-  uint16_t p_dropout_in_uint16_t;
-
-  // Scale factor of 1 / (1 - p_dropout).
-  float rp_dropout;
-  float scale_bmm1_rp_dropout;
-
-  // Scale factor of 1 / (1 - p_dropout), in half2.
-  uint32_t scale_dropout;
-
-  // Random state.
-  void* philox_args;
-
   bool is_causal;
 
   int num_splits;  // How many SMs per attention matrix.
