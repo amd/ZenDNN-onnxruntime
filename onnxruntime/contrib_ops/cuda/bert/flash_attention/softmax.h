@@ -214,25 +214,6 @@ struct Softmax_base {
   }
 
   // Apply the exp to all the elements.
-  template <bool max_in_base2 = false, bool elt_in_base2 = false>
-  inline __device__ void apply_exp(const float (&max)[MMAS_M * 2]) {
-#pragma unroll
-    for (int mi = 0; mi < MMAS_M * 2; ++mi) {
-      // Instead of computing exp(x - max), we compute exp2(x * log_2(e) -
-      // max * log_2(e)) This allows the compiler to use the ffma
-      // instruction instead of fadd and fmul separately.
-      constexpr float kLog2e = M_LOG2E;
-      const float max_base2 = max_in_base2 ? max[mi] : max[mi] * kLog2e;
-#pragma unroll
-      for (int ni = 0; ni < MMAS_N * 4; ++ni) {
-        // elt_[mi][ni] = apply_exp_(elt_[mi][ni], max[mi]);
-        elt_[mi][ni] = apply_exp2_(elt_in_base2 ? elt_[mi][ni] : elt_[mi][ni] * kLog2e,
-                                   max_base2);
-      }
-    }
-  }
-
-  // Apply the exp to all the elements.
   template <bool scale_max = true>
   inline __device__ void scale_apply_exp(const float (&max)[MMAS_M * 2], const float scale_) {
     const float max_scale = scale_max ? scale_ * M_LOG2E : M_LOG2E;
@@ -250,61 +231,6 @@ struct Softmax_base {
     }
   }
 
-  // Apply the exp to all the elements.
-  template <bool max_in_base2 = false>
-  inline __device__ void apply_exp_col(const float (&max)[MMAS_N * 4]) {
-#pragma unroll
-    for (int ni = 0; ni < MMAS_N * 4; ++ni) {
-      constexpr float kLog2e = M_LOG2E;
-      const float max_base2 = max_in_base2 ? max[ni] : max[ni] * kLog2e;
-#pragma unroll
-      for (int mi = 0; mi < MMAS_M * 2; ++mi) {
-        elt_[mi][ni] = apply_exp2_(elt_[mi][ni] * kLog2e, max_base2);
-      }
-    }
-  }
-  // inline __device__ void apply_exp_col(const float (&max)[MMAS_N]) {
-  //     constexpr float kLog2e = M_LOG2E;
-  //     #pragma unroll
-  //     for( int ni = 0; ni < MMAS_N * 4; ++ni ) {
-  //         float max_base2 = max_in_base2 ? max[ni / 4] : max[ni / 4] * kLog2e;
-  //         max_base2 = __shfl_sync(0xffffffff, max_base2, (ni % 4) * 8 + threadIdx.x % 8);
-  //         #pragma unroll
-  //         for( int mi = 0; mi < MMAS_M * 2; ++mi ) {
-  //             elt_[mi][ni] = apply_exp2_(elt_[mi][ni] * kLog2e, max_base2);
-  //         }
-  //     }
-  // }
-
-  // Scale all the elements.
-  inline __device__ void scale(const float (&sum)[MMAS_M * 2]) {
-    // Precompute the inverse sum to normalize. Without -use_fast_math, it makes a huge deal.
-    float inv_sum[MMAS_M * 2];
-#pragma unroll
-    for (int mi = 0; mi < MMAS_M * 2; ++mi) {
-      inv_sum[mi] = (sum[mi] == 0.f || sum[mi] != sum[mi]) ? 1.f : 1.f / sum[mi];
-    }
-
-// Update the values.
-#pragma unroll
-    for (int mi = 0; mi < MMAS_M * 2; ++mi) {
-#pragma unroll
-      for (int ni = 0; ni < MMAS_N * 4; ++ni) {
-        elt_[mi][ni] *= inv_sum[mi];
-      }
-    }
-  }
-
-  // Subtract all elements by dp_sum
-  inline __device__ void subtract_dp_sum(const float (&dp_sum)[MMAS_M * 2]) {
-#pragma unroll
-    for (int mi = 0; mi < MMAS_M * 2; ++mi) {
-#pragma unroll
-      for (int ni = 0; ni < MMAS_N * 4; ++ni) {
-        elt_[mi][ni] -= dp_sum[mi];
-      }
-    }
-  }
 
   // The pointer to the mask.
   const char* packed_mask_ptr_;
