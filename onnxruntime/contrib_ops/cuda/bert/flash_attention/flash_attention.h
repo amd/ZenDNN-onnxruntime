@@ -23,6 +23,5 @@ void fmha_forward(const cudaDeviceProp& dprops,
                   const int max_seqlen_q_,
                   const int max_seqlen_k_,
                   const float softmax_scale,
-                  const bool zero_tensors,
                   const bool is_causal,
                   const int num_splits);

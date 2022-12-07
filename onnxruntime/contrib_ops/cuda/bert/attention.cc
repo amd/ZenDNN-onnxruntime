@@ -298,7 +298,6 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
                 max_token_count,    // max_seqlen_q_,
                 max_token_count,    // max_seqlen_k_,
                 rsqrt_head_size,    // softmax_scale,
-                false,              // zero_tensors,
                 false,              // is_causal,
                 0                   // num_splits
     );
@@ -415,7 +414,6 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
                  max_token_count,    // max_seqlen_q_,
                  max_token_count,    // max_seqlen_k_,
                  rsqrt_head_size,    // softmax_scale,
-                 false,              // zero_tensors,
                  false,              // is_causal,
                  0                   // num_splits
     );

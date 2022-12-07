@@ -150,7 +150,6 @@ void fmha_forward(const cudaDeviceProp& dprops,
                   const int max_seqlen_q_,
                   const int max_seqlen_k_,
                   const float softmax_scale,
-                  const bool zero_tensors,
                   const bool is_causal,
                   const int num_splits) {
   ORT_UNUSED_PARAMETER(total_q);
@@ -171,16 +170,6 @@ void fmha_forward(const cudaDeviceProp& dprops,
 
   if (!loop) {
     o_tmp_buffer = nullptr;
-  }
-
-  if (zero_tensors) {
-    // cuMemset(out, 0, sizeof(half) * total_q * num_heads * v_head_size)
-    // volatile union float_int {
-    //   unsigned int i;
-    //   float f;
-    // } x;
-    // x.f = -std::numeric_limits<float>::infinity();
-    // // cuMemsetD32(reinterpret_cast<CUdeviceptr>(softmax_lse_buffer), x.i, static_cast<size_t>(batch_size) * num_heads * max_seqlen_q);
   }
 
   set_params_fprop(launch_params.params,
