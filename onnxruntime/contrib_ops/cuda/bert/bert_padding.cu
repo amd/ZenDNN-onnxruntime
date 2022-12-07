@@ -89,7 +89,7 @@ void LaunchGetTokenOffset(int* token_count_buffer,
                           const int sequence_length,
                           cudaStream_t stream) {
   getTokenOffset<<<1, 1, 0, stream>>>(
-    token_count_buffer, token_offset, cumulated_token_count, sequence_token_count, batch_size, sequence_length);
+      token_count_buffer, token_offset, cumulated_token_count, sequence_token_count, batch_size, sequence_length);
 }
 
 // -----------------------------------
@@ -212,7 +212,6 @@ __global__ void __launch_bounds__(kMAX_THREADS_PER_BLOCK)
   }
 }
 
-
 template <>
 void LaunchRestorePadding(
     float* output, const float* input, const int* token_offset, const int token_count, const int hidden_size,
@@ -258,25 +257,25 @@ void LaunchRestorePadding(
     const int4* input2 = reinterpret_cast<const int4*>(input);
     int4* output2 = reinterpret_cast<int4*>(output);
     restorePadding<int4><<<grid_size, kMAX_THREADS_PER_BLOCK, 0, stream>>>(
-      output2, input2, token_offset, width, token_count);
+        output2, input2, token_offset, width, token_count);
   } else if (hidden_size % 4 == 0) {
     const int width = hidden_size / 4;
     const int64_t* input2 = reinterpret_cast<const int64_t*>(input);
     int64_t* output2 = reinterpret_cast<int64_t*>(output);
     restorePadding<int64_t><<<grid_size, kMAX_THREADS_PER_BLOCK, 0, stream>>>(
-      output2, input2, token_offset, width, token_count);
+        output2, input2, token_offset, width, token_count);
   } else if (hidden_size % 2 == 0) {
     const int width = hidden_size / 2;
     const int32_t* input2 = reinterpret_cast<const int32_t*>(input);
     int32_t* output2 = reinterpret_cast<int32_t*>(output);
     restorePadding<int32_t><<<grid_size, kMAX_THREADS_PER_BLOCK, 0, stream>>>(
-      output2, input2, token_offset, width, token_count);
+        output2, input2, token_offset, width, token_count);
   } else {
     const int width = hidden_size;
     const int16_t* input2 = reinterpret_cast<const int16_t*>(input);
     int16_t* output2 = reinterpret_cast<int16_t*>(output);
     restorePadding<int16_t><<<grid_size, kMAX_THREADS_PER_BLOCK, 0, stream>>>(
-      output2, input2, token_offset, width, token_count);
+        output2, input2, token_offset, width, token_count);
   }
 }
 
@@ -355,9 +354,8 @@ void LaunchTrtSequenceOffset(int* trt_mha_padding_offset,
                              cudaStream_t stream) {
   if (nullptr == sequence_token_count) {
     getTrtSequenceOffsetNoMask<<<1, kMAX_THREADS_PER_BLOCK, sizeof(int) * (batch_size + 1), stream>>>(
-      trt_mha_padding_offset, batch_size, sequence_length);
-  }
-  else {
+        trt_mha_padding_offset, batch_size, sequence_length);
+  } else {
     getTrtSequenceOffset<<<1, kMAX_THREADS_PER_BLOCK, sizeof(int) * (2 * batch_size + 1), stream>>>(
         trt_mha_padding_offset, sequence_token_count, batch_size, sequence_length);
   }

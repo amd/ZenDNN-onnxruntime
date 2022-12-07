@@ -270,9 +270,9 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
     const int format = 3;
     // format 3: BxSx(NH + NH + NH_v) => BxSxNxH + BxSxNxH + BxSxNxH_v
     LaunchAddBiasTranspose(stream, 3, format, device_prop.maxThreadsPerBlock,
-                          batch_size, sequence_length, parameters.num_heads, parameters.head_size,
-                          data.gemm_buffer, data.bias, data.workspace,
-                          true, -1);
+                           batch_size, sequence_length, parameters.num_heads, parameters.head_size,
+                           data.gemm_buffer, data.bias, data.workspace,
+                           true, -1);
 
     dumper.Print("q", reinterpret_cast<T*>(q_data), total_token_count, parameters.hidden_size);
     dumper.Print("k", reinterpret_cast<T*>(k_data), total_token_count, parameters.hidden_size);
@@ -301,7 +301,7 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
         rsqrt_head_size,    // softmax_scale,
         false,              // is_causal,
         0                   // num_splits
-    ));
+        ));
 
     dumper.Print("fmha_output", output->MutableData<T>(), total_token_count, parameters.v_hidden_size);
     return Status::OK();
@@ -418,7 +418,7 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
         rsqrt_head_size,    // softmax_scale,
         false,              // is_causal,
         0                   // num_splits
-    ));
+        ));
 
     dumper.Print("fmha_output", fmha_output_buffer.get(), total_token_count, parameters.v_hidden_size);
 

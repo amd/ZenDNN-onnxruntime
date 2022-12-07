@@ -71,7 +71,8 @@ size_t GetAttentionScratchSize(
 size_t GetSequenceOffsetSize(int batch_size, bool has_padding) {
   // There are batch_size + 1 offsets Without padding (or padding removed), and 2 * batch_size + 1 with padding.
   size_t bytes = sizeof(int) * ((has_padding ? 2 * batch_size : batch_size) + 1);
-  return AlignSize(bytes);;
+  return AlignSize(bytes);
+  ;
 }
 
 size_t GetAttentionWorkspaceSize(
@@ -149,15 +150,15 @@ Status QkvToContext(
       // gemm_buffer should be BxSx3xNxH => qkv: 3xBxNxSxH
       ORT_ENFORCE(qk_head_size == v_head_size);
       ORT_RETURN_IF_ERROR(LaunchTransQkv(stream, 3, sequence_length, batch_size, qk_head_size, num_heads,
-                                          max_threads_per_block, false, data.gemm_buffer, qkv));
+                                         max_threads_per_block, false, data.gemm_buffer, qkv));
     } else {
       const int format = (use_fused_kernel ? 2 : 1);
       // format 1: BxSx(NH + NH + NH_v) => BxNxSxH + BxNxSxH + BxNxSxH_v
       // format 2: BxSx(NH + NH + NH) => BxSxNx(H + H + H)
       LaunchAddBiasTranspose(stream, 3, format, max_threads_per_block,
-                              batch_size, sequence_length, num_heads, qk_head_size,
-                              data.gemm_buffer, data.bias, qkv,
-                              true, v_head_size);
+                             batch_size, sequence_length, num_heads, qk_head_size,
+                             data.gemm_buffer, data.bias, qkv,
+                             true, v_head_size);
       CUDA_RETURN_IF_ERROR(cudaGetLastError());
     }
   } else {  // gemm_buffer == nullptr
