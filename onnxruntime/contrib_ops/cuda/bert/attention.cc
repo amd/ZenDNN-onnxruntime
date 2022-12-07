@@ -219,8 +219,98 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
     return status;
   }
 
+  if (nullptr == data.mask_index) {
+    const size_t cumulated_seq_len_elements = ((nullptr == data.mask_index) ? batch_size : 2 * batch_size) + 1;
+    auto cumulated_seq_len_buffer = GetScratchBuffer<int>(cumulated_seq_len_elements);
+    int* sequence_offset = reinterpret_cast<int*>(cumulated_seq_len_buffer.get());
+    LaunchTrtSequenceOffset(sequence_offset, data.mask_index, batch_size, sequence_length, stream);
+    CUDA_RETURN_IF_ERROR(cudaGetLastError());
+
+    dumper.Print("cumulated_seq_len", cumulated_seq_len_buffer.get(), 1, cumulated_seq_len_elements);
+
+    int total_token_count = batch_size * sequence_length;
+    int max_token_count = sequence_length;
+
+    typedef typename ToCudaType<T>::MappedType CudaT;
+
+    int m = total_token_count;
+    int n = (parameters.hidden_size + parameters.hidden_size + parameters.v_hidden_size);
+    int k = parameters.input_hidden_size;
+    gemm_buffer = GetScratchBuffer<T>(static_cast<size_t>(m) * n);
+
+    CudaT one = ToCudaType<T>::FromFloat(1.0f);
+    CudaT zero = ToCudaType<T>::FromFloat(0.0f);
+
+    // Gemm, note that CUDA assumes col-major, so result(N, M) = 1 * weights x compressed_input + 1 x bias
+    // The bias part is not included here since we fuse bias and output 3 matrice into one cuda kernel.
+    CUBLAS_RETURN_IF_ERROR(cublasGemmHelper(
+        cublas, CUBLAS_OP_N, CUBLAS_OP_N, n, m, k, &one,
+        reinterpret_cast<const CudaT*>(weights->Data<T>()), n,
+        reinterpret_cast<const CudaT*>(input->Data<T>()), k,
+        &zero, reinterpret_cast<CudaT*>(gemm_buffer.get()), n, device_prop));
+
+    data.gemm_buffer = reinterpret_cast<const CudaT*>(gemm_buffer.get());
+    dumper.Print("gemm_buffer", gemm_buffer.get(), m, n);
+
+    int max_seqlen_q_ = max_token_count;
+    size_t softmax_lse_bytes = get_softmax_lse_size(max_seqlen_q_, batch_size, parameters.num_heads);
+    auto softmax_lse_buffer = GetScratchBuffer<void>(softmax_lse_bytes);
+
+    auto fmha_output_buffer = GetScratchBuffer<T>(static_cast<size_t>(total_token_count) * parameters.v_hidden_size);
+
+    const size_t elements_q = static_cast<size_t>(total_token_count) * static_cast<size_t>(parameters.hidden_size);
+    const size_t elements_k = static_cast<size_t>(total_token_count) * static_cast<size_t>(parameters.hidden_size);
+    const size_t elements_v = static_cast<size_t>(total_token_count) * static_cast<size_t>(parameters.v_hidden_size);
+
+    CudaT* q_data = data.workspace;
+    CudaT* k_data = q_data + elements_q;
+    CudaT* v_data = k_data + elements_k;
+    CudaT* o_tmp_buffer = v_data + elements_v;
+
+    const int format = 3;
+    // format 3: BxSx(NH + NH + NH_v) => BxSxNxH + BxSxNxH + BxSxNxH_v
+    LaunchAddBiasTranspose(stream, 3, format, device_prop.maxThreadsPerBlock,
+                          batch_size, sequence_length, parameters.num_heads, parameters.head_size,
+                          data.gemm_buffer, data.bias, data.workspace,
+                          true, -1);
+
+    dumper.Print("q", reinterpret_cast<T*>(q_data), total_token_count, parameters.hidden_size);
+    dumper.Print("k", reinterpret_cast<T*>(k_data), total_token_count, parameters.hidden_size);
+    dumper.Print("v", reinterpret_cast<T*>(v_data), total_token_count, parameters.v_hidden_size);
+
+    const float rsqrt_head_size = 1.f / sqrt(static_cast<float>(parameters.head_size));
+
+    fmha_forward(device_prop,
+                stream,
+                reinterpret_cast<void*>(q_data),
+                reinterpret_cast<void*>(k_data),
+                reinterpret_cast<void*>(v_data),
+                reinterpret_cast<void*>(output->MutableData<T>()),
+                cumulated_seq_len_buffer.get(),
+                cumulated_seq_len_buffer.get(),
+                reinterpret_cast<void*>(softmax_lse_buffer.get()),
+                reinterpret_cast<void*>(o_tmp_buffer),
+                batch_size,
+                parameters.num_heads,
+                parameters.head_size,
+                parameters.v_head_size,
+                total_token_count,  // total_q
+                max_token_count,    // max_seqlen_q_,
+                max_token_count,    // max_seqlen_k_,
+                rsqrt_head_size,    // softmax_scale,
+                false,              // zero_tensors,
+                false,              // is_causal,
+                0                   // num_splits
+    );
+
+    dumper.Print("fmha_output", output->MutableData<T>(), total_token_count, parameters.v_hidden_size);
+    return Status::OK();
+  }
+
   // Remove padding for flash attention
-  if (this->enable_unpad_attention_) {
+  ORT_ENFORCE(this->enable_unpad_attention_);
+  //if (this->enable_unpad_attention_)
+  {
     auto token_count_buffer = GetScratchBuffer<int>(2);
     auto token_offset_buffer = GetScratchBuffer<int>(batch_size * sequence_length);
     auto cumulated_seq_len_buffer = GetScratchBuffer<int>(batch_size + 1);
@@ -344,94 +434,8 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
         stream);
 
     dumper.Print("output", output->MutableData<T>(), batch_size, sequence_length, parameters.v_hidden_size);
-    return Status::OK();
   }
 
-  ORT_ENFORCE(nullptr == data.mask_index);
-  const size_t cumulated_seq_len_elements = ((nullptr == data.mask_index) ? batch_size : 2 * batch_size) + 1;
-  auto cumulated_seq_len_buffer = GetScratchBuffer<int>(cumulated_seq_len_elements);
-  int* sequence_offset = reinterpret_cast<int*>(cumulated_seq_len_buffer.get());
-  LaunchTrtSequenceOffset(sequence_offset, data.mask_index, batch_size, sequence_length, stream);
-  CUDA_RETURN_IF_ERROR(cudaGetLastError());
-
-  dumper.Print("cumulated_seq_len", cumulated_seq_len_buffer.get(), 1, cumulated_seq_len_elements);
-
-  int total_token_count = batch_size * sequence_length;
-  int max_token_count = sequence_length;
-
-  typedef typename ToCudaType<T>::MappedType CudaT;
-
-  int m = total_token_count;
-  int n = (parameters.hidden_size + parameters.hidden_size + parameters.v_hidden_size);
-  int k = parameters.input_hidden_size;
-  gemm_buffer = GetScratchBuffer<T>(static_cast<size_t>(m) * n);
-
-  CudaT one = ToCudaType<T>::FromFloat(1.0f);
-  CudaT zero = ToCudaType<T>::FromFloat(0.0f);
-
-  // Gemm, note that CUDA assumes col-major, so result(N, M) = 1 * weights x compressed_input + 1 x bias
-  // The bias part is not included here since we fuse bias and output 3 matrice into one cuda kernel.
-  CUBLAS_RETURN_IF_ERROR(cublasGemmHelper(
-      cublas, CUBLAS_OP_N, CUBLAS_OP_N, n, m, k, &one,
-      reinterpret_cast<const CudaT*>(weights->Data<T>()), n,
-      reinterpret_cast<const CudaT*>(input->Data<T>()), k,
-      &zero, reinterpret_cast<CudaT*>(gemm_buffer.get()), n, device_prop));
-
-  data.gemm_buffer = reinterpret_cast<const CudaT*>(gemm_buffer.get());
-  dumper.Print("gemm_buffer", gemm_buffer.get(), m, n);
-
-  int max_seqlen_q_ = max_token_count;
-  size_t softmax_lse_bytes = get_softmax_lse_size(max_seqlen_q_, batch_size, parameters.num_heads);
-  auto softmax_lse_buffer = GetScratchBuffer<void>(softmax_lse_bytes);
-
-  auto fmha_output_buffer = GetScratchBuffer<T>(static_cast<size_t>(total_token_count) * parameters.v_hidden_size);
-
-  const size_t elements_q = static_cast<size_t>(total_token_count) * static_cast<size_t>(parameters.hidden_size);
-  const size_t elements_k = static_cast<size_t>(total_token_count) * static_cast<size_t>(parameters.hidden_size);
-  const size_t elements_v = static_cast<size_t>(total_token_count) * static_cast<size_t>(parameters.v_hidden_size);
-
-  CudaT* q_data = data.workspace;
-  CudaT* k_data = q_data + elements_q;
-  CudaT* v_data = k_data + elements_k;
-  CudaT* o_tmp_buffer = v_data + elements_v;
-
-  const int format = 3;
-  // format 3: BxSx(NH + NH + NH_v) => BxSxNxH + BxSxNxH + BxSxNxH_v
-  LaunchAddBiasTranspose(stream, 3, format, device_prop.maxThreadsPerBlock,
-                         batch_size, sequence_length, parameters.num_heads, parameters.head_size,
-                         data.gemm_buffer, data.bias, data.workspace,
-                         true, -1);
-
-  dumper.Print("q", reinterpret_cast<T*>(q_data), total_token_count, parameters.hidden_size);
-  dumper.Print("k", reinterpret_cast<T*>(k_data), total_token_count, parameters.hidden_size);
-  dumper.Print("v", reinterpret_cast<T*>(v_data), total_token_count, parameters.v_hidden_size);
-
-  const float rsqrt_head_size = 1.f / sqrt(static_cast<float>(parameters.head_size));
-
-  fmha_forward(device_prop,
-               stream,
-               reinterpret_cast<void*>(q_data),
-               reinterpret_cast<void*>(k_data),
-               reinterpret_cast<void*>(v_data),
-               reinterpret_cast<void*>(output->MutableData<T>()),
-               cumulated_seq_len_buffer.get(),
-               cumulated_seq_len_buffer.get(),
-               reinterpret_cast<void*>(softmax_lse_buffer.get()),
-               reinterpret_cast<void*>(o_tmp_buffer),
-               batch_size,
-               parameters.num_heads,
-               parameters.head_size,
-               parameters.v_head_size,
-               total_token_count,  // total_q
-               max_token_count,    // max_seqlen_q_,
-               max_token_count,    // max_seqlen_k_,
-               rsqrt_head_size,    // softmax_scale,
-               false,              // zero_tensors,
-               false,              // is_causal,
-               0                   // num_splits
-  );
-
-  dumper.Print("fmha_output", output->MutableData<T>(), total_token_count, parameters.v_hidden_size);
   return Status::OK();
 }
 
