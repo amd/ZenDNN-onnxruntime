@@ -240,8 +240,8 @@ constexpr size_t get_dynamic_smem_size(){
     return Gemm_Q_K<Kernel_traits, Kernel_traits::K_IN_REGS>::SMEM_BYTES;
 }
 
-template<typename Kernel_traits, bool Is_dropout, bool Is_causal, bool Return_softmax, bool Is_first, bool Is_last, typename Params, typename Prng>
-inline __device__ void device_1xN_(const Params &params, const int bidb, const int bidh, int steps, Prng &ph, const int loop_step_idx) {
+template<typename Kernel_traits, bool Is_causal, bool Return_softmax, bool Is_first, bool Is_last, typename Params>
+inline __device__ void device_1xN_(const Params &params, const int bidb, const int bidh, int steps, const int loop_step_idx) {
 
 #if defined(__CUDA_ARCH__) &&  __CUDA_ARCH__ >= 800
     using elem_type = typename Kernel_traits::elem_type;
@@ -478,18 +478,6 @@ inline __device__ void device_1xN_(const Params &params, const int bidb, const i
 
         softmax.reduce_sum_before_sync_(p_sum);
 
-        constexpr bool encode_dropout_in_sign_bit = Return_softmax;
-        if (Is_dropout) {
-            unsigned int warp_idx = threadIdx.x / 32;
-            // TODO: this should change after we rearrange the warps (e.g. cutlass branch)
-            unsigned int block_col_idx = loop_step_idx * Cta_tile_p::N / 16 + warp_idx;
-            // We want to use actual_seqlen_k, not seqlen_k, since seqlen_k could be rounded
-            // differently in the fwd and bwd pass. E.g., for d=128 on A100, fwd rounds seqlen_k
-            // to multiples of 256 while bwd rounds seqlen_k to multiples of 128.
-            unsigned long long philox_subsequence = (begin + l) * (binfo.actual_seqlen_k / 16) + block_col_idx;
-            softmax.template apply_dropout_16bits<encode_dropout_in_sign_bit>(ph, params.p_dropout_in_uint16_t, philox_subsequence);
-        }
-
         using Frag_p = fmha::Fragment_a<fmha::Row>;
         Frag_p frag_p[Mma_tile_o::MMAS_K][Mma_tile_o::MMAS_M];
         static_assert(Mma_tile_o::MMAS_M == Mma_tile_p::MMAS_M);
@@ -503,16 +491,6 @@ inline __device__ void device_1xN_(const Params &params, const int bidb, const i
         // Commit the values for Q into shared memory.
         if (l + step_stride < steps) {
             gmem_q.commit(gemm_q_k.smem_q);
-        }
-
-        if (Is_dropout && encode_dropout_in_sign_bit) {
-            #pragma unroll
-            for( int ki = 0; ki < Mma_tile_o::MMAS_K; ki++ ) {
-                #pragma unroll
-                for( int mi = 0; mi < Mma_tile_o::MMAS_M; mi++ ) {
-                    frag_p[ki][mi].template hrelu_<elem_type>();
-                }
-            }
         }
 
         // Declare the accumulators for the 2nd gemm.
@@ -589,9 +567,6 @@ inline __device__ void device_1xN_(const Params &params, const int bidb, const i
         for (int jj = 0; jj < Gmem_tile_o::STGS_PER_LOOP; jj++) {
             float sum = p_sum_o[jj][0];
             float inv_sum = (sum == 0.f || sum != sum) ? 1.f : 1.f / sum;
-            if (Is_dropout && is_final_write) {
-                inv_sum *= params.rp_dropout;
-            }
             out[jj] = fmha::fmul4(out[jj], inv_sum);
         }
 
@@ -618,39 +593,27 @@ inline __device__ void device_1xN_(const Params &params, const int bidb, const i
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-template<typename Kernel_traits, bool Is_dropout, bool Is_causal, bool Return_softmax, typename Params>
+template<typename Kernel_traits, bool Is_causal, bool Return_softmax, typename Params>
 inline __device__ void device_1xN_loop(const Params &params) {
 
     // The block index for the batch.
     const int bidb = blockIdx.x;
     // The block index for the head.
     const int bidh = blockIdx.y;
-    // The thread index.
-    const int tidx = threadIdx.x;
 
-    // We want the fwd and bwd to generate the same dropout pattern (RNG), without restricting
-    // them to have the same number of threads or have to traverse the attention matrix
-    // in the same order.
-    // In the Philox RNG, we use the offset to store the batch, head, and the lane id
-    // (within a warp). We use the subsequence to store the location of the 16 x 16 blocks within
-    // the attention matrix. This way, as long as we have the batch, head, and the location of
-    // the 16 x 16 block within the attention matrix, we can generate the exact same dropout pattern.
-    philox::PhiloxCudaState* arg = reinterpret_cast<philox::PhiloxCudaState*>(params.philox_args);
-    auto seeds = philox::unpack(*arg);
-    philox::Philox ph(std::get<0>(seeds), 0, std::get<1>(seeds) + (bidb * params.h + bidh) * 32 + tidx % 32);
     constexpr int M = Kernel_traits::Cta_tile_p::M;
     const int STEPS = (params.seqlen_q + M - 1) / M;
 
     constexpr int blocksize_c = Kernel_traits::Cta_tile_p::N;
     if (params.seqlen_k == blocksize_c) {
-        fmha::device_1xN_<Kernel_traits, Is_dropout, Is_causal, Return_softmax, true, true>(params, bidb, bidh, STEPS, ph, 0);
+        fmha::device_1xN_<Kernel_traits, Is_causal, Return_softmax, true, true>(params, bidb, bidh, STEPS, 0);
     } else {
         const int max_loop_steps = (params.seqlen_k + blocksize_c - 1) / blocksize_c;
-        fmha::device_1xN_<Kernel_traits, Is_dropout, Is_causal, Return_softmax, true, false>(params, bidb, bidh, STEPS, ph, 0);
+        fmha::device_1xN_<Kernel_traits, Is_causal, Return_softmax, true, false>(params, bidb, bidh, STEPS, 0);
         for (int loop_step_idx = 1; loop_step_idx < max_loop_steps - 1; loop_step_idx++) {
-            fmha::device_1xN_<Kernel_traits, Is_dropout, Is_causal, Return_softmax, false, false>(params, bidb, bidh, STEPS, ph, loop_step_idx);
+            fmha::device_1xN_<Kernel_traits, Is_causal, Return_softmax, false, false>(params, bidb, bidh, STEPS, loop_step_idx);
         }
-        fmha::device_1xN_<Kernel_traits, Is_dropout, Is_causal, Return_softmax, false, true>(params, bidb, bidh, STEPS, ph, max_loop_steps - 1);
+        fmha::device_1xN_<Kernel_traits, Is_causal, Return_softmax, false, true>(params, bidb, bidh, STEPS, max_loop_steps - 1);
     }
 }
 

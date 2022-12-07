@@ -27,7 +27,6 @@
 
 #pragma once
 
-#include "contrib_ops/cuda/bert/flash_attention/philox.cuh"
 #include "contrib_ops/cuda/bert/flash_attention/fmha.h"
 #include "contrib_ops/cuda/bert/flash_attention/utils.h"
 #include "contrib_ops/cuda/bert/flash_attention/smem_tile.h"

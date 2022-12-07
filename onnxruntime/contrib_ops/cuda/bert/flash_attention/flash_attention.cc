@@ -159,9 +159,8 @@ void fmha_forward(const cudaDeviceProp& dprops,
   bool is_sm8x = dprops.major == 8 && dprops.minor >= 0;
   ORT_ENFORCE(is_sm8x || is_sm75);
 
-  constexpr bool is_dropout = false;
   constexpr bool return_softmax = false;
-  Launch_params<FMHA_fprop_params> launch_params(&dprops, stream, is_dropout, return_softmax);
+  Launch_params<FMHA_fprop_params> launch_params(&dprops, stream, return_softmax);
 
   ORT_ENFORCE(batch_size > 0);
   ORT_ENFORCE((head_size % 8 == 0) && (head_size <= 128));

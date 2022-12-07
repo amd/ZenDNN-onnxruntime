@@ -124,12 +124,10 @@ template<typename Kernel_params>
 struct Launch_params{
     Launch_params(const cudaDeviceProp * props_,
                   cudaStream_t stream_,
-                  bool is_dropout_,
                   bool return_softmax_)
         : elts_per_thread(0)
         , props(props_)
         , stream(stream_)
-        , is_dropout(is_dropout_)
         , return_softmax(return_softmax_) {
     }
 
@@ -139,7 +137,6 @@ struct Launch_params{
 
     cudaStream_t stream;
 
-    bool is_dropout;
     bool return_softmax;
 
     Kernel_params params;
