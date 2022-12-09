@@ -13,6 +13,7 @@ jobs:
     clean: all
   variables:
     skipComponentGovernanceDetection: true
+    CCACHE_DIR: $(Pipeline.Workspace)/ccache
   pool: Linux-CPU-2019
   steps:
   - checkout: self
@@ -35,6 +36,19 @@ jobs:
       DockerBuildArgs: "--build-arg BUILD_UID=$( id -u )"
       Repository: onnxruntimecpubuild
 
+  - script: |
+      apt-get install ccache -y
+      echo "##vso[task.prependpath]/usr/lib/ccache"
+    displayName: Install ccache and update PATH to use linked versions of gcc, cc, etc
+
+  - task: Cache@2
+    inputs:
+      key: 'ccache | "$(Agent.OS)" | cpu'
+      path: $(CCACHE_DIR)
+      restoreKeys: |
+        ccache | "$(Agent.OS)" | cpu
+    displayName: ccache
+
   - task: CmdLine@2
     displayName: 'build'
     inputs:
@@ -45,10 +59,17 @@ jobs:
           --volume $(Build.SourcesDirectory):/onnxruntime_src \
           --volume $(Build.BinariesDirectory):/build \
           --volume $HOME/.onnx:/home/onnxruntimedev/.onnx \
+          --volume $(Pipeline.Workspace)/ccache:/cache \
           -e ALLOW_RELEASED_ONNX_OPSET_ONLY=0 \
           -e NIGHTLY_BUILD \
           -e BUILD_BUILDNUMBER \
+          -e CCACHE_DIR=/cache \
           onnxruntimecpubuild \
+          bin bash -c "
+            apt-get install ccache -y; \
+            cp ccache /usr/local/bin/;  \
+            ln -s ccache /usr/local/bin/gcc; \
+            ln -s ccache /usr/local/bin/g++; \
             /opt/python/cp38-cp38/bin/python3 /onnxruntime_src/tools/ci_build/build.py \
               --build_dir /build --cmake_generator Ninja \
               --config Debug Release \
@@ -58,7 +79,7 @@ jobs:
               --build_wheel \
               --enable_onnx_tests \
               --enable_transformers_tool_test \
-              --build_java --build_nodejs --update --build --cmake_extra_defines onnxruntime_BUILD_BENCHMARKS=ON
+              --build_java --build_nodejs --update --build --cmake_extra_defines onnxruntime_BUILD_BENCHMARKS=ON"
       workingDirectory: $(Build.SourcesDirectory)
 
   - task: CmdLine@2
