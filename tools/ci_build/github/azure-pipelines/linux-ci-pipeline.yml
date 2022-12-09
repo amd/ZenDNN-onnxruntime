@@ -37,7 +37,7 @@ jobs:
       Repository: onnxruntimecpubuild
 
   - script: |
-      apt-get install ccache -y
+      sudo apt-get install ccache -y
       echo "##vso[task.prependpath]/usr/lib/ccache"
     displayName: Install ccache and update PATH to use linked versions of gcc, cc, etc
 
@@ -65,7 +65,7 @@ jobs:
           -e BUILD_BUILDNUMBER \
           -e CCACHE_DIR=/cache \
           onnxruntimecpubuild \
-          bin bash -c "
+          bin/bash -c "
             apt-get install ccache -y; \
             cp ccache /usr/local/bin/;  \
             ln -s ccache /usr/local/bin/gcc; \
