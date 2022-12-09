@@ -83,6 +83,12 @@ echo "Installing Node.js"
 GetFile https://nodejs.org/dist/v16.14.2/node-v16.14.2-linux-x64.tar.gz /tmp/src/node-v16.14.2-linux-x64.tar.gz
 tar --strip 1 -xf /tmp/src/node-v16.14.2-linux-x64.tar.gz -C /usr
 
+echo "Installing CCache"
+mkdir -p /tmp/ccache
+GetFile https://github.com/ccache/ccache/releases/download/v4.7.4/ccache-4.7.4-linux-x86_64.tar.xz /tmp/src/ccache-4.7.4-linux-x86_64.tar.xz
+tar --strip 1 -xf /tmp/src/ccache-4.7.4-linux-x86_64.tar.xz -C /tmp/ccache
+cp /tmp/ccache/ccache /usr/bin
+
 cd /tmp/src
 GetFile https://downloads.gradle-dn.com/distributions/gradle-6.3-bin.zip /tmp/src/gradle-6.3-bin.zip
 unzip /tmp/src/gradle-6.3-bin.zip
@@ -99,10 +105,6 @@ for PYTHON_EXE in "${PYTHON_EXES[@]}"
 do
   ${PYTHON_EXE} -m pip install -r ${0/%install_deps\.sh/requirements\.txt}
 done
-
-if [ -f /etc/os-release ]; then
-  apt-get update && apt-get install -y ccache
-fi
 
 cd /
 rm -rf /tmp/src
