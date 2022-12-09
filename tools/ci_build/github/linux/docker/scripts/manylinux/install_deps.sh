@@ -100,14 +100,7 @@ do
   ${PYTHON_EXE} -m pip install -r ${0/%install_deps\.sh/requirements\.txt}
 done
 
-# Install ccache
-if [ -f /etc/redhat-release ]; then
-  yum install -y epel-release
-  yum install -y snapd
-  systemctl enable --now snapd.socket
-  ln -s /var/lib/snapd/snap /snap
-  snap install -y ccache --classic
-elif [ -f /etc/os-release ]; then
+if [ -f /etc/os-release ]; then
   apt-get update && apt-get install -y ccache
 fi
 
