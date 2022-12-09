@@ -3,10 +3,10 @@ set -e -x
 
 # Development tools and libraries
 if [ -f /etc/redhat-release ]; then
-  yum update && yum makecache && yum -y install graphviz ccache
+  yum update && yum -y install graphviz
   os_major_version=$(cat /etc/redhat-release | tr -dc '0-9.'|cut -d \. -f1)
 elif [ -f /etc/os-release ]; then
-  apt-get update && apt-get install -y graphviz ccache
+  apt-get update && apt-get install -y graphviz
   os_major_version=$(cat /etc/os-release | tr -dc '0-9.'|cut -d \. -f1)
 else
   echo "Unsupported OS"
@@ -99,6 +99,17 @@ for PYTHON_EXE in "${PYTHON_EXES[@]}"
 do
   ${PYTHON_EXE} -m pip install -r ${0/%install_deps\.sh/requirements\.txt}
 done
+
+# Install ccache
+if [ -f /etc/redhat-release ]; then
+  yum install -y epel-release
+  yum install -y snapd
+  systemctl enable --now snapd.socket
+  ln -s /var/lib/snapd/snap /snap
+  snap install -y ccache --classic
+elif [ -f /etc/os-release ]; then
+  apt-get update && apt-get install -y ccache
+fi
 
 cd /
 rm -rf /tmp/src
