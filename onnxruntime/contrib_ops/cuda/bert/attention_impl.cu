@@ -213,7 +213,7 @@ Status QkvToContext(
     const int B = (nullptr == data.mask_index ? batch_size : 2 * batch_size);
     fused_fp16_runner->setup(S, B);
 
-    fused_fp16_runner->run(qkv, nullptr, sequence_offset, data.output, nullptr, stream);
+    fused_fp16_runner->run(qkv, sequence_offset, data.output, stream);
     return Status::OK();
   }
 

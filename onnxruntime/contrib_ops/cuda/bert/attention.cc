@@ -34,23 +34,22 @@ namespace cuda {
 REGISTER_KERNEL_TYPED(float)
 REGISTER_KERNEL_TYPED(MLFloat16)
 
-static inline bool HasFusedFp16Kernel(int sm, int head_size, int sequence_length) {
+static inline bool HasFusedFp16Kernel(int sm, int head_size, int sequence_length, bool enable_flash_attention) {
   if (!(sm == kSM_70 || sm == kSM_75 || sm == kSM_80 || sm == kSM_86)) {
     return false;
   }
 
-  if (head_size != 64) {
+  if (head_size != 64 && head_size != 32) {
     return false;
   }
 
-  // For sequence length 512, SM86 could fall back to SM80.
-  // In our test, T4 GPU has no enough shared memory to load fmha_v2_fp16_512_64_sm75_kernel so we removed it.
+  // Use flash attention when sequence_length >= 512 for BERT
+  if (enable_flash_attention && sequence_length >= kMinSequenceLengthFlashAttention) && (sm != kSM_70 || head_size != 32) {
+    return true;
+  }
+
   const int max_sequence_length = (sm >= kSM_80 ? 512 : 384);
-  if (sequence_length > max_sequence_length) {
-    return false;
-  }
-
-  return true;
+  return sequence_length <= max_sequence_length;
 }
 
 static inline bool HasFlashAttentionKernel(int sm, int head_size) {
@@ -143,17 +142,18 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
                              !is_unidirectional_ &&
                              parameters.hidden_size == parameters.v_hidden_size &&
                              parameters.sequence_length == parameters.kv_sequence_length &&
-                             HasFusedFp16Kernel(sm, parameters.head_size, sequence_length));
+                             HasFusedFp16Kernel(sm, parameters.head_size, sequence_length, enable_flash_attention_));
 
     if (use_fused_runner) {
       if (nullptr == fused_fp16_runner_.get()) {
-        fused_fp16_runner_.reset(new FusedMHARunnerFP16v2(num_heads_, parameters.head_size, sm));
+        fused_fp16_runner_.reset(new FusedMHARunnerFP16v2(num_heads_, parameters.head_size, sm, is_unidirectional_));
       }
 
       // In case some kernel not loaded due to shared memory limit, we need to double check here.
       const int S = fused_fp16_runner_->getSFromMaxSeqLen(sequence_length);
       if (fused_fp16_runner_->isValid(S)) {
         fused_runner = fused_fp16_runner_.get();
+        //printf("use fused runner, S=%d\n", S);
       }
     }
   }
