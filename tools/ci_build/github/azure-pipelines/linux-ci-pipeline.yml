@@ -59,11 +59,11 @@ jobs:
           --volume $(Build.SourcesDirectory):/onnxruntime_src \
           --volume $(Build.BinariesDirectory):/build \
           --volume $HOME/.onnx:/home/onnxruntimedev/.onnx \
-          --volume $(Pipeline.Workspace)/ccache:/cache \
+          --volume $(Pipeline.Workspace)/ccache:/var/cache \
           -e ALLOW_RELEASED_ONNX_OPSET_ONLY=0 \
           -e NIGHTLY_BUILD \
           -e BUILD_BUILDNUMBER \
-          -e CCACHE_DIR=/cache \
+          -e CCACHE_DIR=/var/cache \
           onnxruntimecpubuild \
           /bin/bash -c "
             set -ex; \
