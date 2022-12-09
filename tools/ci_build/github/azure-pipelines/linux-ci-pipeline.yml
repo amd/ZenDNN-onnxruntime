@@ -65,12 +65,14 @@ jobs:
           -e BUILD_BUILDNUMBER \
           -e CCACHE_DIR=/cache \
           onnxruntimecpubuild \
-          bin/bash -c "
+          /bin/bash -c "
+            set -x
             apt-get install ccache -y; \
             cp ccache /usr/local/bin/;  \
             ln -s ccache /usr/local/bin/gcc; \
             ln -s ccache /usr/local/bin/g++; \
-            ccache -s \
+            env; \
+            ccache -s; \
             /opt/python/cp38-cp38/bin/python3 /onnxruntime_src/tools/ci_build/build.py \
               --build_dir /build --cmake_generator Ninja \
               --config Debug Release \
