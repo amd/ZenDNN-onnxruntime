@@ -49,6 +49,10 @@ jobs:
         ccache | "$(Agent.OS)" | cpu
     displayName: ccache
 
+  - script: |
+      sudo mkdir -p $(Pipeline.Workspace)/ccache1
+    displayName: Install ccache and update PATH to use linked versions of gcc, cc, etc
+
   - task: CmdLine@2
     displayName: 'build'
     inputs:
@@ -59,17 +63,17 @@ jobs:
           --volume $(Build.SourcesDirectory):/onnxruntime_src \
           --volume $(Build.BinariesDirectory):/build \
           --volume $HOME/.onnx:/home/onnxruntimedev/.onnx \
-          --volume $(Pipeline.Workspace)/ccache:/var/cache \
+          --volume $(Pipeline.Workspace)/ccache1:/cache \
           -e ALLOW_RELEASED_ONNX_OPSET_ONLY=0 \
           -e NIGHTLY_BUILD \
           -e BUILD_BUILDNUMBER \
-          -e CCACHE_DIR=/var/cache \
+          -e CCACHE_DIR=/cache \
           onnxruntimecpubuild \
           /bin/bash -c "
             set -ex; \
             env; \
             ccache -s; \
-            ls -l ccache; \
+            ls -l /usr/bin/ccache; \
             ls -l /var/cache; \
             /opt/python/cp38-cp38/bin/python3 /onnxruntime_src/tools/ci_build/build.py \
               --build_dir /build --cmake_generator Ninja \
