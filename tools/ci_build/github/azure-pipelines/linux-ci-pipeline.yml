@@ -70,6 +70,7 @@ jobs:
             cp ccache /usr/local/bin/;  \
             ln -s ccache /usr/local/bin/gcc; \
             ln -s ccache /usr/local/bin/g++; \
+            ccache -s \
             /opt/python/cp38-cp38/bin/python3 /onnxruntime_src/tools/ci_build/build.py \
               --build_dir /build --cmake_generator Ninja \
               --config Debug Release \
@@ -79,7 +80,8 @@ jobs:
               --build_wheel \
               --enable_onnx_tests \
               --enable_transformers_tool_test \
-              --build_java --build_nodejs --update --build --cmake_extra_defines onnxruntime_BUILD_BENCHMARKS=ON"
+              --build_java --build_nodejs --update --build --cmake_extra_defines onnxruntime_BUILD_BENCHMARKS=ON; \
+            ccache -s"
       workingDirectory: $(Build.SourcesDirectory)
 
   - task: CmdLine@2
