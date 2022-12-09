@@ -3,10 +3,10 @@ set -e -x
 
 # Development tools and libraries
 if [ -f /etc/redhat-release ]; then
-  yum update && yum -y install graphviz
+  yum update && yum -y install graphviz ccache
   os_major_version=$(cat /etc/redhat-release | tr -dc '0-9.'|cut -d \. -f1)
 elif [ -f /etc/os-release ]; then
-  apt-get update && apt-get install -y graphviz
+  apt-get update && apt-get install -y graphviz ccache
   os_major_version=$(cat /etc/os-release | tr -dc '0-9.'|cut -d \. -f1)
 else
   echo "Unsupported OS"
