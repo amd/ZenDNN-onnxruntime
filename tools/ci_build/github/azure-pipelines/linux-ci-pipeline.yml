@@ -91,6 +91,7 @@ jobs:
 
   - script: |
       mv $(Pipeline.Workspace)/ccache1 $(Pipeline.Workspace)/ccache
+      ccache -s
     condition: ne(variables.CACHE_RESTORED, 'true')
     displayName: renanme to {CACHE_DIR}
 

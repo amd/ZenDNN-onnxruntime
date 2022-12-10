@@ -100,6 +100,10 @@ jobs:
         BuildJava: true
         BuildNodejs: true
 
+    - script: |
+        find $(Pipeline.Workspace)/ccache -type d -ls
+      displayName: Show Cache directory
+
     - task: PublishPipelineArtifact@1
       inputs:
         targetPath: '$(Build.ArtifactStagingDirectory)'
