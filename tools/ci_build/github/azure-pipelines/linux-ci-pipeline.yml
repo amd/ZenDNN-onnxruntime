@@ -90,9 +90,9 @@ jobs:
       workingDirectory: $(Build.SourcesDirectory)
 
   - script: |
-      sudo cp -Rf $(Pipeline.Workspace)/ccache1/* $(Pipeline.Workspace)/ccache
+      mv $(Pipeline.Workspace)/ccache1 $(Pipeline.Workspace)/ccache
     condition: ne(variables.CACHE_RESTORED, 'true')
-    displayName: Install ccache and update PATH to use linked versions of gcc, cc, etc
+    displayName: renanme to {CACHE_DIR}
 
   - task: CmdLine@2
     displayName: 'Install python deps and run java tests'
