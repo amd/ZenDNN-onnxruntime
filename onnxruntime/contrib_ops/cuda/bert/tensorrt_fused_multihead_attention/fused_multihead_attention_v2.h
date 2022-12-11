@@ -18,7 +18,6 @@
 #pragma once
 
 #include "contrib_ops/cuda/bert/tensorrt_fused_multihead_attention/fused_multihead_attention.h"
-// #include <assert.h>
 #include <stdint.h>
 
 namespace onnxruntime {
@@ -888,8 +887,7 @@ static const struct FusedMultiHeadAttentionKernelMetaInfoV2 {
      false,
      false},
 
-    // GA10x
-    // Note: For GA10X, sm86 uses sm80 kernels
+    // GA10x: sm86 uses sm80 kernels
     {DATA_TYPE_FP16,
      32,
      32,

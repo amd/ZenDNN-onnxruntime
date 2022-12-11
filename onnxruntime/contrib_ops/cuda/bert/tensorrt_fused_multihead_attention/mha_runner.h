@@ -91,7 +91,7 @@ class MHARunner {
 
 class FusedMHARunnerFP16v2 : public MHARunner {
  public:
-  FusedMHARunnerFP16v2(const int numHeads, const int headSize, const int sm, bool causal_mask);
+  FusedMHARunnerFP16v2(const int numHeads, const int headSize, const int sm, bool causal_mask, bool enable_flash_attention);
   ~FusedMHARunnerFP16v2() = default;  // for pimpl
 
   virtual void setup(const int S, const int B) override;
@@ -108,6 +108,7 @@ class FusedMHARunnerFP16v2 : public MHARunner {
 
  private:
   int mSm;
+  bool mEnableFlashAttention;
   class mhaImpl;
   std::unique_ptr<mhaImpl> pimpl;
 };

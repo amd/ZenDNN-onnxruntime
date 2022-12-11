@@ -54,7 +54,7 @@ class FusedMHARunnerFP16v2::mhaImpl {
     size_t warps_k = 1;
 
     // For bert and vit, use flash attention when sequence length is larger than the threshold.
-    use_flash_attention = (S >= kMinSequenceLengthFlashAttention);
+    use_flash_attention = is_flash_attention(S);
 
     if (use_flash_attention) {
       warps_m = 4;
@@ -140,8 +140,8 @@ class FusedMHARunnerFP16v2::mhaImpl {
     params.o_stride_in_bytes = interface->mNumHeads * interface->mHeadSize * sizeof(half);
 
     // fallback to original fmha_v2 when head_size <= 64 and seq_len <- 128
-    use_flash_attention = true;
-    if (params.d <= 64 && params.s <= 128) {
+    use_flash_attention = interface->mEnableFlashAttention;
+    if (use_flash_attention && params.d <= 64 && params.s <= 128) {
       use_flash_attention = false;
       // get max sequence length
       if (params.s > 64) {
@@ -164,7 +164,8 @@ class FusedMHARunnerFP16v2::mhaImpl {
               interface->mHeadSize == 160 || interface->mHeadSize == 256);
     } else {
       return (sm == kSM_70 || sm == kSM_75 || sm == kSM_80 || sm == kSM_86) &&
-             (interface->mHeadSize == 32 || interface->mHeadSize == 64);
+             (interface->mHeadSize == 32 || interface->mHeadSize == 64) &&
+             (sm != kSM_70 || interface->mHeadSize != 32);  // No TRT Fused kernel for SM_70 and head size 32.
     }
   }
 
@@ -177,15 +178,15 @@ class FusedMHARunnerFP16v2::mhaImpl {
   }
 
   bool isValid(int s) const {
-    return xmmaKernel->isValid(s) || s >= 512;
+    return xmmaKernel->isValid(s) || is_flash_attention(s);
   }
 
   int getSFromMaxSeqLen(const int max_seq_len) const {
-    if (max_seq_len >= kMinSequenceLengthFlashAttention) {
+    if (is_flash_attention(max_seq_len)) {
       return max_seq_len;
     }
 
-    int S = 1024;
+    int S = -1;
     if (max_seq_len <= 32) {
       S = 32;
     } else if (max_seq_len <= 64) {
@@ -207,6 +208,11 @@ class FusedMHARunnerFP16v2::mhaImpl {
     return S;
   }
 
+ protected:
+  bool is_flash_attention(const int S) const {
+    return interface->mEnableFlashAttention && S >= kMinSequenceLengthFlashAttention && !(sm == kSM_70 && interface->mHeadSize == 32);
+  }
+
  private:
   FusedMHARunnerFP16v2* interface;
   Fused_multihead_attention_params_v2 params;
@@ -219,8 +225,8 @@ class FusedMHARunnerFP16v2::mhaImpl {
   bool has_causal_mask = false;
 };
 
-FusedMHARunnerFP16v2::FusedMHARunnerFP16v2(const int numHeads, const int headSize, const int sm, bool causal_mask)
-    : MHARunner(numHeads, headSize, 2, causal_mask), mSm(sm), pimpl(new mhaImpl(this)) {
+FusedMHARunnerFP16v2::FusedMHARunnerFP16v2(const int numHeads, const int headSize, const int sm, bool causal_mask, bool enable_flash_attention)
+    : MHARunner(numHeads, headSize, 2, causal_mask), mSm(sm), mEnableFlashAttention(enable_flash_attention), pimpl(new mhaImpl(this)) {
 }
 
 void FusedMHARunnerFP16v2::setup(const int S, const int B) {

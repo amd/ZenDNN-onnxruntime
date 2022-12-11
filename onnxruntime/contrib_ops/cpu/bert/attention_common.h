@@ -29,6 +29,9 @@ constexpr const char* kDisableFusedAttention = "ORT_DISABLE_FUSED_ATTENTION";
 // Environment variable to enable flash attention. Default is false.
 constexpr const char* kEnableFlashAttention = "ORT_ENABLE_FLASH_ATTENTION";
 
+// Environment variable to enable TRT flash attention. Default is false.
+constexpr const char* kEnableTrtFlashAttention = "ORT_ENABLE_TRT_FLASH_ATTENTION";
+
 // Environment variable to enable removing padding and restore padding. Default is false.
 constexpr const char* kEnableUnpadAttention = "ORT_ENABLE_UNPAD_ATTENTION";
 

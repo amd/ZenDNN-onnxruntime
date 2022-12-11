@@ -43,8 +43,12 @@ static inline bool HasFusedFp16Kernel(int sm, int head_size, int sequence_length
     return false;
   }
 
+  if (sm == kSM_70 && head_size == 32) {
+    return false;
+  }
+
   // Use flash attention when sequence_length >= 512 for BERT
-  if (enable_flash_attention && sequence_length >= kMinSequenceLengthFlashAttention && (sm != kSM_70 || head_size != 32)) {
+  if (enable_flash_attention && sequence_length >= kMinSequenceLengthFlashAttention) {
     return true;
   }
 
@@ -153,7 +157,7 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
 
     if (use_fused_runner) {
       if (nullptr == fused_fp16_runner_.get()) {
-        fused_fp16_runner_.reset(new FusedMHARunnerFP16v2(num_heads_, parameters.head_size, sm, is_unidirectional_));
+        fused_fp16_runner_.reset(new FusedMHARunnerFP16v2(num_heads_, parameters.head_size, sm, is_unidirectional_, enable_trt_flash_attention_));
       }
 
       // In case some kernel not loaded due to shared memory limit, we need to double check here.
