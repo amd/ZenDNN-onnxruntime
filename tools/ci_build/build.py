@@ -14,14 +14,15 @@ import sys
 from distutils.version import LooseVersion
 from pathlib import Path
 
+import util.android as android  # noqa: E402
+from util import get_logger, is_linux, is_macOS, is_windows, run  # noqa: E402
+
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 REPO_DIR = os.path.normpath(os.path.join(SCRIPT_DIR, "..", ".."))
 
 sys.path.insert(0, os.path.join(REPO_DIR, "tools", "python"))
 
 
-import util.android as android  # noqa: E402
-from util import get_logger, is_linux, is_macOS, is_windows, run  # noqa: E402
 
 log = get_logger("build")
 
@@ -236,6 +237,7 @@ def parse_arguments():
         "--cudnn_home is not specified.",
     )
     parser.add_argument("--enable_cuda_line_info", action="store_true", help="Enable CUDA line info.")
+    parser.add_argument("--enable_flash_attention", action="store_true", help="Enable Flash Attention.")
 
     # Python bindings
     parser.add_argument("--enable_pybind", action="store_true", help="Enable Python Bindings.")
@@ -985,6 +987,8 @@ def generate_build_tree(
         add_default_definition(cmake_extra_defines, "onnxruntime_CUDA_HOME", cuda_home)
         if cudnn_home:
             add_default_definition(cmake_extra_defines, "onnxruntime_CUDNN_HOME", cudnn_home)
+        if args.enable_flash_attention:
+            add_default_definition(cmake_extra_defines, "onnxruntime_ENABLE_FLASH_ATTENTION", "ON")
 
     if is_windows():
         if args.enable_msvc_static_runtime:

@@ -26,6 +26,7 @@
  ******************************************************************************/
 
 #pragma once
+#if defined(ENABLE_FLASH_ATTENTION)
 
 #include "contrib_ops/cuda/bert/flash_attention/fmha.h"
 #include "contrib_ops/cuda/bert/flash_attention/utils.h"
@@ -72,3 +73,5 @@ struct BlockInfoPadded {
 }  // namespace fmha
 }  // namespace cuda
 }  // namespace onnxruntime
+
+#endif

@@ -26,9 +26,9 @@
  ******************************************************************************/
 
 #pragma once
+#if defined(ENABLE_FLASH_ATTENTION)
 
 #include "contrib_ops/cuda/bert/flash_attention/utils.h"
-
 #include <cutlass/cutlass.h>
 #include <cutlass/gemm/warp/default_mma_tensor_op.h>
 #include <cutlass/gemm/warp/mma_tensor_op_policy.h>
@@ -40,8 +40,6 @@
 namespace onnxruntime {
 namespace cuda {
 namespace fmha {
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <typename Data_type_, int NUM_ELTS_, int BITS_PER_ELT_, int ALIGNMENT_>
 struct Fragment_base_ {
@@ -445,3 +443,5 @@ using Cta_tile_with_k_with_padding = Cta_tile_extd<Cta_tile_::M,
 }  // namespace fmha
 }  // namespace cuda
 }  // namespace onnxruntime
+
+#endif

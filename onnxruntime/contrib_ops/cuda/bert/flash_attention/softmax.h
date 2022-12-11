@@ -26,6 +26,7 @@
  ******************************************************************************/
 
 #pragma once
+#if defined(ENABLE_FLASH_ATTENTION)
 
 #include <cmath>
 #include <cuda_fp16.h>
@@ -33,8 +34,6 @@
 namespace onnxruntime {
 namespace cuda {
 namespace fmha {
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
 
 inline __device__ float apply_exp_(float x, float max) {
   return __expf(x - max);
@@ -416,6 +415,8 @@ struct Softmax : public Softmax_base<Cta_tile, Kernel_traits> {
   Smem_tile_red smem_max_;
   Smem_tile_red smem_sum_;
 };
+
+#endif
 
 }  // namespace fmha
 }  // namespace cuda

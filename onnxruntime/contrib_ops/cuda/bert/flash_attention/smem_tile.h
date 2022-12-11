@@ -26,6 +26,7 @@
  ******************************************************************************/
 
 #pragma once
+#if defined(ENABLE_FLASH_ATTENTION)
 
 #include "contrib_ops/cuda/bert/flash_attention/utils.h"
 #include "contrib_ops/cuda/bert/flash_attention/gemm.h"
@@ -33,8 +34,6 @@
 namespace onnxruntime {
 namespace cuda {
 namespace fmha {
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <
     // The description of the tile computed by this CTA.
@@ -1673,3 +1672,5 @@ struct Smem_tile_dp_sum {
 }  // namespace fmha
 }  // namespace cuda
 }  // namespace onnxruntime
+
+#endif

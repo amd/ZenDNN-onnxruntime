@@ -1,6 +1,7 @@
 // Copyright (c) 2022, Tri Dao.
 
 #pragma once
+#if defined(ENABLE_FLASH_ATTENTION)
 
 #include <vector>
 
@@ -95,3 +96,5 @@ Status run_fmha_fwd_loop(Launch_params<FMHA_fprop_params>& launch_params) {
 }  // namespace fmha
 }  // namespace cuda
 }  // namespace onnxruntime
+
+#endif

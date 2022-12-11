@@ -27,6 +27,7 @@
  ******************************************************************************/
 
 #pragma once
+#if defined(ENABLE_FLASH_ATTENTION)
 
 #include "contrib_ops/cuda/bert/flash_attention/fmha_kernel.h"
 #include "contrib_ops/cuda/bert/flash_attention/kernel_traits.h"
@@ -574,3 +575,5 @@ inline __device__ void device_1xN_loop(const Params& params) {
 }  // namespace fmha
 }  // namespace cuda
 }  // namespace onnxruntime
+
+#endif

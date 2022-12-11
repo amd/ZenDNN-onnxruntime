@@ -44,7 +44,7 @@ static inline bool HasFusedFp16Kernel(int sm, int head_size, int sequence_length
   }
 
   // Use flash attention when sequence_length >= 512 for BERT
-  if (enable_flash_attention && sequence_length >= kMinSequenceLengthFlashAttention) && (sm != kSM_70 || head_size != 32) {
+  if (enable_flash_attention && sequence_length >= kMinSequenceLengthFlashAttention && (sm != kSM_70 || head_size != 32)) {
     return true;
   }
 
@@ -71,6 +71,8 @@ Attention<T>::Attention(const OpKernelInfo& info) : CudaKernel(info), AttentionB
                           ParseEnvironmentVariableWithDefault<bool>(attention::kDisableFusedAttention, false);
   enable_flash_attention_ = sizeof(T) == 2 &&
                             ParseEnvironmentVariableWithDefault<bool>(attention::kEnableFlashAttention, false);
+  enable_trt_flash_attention_ = sizeof(T) == 2 &&
+                            ParseEnvironmentVariableWithDefault<bool>(attention::kEnableTrtFlashAttention, false);
   enable_unpad_attention_ = ParseEnvironmentVariableWithDefault<bool>(attention::kEnableUnpadAttention, false);
   enable_dump_ = ParseEnvironmentVariableWithDefault<bool>(attention::kEnableDumpAttention, false);
 }
@@ -121,6 +123,8 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
   // Check whether we can use fused kernel
   int sm = device_prop.major * 10 + device_prop.minor;
   bool is_1d_mask = nullptr != mask_index && mask_index->Shape().NumDimensions() == 1;
+
+#if defined(ENABLE_FLASH_ATTENTION)
   bool use_flash_attention = enable_flash_attention_ &&
                              nullptr != weights &&
                              (nullptr == mask_index || (is_1d_mask && enable_unpad_attention_)) &&
@@ -131,6 +135,9 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
                              parameters.hidden_size == parameters.v_hidden_size &&
                              parameters.sequence_length == parameters.kv_sequence_length &&
                              HasFlashAttentionKernel(sm, parameters.head_size);
+#else
+  constexpr bool use_flash_attention = false;
+#endif
 
   MHARunner* fused_runner = nullptr;
   if (!use_flash_attention) {
@@ -142,7 +149,7 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
                              !is_unidirectional_ &&
                              parameters.hidden_size == parameters.v_hidden_size &&
                              parameters.sequence_length == parameters.kv_sequence_length &&
-                             HasFusedFp16Kernel(sm, parameters.head_size, sequence_length, enable_flash_attention_));
+                             HasFusedFp16Kernel(sm, parameters.head_size, sequence_length, enable_trt_flash_attention_));
 
     if (use_fused_runner) {
       if (nullptr == fused_fp16_runner_.get()) {
@@ -219,6 +226,7 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
     return status;
   }
 
+#if defined(ENABLE_FLASH_ATTENTION)
   if (nullptr == data.mask_index) {
     const size_t cumulated_seq_len_elements = ((nullptr == data.mask_index) ? batch_size : 2 * batch_size) + 1;
     auto cumulated_seq_len_buffer = GetScratchBuffer<int>(cumulated_seq_len_elements);
@@ -435,6 +443,7 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
 
     dumper.Print("output", output->MutableData<T>(), batch_size, sequence_length, parameters.v_hidden_size);
   }
+#endif
 
   return Status::OK();
 }

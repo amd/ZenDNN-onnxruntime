@@ -26,14 +26,13 @@
  ******************************************************************************/
 
 #pragma once
+#if defined(ENABLE_FLASH_ATTENTION)
 
 #include <cuda_fp16.h>
 
 namespace onnxruntime {
 namespace cuda {
 namespace fmha {
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <int S, int D, int STEP, int WARPS_M, int WARPS_N, uint32_t FLAGS = 0x08u, typename elem_type_ = __half>
 struct FMHA_kernel_traits {
@@ -120,3 +119,5 @@ struct FMHA_kernel_traits {
 }  // namespace fmha
 }  // namespace cuda
 }  // namespace onnxruntime
+
+#endif

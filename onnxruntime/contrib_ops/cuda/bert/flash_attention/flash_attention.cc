@@ -25,6 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  ******************************************************************************/
+#if defined(ENABLE_FLASH_ATTENTION)
+
 #include <cuda_fp16.h>
 #include "contrib_ops/cuda/bert/flash_attention/fmha.h"
 #include "contrib_ops/cuda/bert/flash_attention/flash_attention.h"
@@ -206,3 +208,5 @@ Status fmha_forward(const cudaDeviceProp& dprops,
 }  // namespace fmha
 }  // namespace cuda
 }  // namespace onnxruntime
+
+#endif

@@ -26,6 +26,7 @@
  ******************************************************************************/
 
 #pragma once
+#if defined(ENABLE_FLASH_ATTENTION)
 
 #include <cuda.h>
 #include <cuda_runtime_api.h>
@@ -130,3 +131,5 @@ Status run_fmha_fwd_hdim128(Launch_params<FMHA_fprop_params>& launch_params);
 }  // namespace fmha
 }  // namespace cuda
 }  // namespace onnxruntime
+
+#endif

@@ -26,6 +26,7 @@
  ******************************************************************************/
 
 #pragma once
+#if defined(ENABLE_FLASH_ATTENTION)
 
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
@@ -534,3 +535,5 @@ struct Gmem_summary_stats {
 }  // namespace fmha
 }  // namespace cuda
 }  // namespace onnxruntime
+
+#endif
