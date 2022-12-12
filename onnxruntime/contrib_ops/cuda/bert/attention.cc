@@ -177,6 +177,7 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
                                                enable_trt_flash_attention_, false);
 
     if (use_fused_runner) {
+      // Here we assume that num_heads, head_size and is_unidirectional does not change for an Attention node.
       if (nullptr == fused_fp16_runner_.get()) {
         fused_fp16_runner_.reset(new FusedMHARunnerFP16v2(num_heads_, parameters.head_size, sm, is_unidirectional_, enable_trt_flash_attention_));
       }
@@ -198,6 +199,7 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
                                      HasFusedFp16Kernel(sm, parameters.head_size, sequence_length,
                                                         enable_trt_flash_attention_, true);
       if (use_causal_fused_runner) {
+        // Here we assume that num_heads, head_size and is_unidirectional does not change for an Attention node.
         if (nullptr == fused_fp16_runner_.get()) {
           fused_fp16_runner_.reset(new FusedMHARunnerFP16v2(num_heads_, parameters.head_size, sm, is_unidirectional_, enable_trt_flash_attention_));
         }
