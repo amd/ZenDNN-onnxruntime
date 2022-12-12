@@ -34,7 +34,27 @@ namespace cuda {
 REGISTER_KERNEL_TYPED(float)
 REGISTER_KERNEL_TYPED(MLFloat16)
 
-static inline bool HasFusedFp16Kernel(int sm, int head_size, int sequence_length, bool enable_flash_attention) {
+static inline bool HasFusedFp16Kernel(int sm, int head_size, int sequence_length, bool enable_flash_attention,
+                                      bool causal) {
+  if (causal) {
+    if (!(sm == kSM_70 || sm == kSM_75 || sm == kSM_80 || sm == kSM_86)) {
+      return false;
+    }
+
+    if (enable_flash_attention) {
+      return head_size == 64 ||
+            head_size == 32 ||
+            head_size == 40 ||
+            head_size == 80 ||
+            head_size == 128 ||
+            head_size == 144 ||
+            head_size == 160 ||
+            head_size == 256;
+    }
+
+    return (head_size == 64 || head_size == 32 || head_size == 40) && sequence_length <= 128;
+  }
+
   if (!(sm == kSM_70 || sm == kSM_75 || sm == kSM_80 || sm == kSM_86)) {
     return false;
   }
@@ -145,15 +165,16 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
 
   MHARunner* fused_runner = nullptr;
   if (!use_flash_attention) {
-    bool use_fused_runner = (!disable_fused_runner_ &&
-                             (nullptr == mask_index || is_1d_mask) &&
-                             nullptr == past &&
-                             nullptr == present &&
-                             nullptr == extra_add_qk &&
-                             !is_unidirectional_ &&
-                             parameters.hidden_size == parameters.v_hidden_size &&
-                             parameters.sequence_length == parameters.kv_sequence_length &&
-                             HasFusedFp16Kernel(sm, parameters.head_size, sequence_length, enable_trt_flash_attention_));
+    bool use_fused_runner = !disable_fused_runner_ &&
+                            (nullptr == mask_index || is_1d_mask) &&
+                            nullptr == past &&
+                            nullptr == present &&
+                            nullptr == extra_add_qk &&
+                            !is_unidirectional_ &&
+                            parameters.hidden_size == parameters.v_hidden_size &&
+                            parameters.sequence_length == parameters.kv_sequence_length &&
+                            HasFusedFp16Kernel(sm, parameters.head_size, sequence_length,
+                                               enable_trt_flash_attention_, false);
 
     if (use_fused_runner) {
       if (nullptr == fused_fp16_runner_.get()) {
@@ -164,7 +185,25 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
       const int S = fused_fp16_runner_->getSFromMaxSeqLen(sequence_length);
       if (fused_fp16_runner_->isValid(S)) {
         fused_runner = fused_fp16_runner_.get();
-        //printf("use fused runner, S=%d\n", S);
+      }
+    } else if (is_unidirectional_) {
+      // Fused kernels doesn't support different sequence lengths of q and kv, and it requires left side padding.
+      // We only apply fused kernel to the first token generation.
+      bool use_causal_fused_runner = !disable_fused_runner_ &&
+                                     (nullptr == mask_index || is_1d_mask) &&
+                                     nullptr == extra_add_qk &&
+                                     parameters.past_sequence_length == 0 &&
+                                     parameters.hidden_size == parameters.v_hidden_size &&
+                                     parameters.sequence_length == parameters.kv_sequence_length &&
+                                     HasFusedFp16Kernel(sm, parameters.head_size, sequence_length,
+                                                        enable_trt_flash_attention_, true);
+      if (use_causal_fused_runner) {
+        if (nullptr == fused_fp16_runner_.get()) {
+          fused_fp16_runner_.reset(new FusedMHARunnerFP16v2(num_heads_, parameters.head_size, sm, is_unidirectional_, enable_trt_flash_attention_));
+        }
+
+        // Here we assume all causal kernels can be loaded into shared memory. TODO: add a function to check.
+        fused_runner = fused_fp16_runner_.get();
       }
     }
   }
@@ -209,7 +248,7 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
 
   typedef typename ToCudaType<T>::MappedType CudaT;
   AttentionData<CudaT> data;
-  data.gemm_buffer = (nullptr == weights) ? nullptr : reinterpret_cast<const CudaT*>(gemm_buffer.get());
+  data.gemm_buffer = (nullptr == weights) ? nullptr : reinterpret_cast<CudaT*>(gemm_buffer.get());
   data.bias = reinterpret_cast<const CudaT*>(bias->Data<T>());
   data.query = (nullptr != weights) ? nullptr : reinterpret_cast<const CudaT*>(input->Data<T>());
   data.key = (nullptr == key) ? nullptr : reinterpret_cast<const CudaT*>(key->Data<T>());
@@ -284,7 +323,7 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
     LaunchAddBiasTranspose(stream, 3, format, device_prop.maxThreadsPerBlock,
                            batch_size, sequence_length, parameters.num_heads, parameters.head_size,
                            data.gemm_buffer, data.bias, data.workspace,
-                           true, -1);
+                           true, -1, nullptr);
 
     dumper.Print("q", reinterpret_cast<T*>(q_data), total_token_count, parameters.hidden_size);
     dumper.Print("k", reinterpret_cast<T*>(k_data), total_token_count, parameters.hidden_size);
@@ -401,7 +440,7 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
     LaunchAddBiasTranspose(stream, 3, format, device_prop.maxThreadsPerBlock,
                            1, total_token_count, parameters.num_heads, parameters.head_size,
                            data.gemm_buffer, data.bias, data.workspace,
-                           true, -1);
+                           true, -1, nullptr);
 
     dumper.Print("q", reinterpret_cast<T*>(q_data), total_token_count, parameters.hidden_size);
     dumper.Print("k", reinterpret_cast<T*>(k_data), total_token_count, parameters.hidden_size);

@@ -147,7 +147,8 @@ Status QkvToContext(
   T* v = k + elements_k;
 
   // For fused TRT attention, qkv need transpose to BxSxNx3xH
-  bool use_fused_kernel = (nullptr != fused_runner && data.bias != nullptr);
+  bool use_fused_kernel = (nullptr != fused_runner && data.bias != nullptr && !parameters.is_unidirectional);
+  bool use_fused_causal = (nullptr != fused_runner && data.bias != nullptr && parameters.is_unidirectional);
 
   if (nullptr != data.gemm_buffer) {
     if (data.bias == nullptr) {
@@ -157,12 +158,13 @@ Status QkvToContext(
                                          max_threads_per_block, false, data.gemm_buffer, qkv));
     } else {
       const int format = (use_fused_kernel ? 2 : 1);
+      T* qkv_add_bias = use_fused_causal ? data.gemm_buffer : nullptr;
       // format 1: BxSx(NH + NH + NH_v) => BxNxSxH + BxNxSxH + BxNxSxH_v
       // format 2: BxSx(NH + NH + NH) => BxSxNx(H + H + H)
       LaunchAddBiasTranspose(stream, 3, format, max_threads_per_block,
                              batch_size, sequence_length, num_heads, qk_head_size,
                              data.gemm_buffer, data.bias, qkv,
-                             true, v_head_size);
+                             true, v_head_size, qkv_add_bias);
       CUDA_RETURN_IF_ERROR(cudaGetLastError());
     }
   } else {  // gemm_buffer == nullptr
@@ -183,19 +185,19 @@ Status QkvToContext(
       LaunchAddBiasTranspose<T>(stream, 1, format, max_threads_per_block,
                                 batch_size, sequence_length, num_heads, qk_head_size,
                                 data.query, data.bias, q,
-                                true, -1);
+                                true, -1, nullptr);
 
       // Key (BxLxNxH) => K (BxNxLxH)
       LaunchAddBiasTranspose<T>(stream, 1, format, max_threads_per_block,
                                 batch_size, kv_sequence_length, num_heads, qk_head_size,
                                 data.key, data.bias + num_heads * qk_head_size, k,
-                                true, -1);
+                                true, -1, nullptr);
 
       // Value (BxLxNxH_v) => K (BxNxLxH_v)
       LaunchAddBiasTranspose<T>(stream, 1, format, max_threads_per_block,
                                 batch_size, kv_sequence_length, num_heads, v_head_size,
                                 data.value, data.bias + 2 * num_heads * qk_head_size, v,
-                                true, -1);
+                                true, -1, nullptr);
     }
 
     CUDA_RETURN_IF_ERROR(cudaGetLastError());
@@ -219,6 +221,19 @@ Status QkvToContext(
 
     fused_fp16_runner->run(qkv, sequence_offset, data.output, stream);
     return Status::OK();
+  } else if (use_fused_causal){
+    int* sequence_offset = reinterpret_cast<int*>(scratch1);
+    LaunchTrtSequenceOffset(sequence_offset, data.mask_index, batch_size, sequence_length, stream);
+    CUDA_RETURN_IF_ERROR(cudaGetLastError());
+
+    FusedMHARunnerFP16v2* fused_fp16_runner = reinterpret_cast<FusedMHARunnerFP16v2*>(fused_runner);
+
+    const int S = sequence_length;
+    // B = 2 * batch_size when there is padding in input, and B = batch_size when padding is removed.
+    const int B = (nullptr == data.mask_index ? batch_size : 2 * batch_size);
+    fused_fp16_runner->setup(S, B);
+
+    fused_fp16_runner->run(data.gemm_buffer, sequence_offset, data.output, stream);
   }
 
   const size_t bytes = GetAttentionScratchSize(element_size, batch_size, num_heads,
@@ -242,6 +257,10 @@ Status QkvToContext(
     // Update pointers to present_k and present_v.
     k = data.present;
     v = data.present + batches * present_size_per_batch_k;
+  }
+
+  if (use_fused_causal) {
+    return Status::OK();
   }
 
   const int* mask_index = data.mask_index;
