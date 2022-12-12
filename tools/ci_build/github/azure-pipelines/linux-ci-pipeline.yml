@@ -51,8 +51,9 @@ jobs:
     displayName: ccache
 
   - script: |
-      sudo mkdir -p $(Pipeline.Workspace)/ccache1
-    displayName: Install ccache and update PATH to use linked versions of gcc, cc, etc
+      sudo mkdir -p $(Pipeline.Workspace)/ccache
+    condition: ne(variables.CACHE_RESTORED, 'true')
+    displayName: Create Cache Dir
 
   - task: CmdLine@2
     displayName: 'build'
@@ -64,7 +65,7 @@ jobs:
           --volume $(Build.SourcesDirectory):/onnxruntime_src \
           --volume $(Build.BinariesDirectory):/build \
           --volume $HOME/.onnx:/home/onnxruntimedev/.onnx \
-          --volume $(Pipeline.Workspace)/ccache1:/cache \
+          --volume $(Pipeline.Workspace)/ccache:/cache \
           -e ALLOW_RELEASED_ONNX_OPSET_ONLY=0 \
           -e NIGHTLY_BUILD \
           -e BUILD_BUILDNUMBER \
@@ -88,12 +89,6 @@ jobs:
               --build_java --build_nodejs --update --build --use_cache --cmake_extra_defines onnxruntime_BUILD_BENCHMARKS=ON; \
             ccache -s"
       workingDirectory: $(Build.SourcesDirectory)
-
-  - script: |
-      mv $(Pipeline.Workspace)/ccache1 $(Pipeline.Workspace)/ccache
-      ccache -s
-    condition: ne(variables.CACHE_RESTORED, 'true')
-    displayName: renanme to {CACHE_DIR}
 
   - task: CmdLine@2
     displayName: 'Install python deps and run java tests'
