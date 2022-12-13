@@ -1,8 +1,6 @@
 // Copyright (c) 2022, Tri Dao.
 
 // Splitting the different head dimentions to different files to speed up compilation.
-#if defined(ENABLE_FLASH_ATTENTION)
-
 #include "fmha_fwd_launch_template.h"
 
 namespace onnxruntime {
@@ -22,5 +20,3 @@ Status run_fmha_fwd_hdim32(Launch_params<FMHA_fprop_params>& launch_params) {
 }  // namespace fmha
 }  // namespace cuda
 }  // namespace onnxruntime
-
-#endif

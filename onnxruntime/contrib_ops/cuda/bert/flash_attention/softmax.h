@@ -26,7 +26,6 @@
  ******************************************************************************/
 
 #pragma once
-#if defined(ENABLE_FLASH_ATTENTION)
 
 #include <cmath>
 #include <cuda_fp16.h>
@@ -415,8 +414,6 @@ struct Softmax : public Softmax_base<Cta_tile, Kernel_traits> {
   Smem_tile_red smem_max_;
   Smem_tile_red smem_sum_;
 };
-
-#endif
 
 }  // namespace fmha
 }  // namespace cuda

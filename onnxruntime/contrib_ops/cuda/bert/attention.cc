@@ -148,7 +148,6 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
   int sm = device_prop.major * 10 + device_prop.minor;
   bool is_1d_mask = nullptr != mask_index && mask_index->Shape().NumDimensions() == 1;
 
-#if defined(ENABLE_FLASH_ATTENTION)
   bool use_flash_attention = enable_flash_attention_ &&
                              nullptr != weights &&
                              (nullptr == mask_index || (is_1d_mask && enable_unpad_attention_)) &&
@@ -159,9 +158,6 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
                              parameters.hidden_size == parameters.v_hidden_size &&
                              parameters.sequence_length == parameters.kv_sequence_length &&
                              HasFlashAttentionKernel(sm, parameters.head_size);
-#else
-  constexpr bool use_flash_attention = false;
-#endif
 
   MHARunner* fused_runner = nullptr;
   if (!use_flash_attention) {
@@ -271,8 +267,7 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
     return status;
   }
 
-#if defined(ENABLE_FLASH_ATTENTION)
-  if (nullptr == data.mask_index) {
+  if (!enable_unpad_attention_) {
     const size_t cumulated_seq_len_elements = ((nullptr == data.mask_index) ? batch_size : 2 * batch_size) + 1;
     auto cumulated_seq_len_buffer = GetScratchBuffer<int>(cumulated_seq_len_elements);
     int* sequence_offset = reinterpret_cast<int*>(cumulated_seq_len_buffer.get());
@@ -302,7 +297,7 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
         reinterpret_cast<const CudaT*>(input->Data<T>()), k,
         &zero, reinterpret_cast<CudaT*>(gemm_buffer.get()), n, device_prop));
 
-    data.gemm_buffer = reinterpret_cast<const CudaT*>(gemm_buffer.get());
+    data.gemm_buffer = reinterpret_cast<CudaT*>(gemm_buffer.get());
     dumper.Print("gemm_buffer", gemm_buffer.get(), m, n);
 
     int max_seqlen_q_ = max_token_count;
@@ -322,10 +317,10 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
 
     const int format = 3;
     // format 3: BxSx(NH + NH + NH_v) => BxSxNxH + BxSxNxH + BxSxNxH_v
-    LaunchAddBiasTranspose(stream, 3, format, device_prop.maxThreadsPerBlock,
-                           batch_size, sequence_length, parameters.num_heads, parameters.head_size,
-                           data.gemm_buffer, data.bias, data.workspace,
-                           true, -1, nullptr);
+    LaunchAddBiasTranspose<CudaT>(stream, 3, format, device_prop.maxThreadsPerBlock,
+                                  batch_size, sequence_length, parameters.num_heads, parameters.head_size,
+                                  data.gemm_buffer, data.bias, data.workspace,
+                                  true, -1, nullptr);
 
     dumper.Print("q", reinterpret_cast<T*>(q_data), total_token_count, parameters.hidden_size);
     dumper.Print("k", reinterpret_cast<T*>(k_data), total_token_count, parameters.hidden_size);
@@ -419,7 +414,7 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
         reinterpret_cast<const CudaT*>(compressed_input_buffer.get()), k,
         &zero, reinterpret_cast<CudaT*>(gemm_buffer.get()), n, device_prop));
 
-    data.gemm_buffer = reinterpret_cast<const CudaT*>(gemm_buffer.get());
+    data.gemm_buffer = reinterpret_cast<CudaT*>(gemm_buffer.get());
     dumper.Print("gemm_buffer", gemm_buffer.get(), m, n);
 
     int max_seqlen_q_ = max_token_count;
@@ -439,10 +434,10 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
 
     const int format = 3;
     // format 3: BxSx(NH + NH + NH_v) => BxSxNxH + BxSxNxH + BxSxNxH_v
-    LaunchAddBiasTranspose(stream, 3, format, device_prop.maxThreadsPerBlock,
-                           1, total_token_count, parameters.num_heads, parameters.head_size,
-                           data.gemm_buffer, data.bias, data.workspace,
-                           true, -1, nullptr);
+    LaunchAddBiasTranspose<CudaT>(stream, 3, format, device_prop.maxThreadsPerBlock,
+                                  1, total_token_count, parameters.num_heads, parameters.head_size,
+                                  data.gemm_buffer, data.bias, data.workspace,
+                                  true, -1, nullptr);
 
     dumper.Print("q", reinterpret_cast<T*>(q_data), total_token_count, parameters.hidden_size);
     dumper.Print("k", reinterpret_cast<T*>(k_data), total_token_count, parameters.hidden_size);
@@ -488,7 +483,6 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
 
     dumper.Print("output", output->MutableData<T>(), batch_size, sequence_length, parameters.v_hidden_size);
   }
-#endif
 
   return Status::OK();
 }

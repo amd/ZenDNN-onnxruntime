@@ -27,7 +27,6 @@
  ******************************************************************************/
 
 #pragma once
-#if defined(ENABLE_FLASH_ATTENTION)
 
 #include "core/providers/cuda/cuda_common.h"
 
@@ -63,5 +62,3 @@ Status fmha_forward(const cudaDeviceProp& dprops,
 }  // namespace fmha
 }  // namespace cuda
 }  // namespace onnxruntime
-
-#endif

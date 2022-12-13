@@ -26,7 +26,6 @@
  ******************************************************************************/
 
 #pragma once
-#if defined(ENABLE_FLASH_ATTENTION)
 
 namespace onnxruntime {
 namespace cuda {
@@ -89,5 +88,3 @@ struct Mask {
 }  // namespace fmha
 }  // namespace cuda
 }  // namespace onnxruntime
-
-#endif

@@ -26,7 +26,6 @@
  ******************************************************************************/
 
 #pragma once
-#if defined(ENABLE_FLASH_ATTENTION)
 
 #include <assert.h>
 #include <stdint.h>
@@ -1370,5 +1369,3 @@ __device__ inline void quad_allreduce(__half2 (&dst)[M], float2 (&src)[M], Opera
 }  // namespace fmha
 }  // namespace cuda
 }  // namespace onnxruntime
-
-#endif

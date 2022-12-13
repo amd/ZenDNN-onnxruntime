@@ -26,7 +26,6 @@
  ******************************************************************************/
 
 #pragma once
-#if defined(ENABLE_FLASH_ATTENTION)
 
 #include "contrib_ops/cuda/bert/flash_attention/utils.h"
 #include "contrib_ops/cuda/bert/flash_attention/gemm.h"
@@ -1672,5 +1671,3 @@ struct Smem_tile_dp_sum {
 }  // namespace fmha
 }  // namespace cuda
 }  // namespace onnxruntime
-
-#endif

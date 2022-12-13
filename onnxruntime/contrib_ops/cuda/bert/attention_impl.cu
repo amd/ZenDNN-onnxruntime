@@ -89,7 +89,6 @@ size_t GetAttentionWorkspaceSize(
   const size_t qkv_bytes = element_size * batch_size * num_heads *
                            ((sequence_length + kv_sequence_length) * qk_head_size + kv_sequence_length * v_head_size);
 
-#if defined(ENABLE_FLASH_ATTENTION)
   if (use_flash_attention) {
     // constexpr bool has_padding = false;  // padding are removed for flash attention
     // const int batch_count = has_padding ? 2 * batch_size : batch_size;
@@ -101,9 +100,6 @@ size_t GetAttentionWorkspaceSize(
 
     return qkv_bytes + o_tmp_bytes;
   }
-#else
-  ORT_UNUSED_PARAMETER(use_flash_attention);
-#endif
 
   if (fused_runner != nullptr) {
     size_t sequence_offset_bytes = GetSequenceOffsetSize(batch_size, true);

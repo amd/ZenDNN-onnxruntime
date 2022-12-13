@@ -26,7 +26,6 @@
  ******************************************************************************/
 
 #pragma once
-#if defined(ENABLE_FLASH_ATTENTION)
 
 #include <cuda_fp16.h>
 
@@ -119,5 +118,3 @@ struct FMHA_kernel_traits {
 }  // namespace fmha
 }  // namespace cuda
 }  // namespace onnxruntime
-
-#endif

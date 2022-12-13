@@ -50,7 +50,6 @@ option(onnxruntime_ENABLE_PYTHON "Enable python buildings" OFF)
 # Enable it may cause LNK1169 error
 option(onnxruntime_ENABLE_MEMLEAK_CHECKER "Experimental: Enable memory leak checker in Windows debug build" OFF)
 option(onnxruntime_USE_CUDA "Build with CUDA support" OFF)
-option(onnxruntime_ENABLE_FLASH_ATTENTION "Build with Flash Attention" OFF)
 option(onnxruntime_ENABLE_CUDA_LINE_NUMBER_INFO "When building with CUDA support, generate device code line number information." OFF)
 option(onnxruntime_USE_OPENVINO "Build with OpenVINO support" OFF)
 option(onnxruntime_USE_COREML "Build with CoreML support" OFF)
@@ -497,9 +496,6 @@ if (onnxruntime_USE_CUDA)
     list(APPEND ORT_PROVIDER_FLAGS -DUSE_CUDA=1)
     list(APPEND ORT_PROVIDER_CMAKE_FLAGS -Donnxruntime_USE_CUDA=1)
     list(APPEND ONNXRUNTIME_PROVIDER_NAMES cuda)
-    if (onnxruntime_ENABLE_FLASH_ATTENTION)
-      list(APPEND ORT_PROVIDER_CMAKE_FLAGS -Donnxruntime_ENABLE_FLASH_ATTENTION=1)
-    endif()
 endif()
 if (onnxruntime_USE_VITISAI)
     list(APPEND ORT_PROVIDER_FLAGS -DUSE_VITISAI=1)
@@ -1128,20 +1124,18 @@ if (onnxruntime_USE_CUDA)
         set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_87,code=sm_87") # AGX Orin, NX Orin
       endif()
     else()
-      if (NOT onnxruntime_ENABLE_FLASH_ATTENTION)
-        # the following compute capabilities are removed in CUDA 11 Toolkit
-        if (CMAKE_CUDA_COMPILER_VERSION VERSION_LESS 11)
-          set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_30,code=sm_30") # K series
-        endif()
+      # # the following compute capabilities are removed in CUDA 11 Toolkit
+      # if (CMAKE_CUDA_COMPILER_VERSION VERSION_LESS 11)
+      #   set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_30,code=sm_30") # K series
+      # endif()
 
-        # 37, 50 still work in CUDA 11 but are marked deprecated and will be removed in future CUDA version.
-        set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_37,code=sm_37") # K80
-        set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_50,code=sm_50") # M series
+      # # 37, 50 still work in CUDA 11 but are marked deprecated and will be removed in future CUDA version.
+      # set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_37,code=sm_37") # K80
+      # set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_50,code=sm_50") # M series
 
-        set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_52,code=sm_52") # M60
-        set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_60,code=sm_60") # P series
-        set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_70,code=sm_70") # V series
-      endif()
+      # set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_52,code=sm_52") # M60
+      # set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_60,code=sm_60") # P series
+      # set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_70,code=sm_70") # V series
 
       set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode=arch=compute_75,code=sm_75") # T series
       if (CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 11)
@@ -1166,19 +1160,17 @@ if (onnxruntime_USE_CUDA)
   endif()
 
   # To get parity with flash attention. TODO: remove these
-  if (onnxruntime_ENABLE_FLASH_ATTENTION)
-    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -fno-strict-aliasing")
-    # add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:-fno-strict-aliasing>")
-    # add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:-O3>")
-    # add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:-std=c++17>")
-    # add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:-U__CUDA_NO_HALF_OPERATORS__>")
-    # add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:-U__CUDA_NO_HALF_CONVERSIONS__>")
-    # add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>")
-    # add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:--expt-extended-lambda>")
-    # add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>")
-    # add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:--ptxas-options=-v>")
-    # add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:-lineinfo>")
-  endif()
+  set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -fno-strict-aliasing")
+  # add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:-fno-strict-aliasing>")
+  # add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:-O3>")
+  # add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:-std=c++17>")
+  # add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:-U__CUDA_NO_HALF_OPERATORS__>")
+  # add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:-U__CUDA_NO_HALF_CONVERSIONS__>")
+  # add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>")
+  # add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:--expt-extended-lambda>")
+  # add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>")
+  # add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:--ptxas-options=-v>")
+  # add_compile_options("$<$<COMPILE_LANGUAGE:CUDA>:-lineinfo>")
 endif()
 
 if (onnxruntime_USE_TENSORRT)

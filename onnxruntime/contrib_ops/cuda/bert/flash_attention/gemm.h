@@ -26,7 +26,6 @@
  ******************************************************************************/
 
 #pragma once
-#if defined(ENABLE_FLASH_ATTENTION)
 
 #include "contrib_ops/cuda/bert/flash_attention/utils.h"
 #include <cutlass/cutlass.h>
@@ -443,5 +442,3 @@ using Cta_tile_with_k_with_padding = Cta_tile_extd<Cta_tile_::M,
 }  // namespace fmha
 }  // namespace cuda
 }  // namespace onnxruntime
-
-#endif
