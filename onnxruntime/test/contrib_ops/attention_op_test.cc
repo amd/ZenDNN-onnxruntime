@@ -3965,6 +3965,7 @@ TEST(AttentionTest, FlashAttention_B2S4P0_MaskIndex) {
     // We enable TF32 in GEMM helper for A100. TF32 will cause precsion loss, and fail this test.
     // Here is walkaround: Do not run this test unless TF32 is disabled explicitly by NVIDIA_TF32_OVERRIDE=0.
     if (HasCudaEnvironment(800) && ParseEnvironmentVariableWithDefault<int>("NVIDIA_TF32_OVERRIDE", 1) != 0) {
+      GTEST_SKIP() << "Skipping AttentionPastState_dynamic in A100 since TF32 is enabled";
       return;
     }
 
@@ -4064,6 +4065,7 @@ TEST(AttentionTest, FlashAttention_B2S4P0_MaskIndex) {
     // We enable TF32 in GEMM helper for A100. TF32 will cause precsion loss, and fail this test.
     // Here is walkaround: Do not run this test unless TF32 is disabled explicitly by NVIDIA_TF32_OVERRIDE=0.
     if (HasCudaEnvironment(800) && ParseEnvironmentVariableWithDefault<int>("NVIDIA_TF32_OVERRIDE", 1) != 0) {
+      GTEST_SKIP() << "Skipping RunModelWithRandomInput test in A100 since TF32 is enabled";
       return;
     }
 
