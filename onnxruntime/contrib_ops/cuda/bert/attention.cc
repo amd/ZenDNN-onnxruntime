@@ -150,7 +150,7 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
 
   bool use_flash_attention = enable_flash_attention_ &&
                              nullptr != weights &&
-                             (nullptr == mask_index || (is_1d_mask && enable_unpad_attention_)) &&
+                             (nullptr == mask_index || is_1d_mask) &&
                              nullptr == past &&
                              nullptr == present &&
                              nullptr == extra_add_qk &&
