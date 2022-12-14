@@ -34,7 +34,11 @@ namespace cuda {
 REGISTER_KERNEL_TYPED(float)
 REGISTER_KERNEL_TYPED(MLFloat16)
 
-static inline bool HasFusedFp16Kernel(int sm, int head_size, int sequence_length, bool enable_flash_attention,
+static inline bool HasFusedFp16Kernel(int sm,
+                                      int head_size,
+                                      int sequence_length,
+                                      bool enable_flash_attention,
+                                      int flash_attention_min_seq_length, // for non-causal
                                       bool causal) {
   if (causal) {
     if (!(sm == kSM_70 || sm == kSM_75 || sm == kSM_80 || sm == kSM_86)) {
@@ -67,8 +71,8 @@ static inline bool HasFusedFp16Kernel(int sm, int head_size, int sequence_length
     return false;
   }
 
-  // Use flash attention when sequence_length >= 512 for BERT
-  if (enable_flash_attention && sequence_length >= kMinSequenceLengthFlashAttention) {
+  // Use flash attention when sequence_length is larger than a threshold
+  if (enable_flash_attention && sequence_length >= flash_attention_min_seq_length) {
     return true;
   }
 
@@ -99,6 +103,7 @@ Attention<T>::Attention(const OpKernelInfo& info) : CudaKernel(info), AttentionB
                             ParseEnvironmentVariableWithDefault<bool>(attention::kEnableTrtFlashAttention, false);
   enable_unpad_attention_ = ParseEnvironmentVariableWithDefault<bool>(attention::kEnableUnpadAttention, false);
   enable_dump_ = ParseEnvironmentVariableWithDefault<bool>(attention::kEnableDumpAttention, false);
+  min_flash_attention_sequence_length_ = ParseEnvironmentVariableWithDefault<int>(attention::kFlashAttentionMinLength, 512);
 }
 
 template <typename T>
@@ -150,13 +155,14 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
 
   bool use_flash_attention = enable_flash_attention_ &&
                              nullptr != weights &&
-                             (nullptr == mask_index || is_1d_mask) &&
+                             (nullptr == mask_index || (is_1d_mask && enable_unpad_attention_)) &&
                              nullptr == past &&
                              nullptr == present &&
                              nullptr == extra_add_qk &&
                              !is_unidirectional_ &&
                              parameters.hidden_size == parameters.v_hidden_size &&
                              parameters.sequence_length == parameters.kv_sequence_length &&
+                             parameters.sequence_length >= min_flash_attention_sequence_length_ &&
                              HasFlashAttentionKernel(sm, parameters.head_size);
 
   MHARunner* fused_runner = nullptr;
@@ -170,12 +176,19 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
                             parameters.hidden_size == parameters.v_hidden_size &&
                             parameters.sequence_length == parameters.kv_sequence_length &&
                             HasFusedFp16Kernel(sm, parameters.head_size, sequence_length,
-                                               enable_trt_flash_attention_, false);
+                                               enable_trt_flash_attention_,
+                                               min_flash_attention_sequence_length_,
+                                               false);
 
     if (use_fused_runner) {
       // Here we assume that num_heads, head_size and is_unidirectional does not change for an Attention node.
       if (nullptr == fused_fp16_runner_.get()) {
-        fused_fp16_runner_.reset(new FusedMHARunnerFP16v2(num_heads_, parameters.head_size, sm, is_unidirectional_, enable_trt_flash_attention_));
+        fused_fp16_runner_.reset(new FusedMHARunnerFP16v2(num_heads_,
+                                                          parameters.head_size,
+                                                          sm,
+                                                          is_unidirectional_,
+                                                          enable_trt_flash_attention_,
+                                                          min_flash_attention_sequence_length_));
       }
 
       // In case some kernel not loaded due to shared memory limit, we need to double check here.
@@ -193,11 +206,18 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
                                      parameters.hidden_size == parameters.v_hidden_size &&
                                      parameters.sequence_length == parameters.kv_sequence_length &&
                                      HasFusedFp16Kernel(sm, parameters.head_size, sequence_length,
-                                                        enable_trt_flash_attention_, true);
+                                                        enable_trt_flash_attention_,
+                                                        min_flash_attention_sequence_length_,
+                                                        true);
       if (use_causal_fused_runner) {
         // Here we assume that num_heads, head_size and is_unidirectional does not change for an Attention node.
         if (nullptr == fused_fp16_runner_.get()) {
-          fused_fp16_runner_.reset(new FusedMHARunnerFP16v2(num_heads_, parameters.head_size, sm, is_unidirectional_, enable_trt_flash_attention_));
+          fused_fp16_runner_.reset(new FusedMHARunnerFP16v2(num_heads_,
+                                                            parameters.head_size,
+                                                            sm,
+                                                            is_unidirectional_,
+                                                            enable_trt_flash_attention_,
+                                                            min_flash_attention_sequence_length_));
         }
 
         // Here we assume all causal kernels can be loaded into shared memory. TODO: add a function to check.
@@ -267,8 +287,8 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
     return status;
   }
 
-  if (!enable_unpad_attention_) {
-    const size_t cumulated_seq_len_elements = ((nullptr == data.mask_index) ? batch_size : 2 * batch_size) + 1;
+  if (nullptr == data.mask_index) {
+    const size_t cumulated_seq_len_elements = batch_size + 1;
     auto cumulated_seq_len_buffer = GetScratchBuffer<int>(cumulated_seq_len_elements);
     int* sequence_offset = reinterpret_cast<int*>(cumulated_seq_len_buffer.get());
     LaunchTrtSequenceOffset(sequence_offset, data.mask_index, batch_size, sequence_length, stream);

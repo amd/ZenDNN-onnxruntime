@@ -210,7 +210,9 @@ class FusedMHARunnerFP16v2::mhaImpl {
 
  protected:
   bool is_flash_attention(const int S) const {
-    return interface->mEnableFlashAttention && S >= kMinSequenceLengthFlashAttention && !(sm == kSM_70 && interface->mHeadSize == 32);
+    return interface->mEnableFlashAttention &&
+           S >= interface->mFlashAttentionMinSeqLength &&
+           !(sm == kSM_70 && interface->mHeadSize == 32);
   }
 
  private:
@@ -225,8 +227,13 @@ class FusedMHARunnerFP16v2::mhaImpl {
   bool has_causal_mask = false;
 };
 
-FusedMHARunnerFP16v2::FusedMHARunnerFP16v2(const int numHeads, const int headSize, const int sm, bool causal_mask, bool enable_flash_attention)
-    : MHARunner(numHeads, headSize, 2, causal_mask), mSm(sm), mEnableFlashAttention(enable_flash_attention), pimpl(new mhaImpl(this)) {
+FusedMHARunnerFP16v2::FusedMHARunnerFP16v2(const int numHeads, const int headSize, const int sm, bool causal_mask,
+                                           bool enable_flash_attention, int flash_attention_min_seq_length)
+    : MHARunner(numHeads, headSize, 2, causal_mask),
+      mSm(sm),
+      mEnableFlashAttention(enable_flash_attention),
+      mFlashAttentionMinSeqLength(flash_attention_min_seq_length),
+      pimpl(new mhaImpl(this)) {
 }
 
 void FusedMHARunnerFP16v2::setup(const int S, const int B) {

@@ -29,6 +29,9 @@ constexpr const char* kDisableFusedAttention = "ORT_DISABLE_FUSED_ATTENTION";
 // Environment variable to enable flash attention. Default is false.
 constexpr const char* kEnableFlashAttention = "ORT_ENABLE_FLASH_ATTENTION";
 
+// Environment variable of minimum sequence length to enable flash attention. Default is 512.
+constexpr const char* kFlashAttentionMinLength = "ORT_FLASH_ATTENTION_MIN_LENGTH";
+
 // Environment variable to enable TRT flash attention. Default is false.
 constexpr const char* kEnableTrtFlashAttention = "ORT_ENABLE_TRT_FLASH_ATTENTION";
 
