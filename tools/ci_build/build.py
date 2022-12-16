@@ -491,6 +491,12 @@ def parse_arguments():
         "--tensorrt_placeholder_builder", action="store_true", help="Instantiate Placeholder TensorRT Builder"
     )
     parser.add_argument("--tensorrt_home", help="Path to TensorRT installation dir")
+    parser.add_argument("--test_all_timeout", default="10800", help="Set timeout for onnxruntime_test_all")
+    parser.add_argument(
+        "--skip_and_perform_filtered_tests",
+        action="store_true",
+        help="Skip time-consuming and only perform filtered tests for TensorRT EP",
+    )
     parser.add_argument("--use_migraphx", action="store_true", help="Build with MIGraphX")
     parser.add_argument("--migraphx_home", help="Path to MIGraphX installation dir")
     parser.add_argument("--use_full_protobuf", action="store_true", help="Use the full protobuf library")
@@ -668,6 +674,8 @@ def parse_arguments():
     )
 
     parser.add_argument("--use_xnnpack", action="store_true", help="Enable xnnpack EP.")
+
+    parser.add_argument("--use_cache", action="store_true", help="Use compiler cache in CI")
 
     args = parser.parse_args()
     if args.android_sdk_path:
@@ -876,6 +884,8 @@ def generate_build_tree(
         "-Donnxruntime_ENABLE_MICROSOFT_INTERNAL=" + ("ON" if args.enable_msinternal else "OFF"),
         "-Donnxruntime_USE_VITISAI=" + ("ON" if args.use_vitisai else "OFF"),
         "-Donnxruntime_USE_TENSORRT=" + ("ON" if args.use_tensorrt else "OFF"),
+        "-Donnxruntime_SKIP_AND_PERFORM_FILTERED_TENSORRT_TESTS="
+        + ("ON" if args.test_all_timeout == "10800" else "OFF"),
         "-Donnxruntime_USE_TENSORRT_BUILTIN_PARSER=" + ("ON" if args.use_tensorrt_builtin_parser else "OFF"),
         "-Donnxruntime_TENSORRT_PLACEHOLDER_BUILDER=" + ("ON" if args.tensorrt_placeholder_builder else "OFF"),
         # set vars for TVM
@@ -952,6 +962,11 @@ def generate_build_tree(
         "-Donnxruntime_USE_XNNPACK=" + ("ON" if args.use_xnnpack else "OFF"),
         "-Donnxruntime_USE_CANN=" + ("ON" if args.use_cann else "OFF"),
     ]
+    if args.use_cache:
+        cmake_args.append("-DCMAKE_CXX_COMPILER_LAUNCHER=ccache")
+        cmake_args.append("-DCMAKE_C_COMPILER_LAUNCHER=ccache")
+        if args.use_cuda:
+            cmake_args.append("-DCMAKE_C_COMPILER_LAUNCHER=ccache")
     # By default cmake does not check TLS/SSL certificates. Here we turn it on.
     # But, in some cases you may also need to supply a CA file.
     add_default_definition(cmake_extra_defines, "CMAKE_TLS_VERIFY", "ON")
@@ -1881,7 +1896,7 @@ def run_onnxruntime_tests(args, source_dir, ctest_path, build_dir, configs):
                     run_subprocess([os.path.join(cwd, exe)], cwd=cwd, dll_path=dll_path)
 
         else:
-            ctest_cmd = [ctest_path, "--build-config", config, "--verbose", "--timeout", "10800"]
+            ctest_cmd = [ctest_path, "--build-config", config, "--verbose", "--timeout", args.test_all_timeout]
             run_subprocess(ctest_cmd, cwd=cwd, dll_path=dll_path)
 
         if args.enable_pybind:
@@ -1964,9 +1979,9 @@ def run_onnxruntime_tests(args, source_dir, ctest_path, build_dir, configs):
                 onnx_test = False
 
             if onnx_test:
-                # Disable python onnx tests for TensorRT because many tests are
+                # Disable python onnx tests for TensorRT and CANN EP, because many tests are
                 # not supported yet.
-                if args.use_tensorrt:
+                if args.use_tensorrt or args.use_cann:
                     return
 
                 run_subprocess(
@@ -2131,7 +2146,17 @@ def derive_linux_build_property():
 
 
 def build_nuget_package(
-    source_dir, build_dir, configs, use_cuda, use_openvino, use_tensorrt, use_dnnl, use_tvm, use_winml, use_snpe
+    source_dir,
+    build_dir,
+    configs,
+    use_cuda,
+    use_openvino,
+    use_tensorrt,
+    use_dnnl,
+    use_tvm,
+    use_winml,
+    use_snpe,
+    enable_training_on_device,
 ):
     if not (is_windows() or is_linux()):
         raise BuildError(
@@ -2150,7 +2175,12 @@ def build_nuget_package(
     target_name = "/t:CreatePackage"
     execution_provider = '/p:ExecutionProvider="None"'
     package_name = '/p:OrtPackageId="Microsoft.ML.OnnxRuntime"'
-    if use_winml:
+    if enable_training_on_device:
+        if use_cuda:
+            package_name = '/p:OrtPackageId="Microsoft.ML.OnnxRuntime.Training.Gpu"'
+        else:
+            package_name = '/p:OrtPackageId="Microsoft.ML.OnnxRuntime.Training"'
+    elif use_winml:
         package_name = '/p:OrtPackageId="Microsoft.AI.MachineLearning"'
         target_name = "/t:CreateWindowsAIPackage"
     elif use_openvino:
@@ -2210,7 +2240,7 @@ def build_nuget_package(
             run_subprocess(cmd_args, cwd=csharp_build_dir)
 
         if is_windows():
-            if use_openvino or use_tvm:
+            if not use_winml:
                 # user needs to make sure nuget is installed and added to the path variable
                 nuget_exe = "nuget.exe"
             else:
@@ -2237,12 +2267,11 @@ def build_nuget_package(
         run_subprocess(cmd_args, cwd=csharp_build_dir)
 
 
-def run_csharp_tests(source_dir, build_dir, use_cuda, use_openvino, use_tensorrt, use_dnnl):
+def run_csharp_tests(source_dir, build_dir, use_cuda, use_openvino, use_tensorrt, use_dnnl, enable_training_on_device):
     # Currently only running tests on windows.
     if not is_windows():
         return
     csharp_source_dir = os.path.join(source_dir, "csharp")
-    is_linux_build = derive_linux_build_property()
 
     # define macros based on build args
     macros = ""
@@ -2254,6 +2283,8 @@ def run_csharp_tests(source_dir, build_dir, use_cuda, use_openvino, use_tensorrt
         macros += "USE_DNNL;"
     if use_cuda:
         macros += "USE_CUDA;"
+    if enable_training_on_device:
+        macros += "__TRAINING_ENABLED_NATIVE_BUILD__;"
 
     define_constants = ""
     if macros != "":
@@ -2268,10 +2299,9 @@ def run_csharp_tests(source_dir, build_dir, use_cuda, use_openvino, use_tensorrt
     cmd_args = [
         "dotnet",
         "test",
-        "test\\Microsoft.ML.OnnxRuntime.Tests\\Microsoft.ML.OnnxRuntime.Tests.csproj",
+        "test\\Microsoft.ML.OnnxRuntime.Tests.NetCoreApp\\Microsoft.ML.OnnxRuntime.Tests.NetCoreApp.csproj",
         "--filter",
         "FullyQualifiedName!=Microsoft.ML.OnnxRuntime.Tests.InferenceTest.TestPreTrainedModels",
-        is_linux_build,
         define_constants,
         ort_build_dir,
     ]
@@ -2811,10 +2841,19 @@ def main():
                 args.use_tvm,
                 args.use_winml,
                 args.use_snpe,
+                args.enable_training_on_device,
             )
 
     if args.test and args.build_nuget:
-        run_csharp_tests(source_dir, build_dir, args.use_cuda, args.use_openvino, args.use_tensorrt, args.use_dnnl)
+        run_csharp_tests(
+            source_dir,
+            build_dir,
+            args.use_cuda,
+            args.use_openvino,
+            args.use_tensorrt,
+            args.use_dnnl,
+            args.enable_training_on_device,
+        )
 
     if args.gen_doc:
         # special case CI where we create the build config separately to building
