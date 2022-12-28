@@ -259,6 +259,7 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
 
     invoker.Run(argument, StreamConfig{Stream(context), false});
   } else {
+  // clang-format off
   typedef typename ToHipType<T>::MappedType HipT;
   namespace blas = rocm::tunable::blas;
 
@@ -284,6 +285,7 @@ Status Attention<T>::ComputeInternal(OpKernelContext* context) const {
       reinterpret_cast<const HipT*>(input->Data<T>()), k,
       /*beta=*/1.0f,
       reinterpret_cast<HipT*>(gemm_buffer.get()), n));
+  // clang-format on
   }
 
   return LaunchAttentionKernel(
