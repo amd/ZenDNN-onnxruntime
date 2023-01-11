@@ -176,7 +176,9 @@ RUN cd /tmp/scripts && \
     /tmp/scripts/install_os_deps.sh -d gpu $INSTALL_DEPS_EXTRA_ARGS && \
     /tmp/scripts/install_rust.sh
 
-ENV PATH $HOME/.cargo/bin/:$PATH
+ENV PATH="$HOME/.cargo/bin/:$PATH"
+RUN echo $PATH
+RUN ls $HOME/.cargo/bin/
 RUN rustc --version
 
 RUN /tmp/scripts/install_ninja.sh && \
