@@ -176,8 +176,10 @@ RUN cd /tmp/scripts && \
     /tmp/scripts/install_os_deps.sh -d gpu $INSTALL_DEPS_EXTRA_ARGS && \
     /tmp/scripts/install_rust.sh
 
-ENV PATH="$HOME/.cargo/bin/:$PATH"
+RUN echo $HOME
+ENV PATH="/root/.cargo/bin/:$HOME/.cargo/bin/:$PATH"
 RUN echo $PATH
+RUN ls /root/.cargo/bin/
 RUN ls $HOME/.cargo/bin/
 RUN rustc --version
 
