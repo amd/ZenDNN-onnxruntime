@@ -330,6 +330,7 @@ namespace Microsoft.ML.OnnxRuntime.Tests
                 { "test_bernoulli_double_expanded", "random generator"},
                 { "test_shape", "opset15 version not implemented yet"},
                 { "test_optional_get_element", "optional type is not supported in test infra."},
+                { "test_optional_get_element_sequence", "optional type is not supported in test infra."},
                 { "test_identity_opt", "optional type is not supported in test infra." },
                 { "test_if_opt", "optional type is not supported in test infra." },
                 { "test_loop16_seq_none", "sequence type is not supported in test infra." },
