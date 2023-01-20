@@ -185,6 +185,7 @@ jobs:
     runTests: ${{ parameters.RunOnnxRuntimeTests }}
     buildJava: true
     buildNodejs: true
+    ort_build_pool_name: Win-CPU-2021-beta
 
 - job: Jar_Packaging
   workspace:
