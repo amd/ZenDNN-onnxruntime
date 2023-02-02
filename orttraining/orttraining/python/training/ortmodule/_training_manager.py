@@ -16,6 +16,7 @@ from ._execution_agent import TrainingAgent
 from ._fallback import ORTModuleFallbackException, _FallbackManager, _FallbackPolicy
 from ._graph_execution_manager import GraphExecutionManager, _RunStateInfo, _SkipCheck
 from .debug_options import DebugOptions
+from ._graph_transformer_registry import GraphTransformerRegistry
 
 
 class TrainingManager(GraphExecutionManager):
@@ -289,6 +290,9 @@ class TrainingManager(GraphExecutionManager):
         self._onnx_models.optimized_pre_grad_model = onnx.load_model_from_string(
             self._graph_builder.get_forward_model()
         )
+
+        GraphTransformerRegistry.transform_all(self._onnx_models.optimized_model.graph)
+
         if self._debug_options.save_onnx_models.save:
             self._onnx_models.save_optimized_model(
                 self._debug_options.save_onnx_models.path,

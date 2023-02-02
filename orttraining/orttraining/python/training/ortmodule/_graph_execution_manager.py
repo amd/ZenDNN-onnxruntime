@@ -20,6 +20,7 @@ import onnxruntime
 from onnxruntime.capi import _pybind_state as C
 from onnxruntime.tools.symbolic_shape_infer import SymbolicShapeInference
 from onnxruntime.training import ortmodule
+from onnxruntime_extensions import get_library_path
 
 from . import _are_deterministic_algorithms_enabled, _io, _logger, _onnx_models, _utils
 from ._custom_autograd_function_exporter import _post_process_after_export
@@ -295,6 +296,7 @@ class GraphExecutionManager(GraphExecutionInterface):
             provider_options = [provider_info[providers[0]]]
 
         session_options = onnxruntime.SessionOptions()
+        session_options.register_custom_ops_library(get_library_path())
         session_options.enable_mem_pattern = False
         session_options.enable_mem_reuse = False
         session_options.use_deterministic_compute = _are_deterministic_algorithms_enabled()

@@ -204,6 +204,7 @@ struct ProviderHostCPU {
   // From aten_op.h
   virtual bool contrib__IsATenOperatorExecutorInitialized() = 0;
   virtual Status contrib__ExecuteReduceSumATen(OpKernelContext* p_ctx, const gsl::span<const int64_t>& axes, bool keepdims) = 0;
+  virtual Status contrib__ExecuteTritonSoftmax(OpKernelContext* p_ctx) = 0;
 #endif
 #endif
 };
@@ -278,6 +279,7 @@ inline void wait_event_in_tensor(const Tensor& event_id_tensor) { return g_host_
 // From aten_op.h
 inline bool IsATenOperatorExecutorInitialized() { return g_host_cpu.contrib__IsATenOperatorExecutorInitialized(); }
 inline Status ExecuteReduceSumATen(OpKernelContext* p_ctx, const gsl::span<const int64_t>& axes, bool keepdims) { return g_host_cpu.contrib__ExecuteReduceSumATen(p_ctx, axes, keepdims); }
+inline Status ExecuteTritonSoftmax(OpKernelContext* p_ctx) { return g_host_cpu.contrib__ExecuteTritonSoftmax(p_ctx); }
 }  // namespace contrib
 #endif  // ENABLE_TRAINING
 #endif  // USE_CUDA || USE_ROCM

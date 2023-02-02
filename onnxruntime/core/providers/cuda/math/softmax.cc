@@ -98,6 +98,14 @@ SPECIALIZED_SOFTMAX_HELPER_IMPL(BFloat16)
 
 template <typename T>
 Status Softmax<T>::ComputeInternal(OpKernelContext* ctx) const {
+#ifdef ENABLE_TRAINING
+  bool use_triton = true;
+  if (use_triton) {
+    ORT_RETURN_IF_ERROR(contrib::ExecuteTritonSoftmax(ctx));
+    return Status::OK();
+  }
+#endif
+
   const Tensor* X = ctx->Input<Tensor>(0);
   const TensorShape& input_shape{X->Shape()};
   size_t rank = input_shape.NumDimensions();

@@ -6,6 +6,8 @@
 #include "core/dlpack/dlpack_converter.h"
 #include "core/framework/op_kernel_context_internal.h"
 #include "contrib_ops/cpu/aten_ops/aten_op_executor.h"
+#include "orttraining/core/framework/torch/dlpack_python.h"
+#include "orttraining/core/framework/torch/python_common.h"
 
 namespace onnxruntime {
 namespace contrib {
@@ -70,6 +72,23 @@ Status ExecuteReduceSumATen(OpKernelContext* p_ctx, const gsl::span<const int64_
   ORT_RETURN_IF_ERROR(p_ctx_internal->SetOutputMLValue(0, dlpack::DlpackToOrtValue(dlpack_output)));
   return Status::OK();
 }
+
+Status ExecuteTritonSoftmax(OpKernelContext* p_ctx) {
+  PyObject* module_name = PyUnicode_FromString("triton_softmax");
+	PyObject* module = PyImport_Import(module_name);
+  PyObject* function = PyObject_GetAttrString(module, "softmax");
+  if (!function) printf("Something wrong!\n");
+  auto* p_ctx_internal = reinterpret_cast<OpKernelContextInternal*>(p_ctx);
+  OrtValue input = *p_ctx_internal->GetInputMLValue(0);
+  PyObject* input_dlpack = training::framework::torch::ToDlpack(input);
+  PyObject* args = PyTuple_New(1);
+  PyTuple_SetItem(args, 0, input_dlpack);
+  PyObject* output_dlpack = PyObject_CallObject(function, args);
+  OrtValue output = training::framework::torch::FromDlpack(output_dlpack, false);
+  ORT_THROW_IF_ERROR(p_ctx_internal->SetOutputMLValue(0, output));
+  return Status::OK();
+}
+
 #endif
 
 }  // namespace contrib

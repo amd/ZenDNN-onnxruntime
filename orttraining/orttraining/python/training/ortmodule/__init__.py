@@ -124,3 +124,5 @@ from .debug_options import DebugOptions, LogLevel  # noqa: E402
 
 # ORTModule must be loaded only after all validation passes
 from .ortmodule import ORTModule  # noqa: E402
+
+from ._trion_softmax import triton_softmax, transform_softmax

@@ -25,6 +25,7 @@ class ATen : public OpKernel {
 #ifdef ENABLE_TRAINING
 bool IsATenOperatorExecutorInitialized();
 Status ExecuteReduceSumATen(OpKernelContext* p_ctx, const gsl::span<const int64_t>& axes, bool keepdims);
+Status ExecuteTritonSoftmax(OpKernelContext* p_ctx);
 #endif
 
 }  // namespace contrib

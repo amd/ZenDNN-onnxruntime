@@ -290,6 +290,7 @@ struct ProviderHostCPUImpl : ProviderHostCPU {
       override {
     return contrib::ExecuteReduceSumATen(p_ctx, axes, keepdims);
   }
+  Status contrib__ExecuteTritonSoftmax(OpKernelContext* p_ctx) override { return contrib::ExecuteTritonSoftmax(p_ctx); }
 #endif
 #endif
 };
