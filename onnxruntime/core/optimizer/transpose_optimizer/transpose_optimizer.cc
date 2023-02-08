@@ -3,23 +3,32 @@
 
 #include "optimizer_api.h"
 
-#include "core/graph/constants.h"
-#include "core/common/make_string.h"
-
 #include <algorithm>
-#include "core/common/gsl.h"
+#include <functional>
 #include <iostream>
 #include <unordered_map>
 #include <unordered_set>
-#include <cstring>
+
+#include "core/common/gsl.h"
+#include "core/common/make_string.h"
+#include "core/graph/constants.h"
 
 namespace onnx_layout_transformation {
+
+struct HandlerInfo;
+
+using CostCheckFn = std::function<bool(const api::GraphRef& graph,
+                                       const api::NodeRef& node,
+                                       const std::vector<int64_t>& perm,
+                                       const std::unordered_set<std::string>& outputs_leading_to_transpose,
+                                       const HandlerInfo& info,
+                                       const std::vector<size_t>& input_indices)>;
 
 struct OptimizerCtx {
   int64_t opset;
   api::GraphRef& graph;
   bool allow_extended_ops;
-  bool skip_cost_check;
+  CostCheckFn cost_check_fn;
   const std::string provider_type;
   OptimizerMode mode;
   std::unordered_set<std::string_view> layout_sensitive_ops;
@@ -678,7 +687,7 @@ static void TransposeOutputs(OptimizerCtx& ctx, api::NodeRef& node, const std::v
 // and an unknown rank likely corresponds to a data-carrying (non-weight) tensor, which will be large.
 
 // Given a value, returns the rank of the value excluding dimensions of value 1. Returns 5 if the rank is unknown.
-static int EstimateValueRank(api::GraphRef& graph, std::string_view input) {
+static int EstimateValueRank(const api::GraphRef& graph, std::string_view input) {
   auto value_info = graph.GetValueInfo(input);
   std::optional<std::vector<int64_t>> shape = value_info->Shape();
   if (shape == std::nullopt) {
@@ -696,7 +705,7 @@ static int EstimateValueRank(api::GraphRef& graph, std::string_view input) {
 static const HandlerInfo* GetHandler(api::NodeRef& node, bool allow_extended_ops);
 
 // Returns true if the provided transpose node is only consumed by nodes we can likely push it through.
-static bool CanLikelyRemoveTranspose(api::GraphRef& graph, api::NodeRef& transpose) {
+static bool CanLikelyRemoveTranspose(const api::GraphRef& graph, api::NodeRef& transpose) {
   auto consumers = graph.GetValueConsumers(transpose.Outputs()[0]);
   if (!consumers->comprehensive) {
     return false;
@@ -711,7 +720,7 @@ static bool CanLikelyRemoveTranspose(api::GraphRef& graph, api::NodeRef& transpo
 
 // Estimates the cost of transposing an input. Currently uses rank heuristic. Negative if transpose is removed.
 // Feel free to improve as needed.
-static int EstimateTransposeValueCost(api::GraphRef& graph, std::string_view input,
+static int EstimateTransposeValueCost(const api::GraphRef& graph, std::string_view input,
                                       const std::vector<int64_t>& perm_inv) {
   // Case 1: Transposing constants probably costs nothing.
   std::unique_ptr<api::TensorRef> constant = graph.GetConstant(input);
@@ -737,7 +746,8 @@ static int EstimateTransposeValueCost(api::GraphRef& graph, std::string_view inp
 }
 
 // Estimates total cost of transposing a node's inputs. Negative if transposing is beneficial.
-static int EstimateTransposeInputsCost(api::GraphRef& graph, api::NodeRef& node, const std::vector<int64_t>& perm_inv,
+static int EstimateTransposeInputsCost(const api::GraphRef& graph, const api::NodeRef& node,
+                                       const std::vector<int64_t>& perm_inv,
                                        const std::vector<size_t>& input_indices) {
   auto inputs = node.Inputs();
   int cost = 0;
@@ -1622,80 +1632,79 @@ static bool HandleMaxPool(HandlerArgs& args) {
 constexpr HandlerInfo max_pool_op_handler = {&FirstInput, &HandleMaxPool};
 
 // TODO: check binary size of this and replace it with constexpr if large
-static const std::unordered_map<std::string_view, const HandlerInfo&> handler_map{
+static const std::unordered_map<std::string_view, const HandlerInfo&> handler_map {
+  {"Cast", simple_node_handler},
+      {"Exp", simple_node_handler},
+      {"Identity", simple_node_handler},
+      {"LeakyRelu", simple_node_handler},
+      {"Log", simple_node_handler},
+      {"Reciprocal", simple_node_handler},
+      {"Relu", simple_node_handler},
+      {"Sigmoid", simple_node_handler},
+      {"Sqrt", simple_node_handler},
+      {"Tanh", simple_node_handler},
+      {"Abs", simple_node_handler},
+      {"Not", simple_node_handler},
+      {"Ceil", simple_node_handler},
+      {"Floor", simple_node_handler},
+      {"Neg", simple_node_handler},
+      {"Erf", simple_node_handler},
+      {"HardSigmoid", simple_node_handler},
+      {"Round", simple_node_handler},
+      {"IsInf", simple_node_handler},
+      {"IsNaN", simple_node_handler},
+      {"Selu", simple_node_handler},
+      {"Shrink", simple_node_handler},
+      {"Sign", simple_node_handler},
+      {"Softplus", simple_node_handler},
+      {"Softsign", simple_node_handler},
+      {"ThresholdedRelu", simple_node_handler},
+      {"Celu", simple_node_handler},
+      {"HardSwish", simple_node_handler},
 
-    {"Cast", simple_node_handler},
-    {"Exp", simple_node_handler},
-    {"Identity", simple_node_handler},
-    {"LeakyRelu", simple_node_handler},
-    {"Log", simple_node_handler},
-    {"Reciprocal", simple_node_handler},
-    {"Relu", simple_node_handler},
-    {"Sigmoid", simple_node_handler},
-    {"Sqrt", simple_node_handler},
-    {"Tanh", simple_node_handler},
-    {"Abs", simple_node_handler},
-    {"Not", simple_node_handler},
-    {"Ceil", simple_node_handler},
-    {"Floor", simple_node_handler},
-    {"Neg", simple_node_handler},
-    {"Erf", simple_node_handler},
-    {"HardSigmoid", simple_node_handler},
-    {"Round", simple_node_handler},
-    {"IsInf", simple_node_handler},
-    {"IsNaN", simple_node_handler},
-    {"Selu", simple_node_handler},
-    {"Shrink", simple_node_handler},
-    {"Sign", simple_node_handler},
-    {"Softplus", simple_node_handler},
-    {"Softsign", simple_node_handler},
-    {"ThresholdedRelu", simple_node_handler},
-    {"Celu", simple_node_handler},
-    {"HardSwish", simple_node_handler},
+      {"Sin", simple_node_handler},
+      {"Cos", simple_node_handler},
+      {"Tan", simple_node_handler},
+      {"Sinh", simple_node_handler},
+      {"Cosh", simple_node_handler},
+      {"Tanh", simple_node_handler},
+      {"Asin", simple_node_handler},
+      {"Acos", simple_node_handler},
+      {"Atan", simple_node_handler},
+      {"Asinh", simple_node_handler},
+      {"Acosh", simple_node_handler},
+      {"Atanh", simple_node_handler},
 
-    {"Sin", simple_node_handler},
-    {"Cos", simple_node_handler},
-    {"Tan", simple_node_handler},
-    {"Sinh", simple_node_handler},
-    {"Cosh", simple_node_handler},
-    {"Tanh", simple_node_handler},
-    {"Asin", simple_node_handler},
-    {"Acos", simple_node_handler},
-    {"Atan", simple_node_handler},
-    {"Asinh", simple_node_handler},
-    {"Acosh", simple_node_handler},
-    {"Atanh", simple_node_handler},
+      {"Add", broadcast_node_handler},
+      {"Max", broadcast_node_handler},
+      {"Min", broadcast_node_handler},
+      {"Mul", broadcast_node_handler},
+      {"Sub", broadcast_node_handler},
+      {"Div", broadcast_node_handler},
+      {"And", broadcast_node_handler},
+      {"Or", broadcast_node_handler},
+      {"Xor", broadcast_node_handler},
+      {"Mod", broadcast_node_handler},
+      {"PRelu", broadcast_node_handler},
+      {"BitShift", broadcast_node_handler},
+      {"Equal", broadcast_node_handler},
+      {"Greater", broadcast_node_handler},
+      {"Less", broadcast_node_handler},
+      {"GreaterOrEqual", broadcast_node_handler},
+      {"LessOrEqual", broadcast_node_handler},
+      {"Mean", broadcast_node_handler},
+      {"Sum", broadcast_node_handler},
+      {"Pow", broadcast_node_handler},
+      {"Where", broadcast_node_handler},
 
-    {"Add", broadcast_node_handler},
-    {"Max", broadcast_node_handler},
-    {"Min", broadcast_node_handler},
-    {"Mul", broadcast_node_handler},
-    {"Sub", broadcast_node_handler},
-    {"Div", broadcast_node_handler},
-    {"And", broadcast_node_handler},
-    {"Or", broadcast_node_handler},
-    {"Xor", broadcast_node_handler},
-    {"Mod", broadcast_node_handler},
-    {"PRelu", broadcast_node_handler},
-    {"BitShift", broadcast_node_handler},
-    {"Equal", broadcast_node_handler},
-    {"Greater", broadcast_node_handler},
-    {"Less", broadcast_node_handler},
-    {"GreaterOrEqual", broadcast_node_handler},
-    {"LessOrEqual", broadcast_node_handler},
-    {"Mean", broadcast_node_handler},
-    {"Sum", broadcast_node_handler},
-    {"Pow", broadcast_node_handler},
-    {"Where", broadcast_node_handler},
+      {"Clip", node_1_inp_handler},
+      {"CastLike", node_1_inp_handler},
 
-    {"Clip", node_1_inp_handler},
-    {"CastLike", node_1_inp_handler},
-
-    {"Transpose", transpose_handler},
-    {"Concat", concat_handler},
-    {"Split", split_handler},
-    {"Shape", shape_handler},
-    {"Pad", pad_handler},
+      {"Transpose", transpose_handler},
+      {"Concat", concat_handler},
+      {"Split", split_handler},
+      {"Shape", shape_handler},
+      {"Pad", pad_handler},
 // The CUDA Resize kernel assumes that the input is NCHW and
 // Resize can't be supported in ORT builds with CUDA enabled.
 // TODO: Enable this once the CUDA Resize kernel is implemented
@@ -1707,35 +1716,36 @@ static const std::unordered_map<std::string_view, const HandlerInfo&> handler_ma
 // incorrect results when this handler is used, so the Resize
 // handler is not enabled even for those builds.
 #if !defined(USE_CUDA) && !defined(USE_ROCM)
-    {"Resize", resize_handler},
+      {"Resize", resize_handler},
 #endif
-    {"ReduceSum", reduce_sum_handler},
+      {"ReduceSum", reduce_sum_handler},
 
-    {"ReduceLogSum", reduce_op_handler},
-    {"ReduceLogSumExp", reduce_op_handler},
-    {"ReduceMax", reduce_op_handler},
-    {"ReduceMean", reduce_op_handler},
-    {"ReduceMin", reduce_op_handler},
-    {"ReduceProd", reduce_op_handler},
-    {"ReduceSumSquare", reduce_op_handler},
-    {"ReduceL1", reduce_op_handler},
-    {"ReduceL2", reduce_op_handler},
+      {"ReduceLogSum", reduce_op_handler},
+      {"ReduceLogSumExp", reduce_op_handler},
+      {"ReduceMax", reduce_op_handler},
+      {"ReduceMean", reduce_op_handler},
+      {"ReduceMin", reduce_op_handler},
+      {"ReduceProd", reduce_op_handler},
+      {"ReduceSumSquare", reduce_op_handler},
+      {"ReduceL1", reduce_op_handler},
+      {"ReduceL2", reduce_op_handler},
 
-    {"ArgMin", arg_min_max_handler},
-    {"ArgMax", arg_min_max_handler},
+      {"ArgMin", arg_min_max_handler},
+      {"ArgMax", arg_min_max_handler},
 
-    {"Squeeze", squeeze_handler},
-    {"Unsqueeze", unsqueeze_handler},
-    {"Slice", slice_handler},
-    {"Tile", tile_handler},
+      {"Squeeze", squeeze_handler},
+      {"Unsqueeze", unsqueeze_handler},
+      {"Slice", slice_handler},
+      {"Tile", tile_handler},
 
-    {"Softmax", soft_hard_max_handler},
-    {"Hardmax", soft_hard_max_handler},
-    {"LogSoftmax", soft_hard_max_handler},
+      {"Softmax", soft_hard_max_handler},
+      {"Hardmax", soft_hard_max_handler},
+      {"LogSoftmax", soft_hard_max_handler},
 
-    {"QuantizeLinear", quantize_dequantize_linear_handler},
-    {"DequantizeLinear", quantize_dequantize_linear_handler},
-    {"Reshape", reshape_handler}};
+      {"QuantizeLinear", quantize_dequantize_linear_handler},
+      {"DequantizeLinear", quantize_dequantize_linear_handler},
+      {"Reshape", reshape_handler},
+};
 
 static const std::unordered_map<std::string_view, const HandlerInfo&> extended_handler_map{
     {"com.microsoft.QLinearReduceMean", reduce_op_handler},
@@ -1773,28 +1783,95 @@ static const HandlerInfo* GetHandler(api::NodeRef& node, bool allow_extended_ops
   return nullptr;
 }
 
-// Some op should be optimized any time there is a transpose as input and a handler is available.
-static bool CanNodeSkipCostCheck(const OptimizerCtx& ctx, const api::NodeRef& node) {
+static int CalculateCost(const api::GraphRef& graph, const api::NodeRef& node,
+                         const std::vector<int64_t>& perm,
+                         const std::unordered_set<std::string>& outputs_leading_to_transpose,
+                         const HandlerInfo& info,
+                         const std::vector<size_t>& input_indices) {
+  // We require the input cost (number of transposes before the op) and the total cost to strictly decrease.
+  // Strict decrease of the input cost ensures the optimization is stable, since the total cost decrease is just an
+  // estimate (the transpose after the op may or may not cancel with a subsequent transpose). We don't want
+  // repeated runs of the optimizer to have a transpose toggle between two inputs of a binary op.
+  int cost = EstimateTransposeInputsCost(graph, node, perm, input_indices);
+
+  if (cost < 0 && info.transposes_outputs) {
+    // If the output will be transposed and won't ultimately cancel, factor in that cost.
+    bool has_output_leading_to_transpose = false;
+    auto outputs = node.Outputs();
+    int out_cost = 0;
+    // Having multiple outputs is rare. When it happens (Split), the total size of the outputs isn't much larger
+    // than the largest input. Cost is rank currently, so just use the largest cost (rank) over all outputs.
+    for (auto out : outputs) {
+      out_cost = std::max(out_cost, EstimateValueRank(graph, out));
+      if (outputs_leading_to_transpose.find(std::string(out)) != outputs_leading_to_transpose.end()) {
+        has_output_leading_to_transpose = true;
+      }
+    }
+
+    if (!has_output_leading_to_transpose) {
+      cost += out_cost;
+    }
+  }
+
+  return cost;
+}
+
+static bool DefaultCostCheck(const api::GraphRef& graph, const api::NodeRef& node,
+                             const std::vector<int64_t>& perm,
+                             const std::unordered_set<std::string>& outputs_leading_to_transpose,
+                             const HandlerInfo& info,
+                             const std::vector<size_t>& input_indices) {
   if (node.IsOp("Transpose")) {
     return true;
   }
-  if (node.IsOp("MaxPool")) {
-    // Inclusion of MaxPool is a hack because it has higher perf in the NHWC variant when supported.
-    return true;
-  }
-  if (node.IsOp("Resize")) {
-    // Resize is included because it has higher perf in the NHWC variant when
-    // the input X is 4D int8 tensor and the mode is linear
-    auto X_value_info = ctx.graph.GetValueInfo(node.Inputs()[0]);
-    auto X_shape = X_value_info->Shape();
-    auto X_dtype = X_value_info->DType();
-    auto mode = node.GetAttributeString("mode");
-    if (X_shape && X_shape->size() == 4 && (X_dtype == api::DataType::UINT8 || X_dtype == api::DataType::INT8) &&
-        mode && *mode == "linear") {
+
+  int cost = CalculateCost(graph, node, perm, outputs_leading_to_transpose, info, input_indices);
+  return cost < 0;
+}
+
+static bool OrtDefaultCostCheck(const api::GraphRef& graph, const api::NodeRef& node,
+                                const std::vector<int64_t>& perm,
+                                const std::unordered_set<std::string>& outputs_leading_to_transpose,
+                                const HandlerInfo& info,
+                                const std::vector<size_t>& input_indices) {
+  // TODO: Move this out of transpose_optimizer.cc so we can use the ORT const for CPU EP
+
+  // special case some kernels based on the ORT implementation details
+  if (node.GetExecutionProviderType() == "CPUExecutionProvider") {
+    if (node.IsOp("MaxPool")) {
+      // MaxPool has higher perf in the NHWC variant when supported. HandleMaxPool does the support checks.
       return true;
     }
+
+    if (node.IsOp("Resize")) {
+      // Resize is included because it has higher perf in the NHWC variant when
+      // the input X is 4D int8 tensor and the mode is linear
+      auto X_value_info = graph.GetValueInfo(node.Inputs()[0]);
+      auto X_shape = X_value_info->Shape();
+      auto X_dtype = X_value_info->DType();
+      auto mode = node.GetAttributeString("mode");
+      if (X_shape && X_shape->size() == 4 && (X_dtype == api::DataType::UINT8 || X_dtype == api::DataType::INT8) &&
+          mode && *mode == "linear") {
+        return true;
+      }
+    }
   }
-  return false;
+
+  return DefaultCostCheck(graph, node, perm, outputs_leading_to_transpose, info, input_indices);
+}
+
+static bool PostLayoutTransformCostCheck(const api::GraphRef& graph, const api::NodeRef& node,
+                                         const std::vector<int64_t>& perm,
+                                         const std::unordered_set<std::string>& outputs_leading_to_transpose,
+                                         const HandlerInfo& info,
+                                         const std::vector<size_t>& input_indices) {
+  if (perm == ChannelFirstToLastPerm(perm.size()) || perm == ChannelLastToFirstPerm(perm.size())) {
+    // we aggressively pull through the layout transpose nodes
+    return true;
+  }
+
+  // for other nodes do the default cost check
+  return OrtDefaultCostCheck(graph, node, perm, outputs_leading_to_transpose, info, input_indices);
 }
 
 // Finds a handler for the node and estimates the cost of pushing a transpose. Does so if deemed beneficial.
@@ -1812,35 +1889,9 @@ bool ProcessTranspose(OptimizerCtx& ctx, api::NodeRef& transpose, api::NodeRef& 
     return false;
   }
 
-  if (!ctx.skip_cost_check && !CanNodeSkipCostCheck(ctx, node)) {
-    // We require the input cost (number of transposes before the op) and the total cost to strictly decrease.
-    // Strict decrease of the input cost ensures the optimization is stable, since the total cost decrease is just an
-    // estimate (the transpose after the op may or may not cancel with a subsequent transpose). We don't want
-    // repeated runs of the optimizer to have a transpose toggle between two inputs of a binary op.
-    int cost = EstimateTransposeInputsCost(ctx.graph, node, perm, input_indices);
-
-    if (cost < 0 && info->transposes_outputs) {
-      // If the output will be transposed and won't ultimately cancel, factor in that cost.
-      bool has_output_leading_to_transpose = false;
-      auto outputs = node.Outputs();
-      int out_cost = 0;
-      // Having multiple outputs is rare. When it happens (Split), the total size of the outputs isn't much larger
-      // than the largest input. Cost is rank currently, so just use the largest cost (rank) over all outputs.
-      for (auto out : outputs) {
-        out_cost = std::max(out_cost, EstimateValueRank(ctx.graph, out));
-        if (outputs_leading_to_transpose.find(std::string(out)) != outputs_leading_to_transpose.end()) {
-          has_output_leading_to_transpose = true;
-        }
-      }
-
-      if (!has_output_leading_to_transpose) {
-        cost += out_cost;
-      }
-    }
-
-    if (cost >= 0) {
-      return false;
-    }
+  bool push_transpose = ctx.cost_check_fn(ctx.graph, node, perm, outputs_leading_to_transpose, *info, input_indices);
+  if (!push_transpose) {
+    return false;
   }
 
   std::vector<int64_t> perm_inv = InvertPerm(perm);
@@ -1876,8 +1927,11 @@ std::optional<OptimizerCtx> MakeOptimizerContext(api::GraphRef& graph, bool allo
 
   // during layout transformation we want to push the transposes as far out as possible.
   // it is important that the EP gets the entire graph in the layout it prefers.
-  bool skip_cost_check = mode == OptimizerMode::OPTIMIZE_LAYOUT_TRANSFORM;
-  OptimizerCtx ctx{*opset, graph, allow_extended_ops, skip_cost_check, provider_type, mode, layout_sensitive_ops};
+  CostCheckFn cost_check = mode == OptimizerMode::OPTIMIZE_LAYOUT_TRANSFORM
+                               ? PostLayoutTransformCostCheck
+                               : OrtDefaultCostCheck;
+
+  OptimizerCtx ctx{*opset, graph, allow_extended_ops, cost_check, provider_type, mode, layout_sensitive_ops};
   return ctx;
 }
 
