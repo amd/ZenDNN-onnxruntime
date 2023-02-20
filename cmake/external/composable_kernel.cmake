@@ -34,4 +34,16 @@ if(NOT composable_kernel_POPULATED)
   set(example_gemm_dl_fp16_srcs ${composable_kernel_SOURCE_DIR}/example/01_gemm/gemm_dl_fp16.cpp ${all_ck_utility_srcs})
   add_executable(example_gemm_dl_fp16 ${example_gemm_dl_fp16_srcs})
   target_link_libraries(example_gemm_dl_fp16 PRIVATE onnxruntime_composable_kernel_includes device_gemm_instance)
+
+  set(ck_profiler_dir ${composable_kernel_SOURCE_DIR}/profiler/src)
+  set(ck_profiler_srcs
+    ${ck_profiler_dir}/profiler.cpp
+    ${ck_profiler_dir}/profile_gemm.cpp
+  )
+  add_executable(ckProfiler ${ck_profiler_srcs} ${all_ck_utility_srcs})
+  target_include_directories(ckProfiler PRIVATE ${composable_kernel_SOURCE_DIR}/profiler/include)
+  target_link_libraries(ckProfiler PRIVATE
+    onnxruntime_composable_kernel_includes
+    device_gemm_instance
+  )
 endif()
