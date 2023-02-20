@@ -20,4 +20,10 @@ if(NOT composable_kernel_POPULATED)
   target_include_directories(onnxruntime_composable_kernel_includes INTERFACE
     ${composable_kernel_SOURCE_DIR}/include
     ${composable_kernel_SOURCE_DIR}/library/include)
+
+  # build client example with ort builtin ck
+  set(client_gemm_01_gemm_srcs ${composable_kernel_SOURCE_DIR}/client_example/01_gemm/gemm.cpp)
+  add_executable(client_gemm_01_gemm ${client_gemm_01_gemm_srcs})
+  target_link_libraries(client_gemm_01_gemm PRIVATE onnxruntime_composable_kernel_includes device_gemm_instance)
+  set_source_files_properties(${client_gemm_01_gemm_srcs} PROPERTIES LANGUAGE HIP)
 endif()
