@@ -21,9 +21,17 @@ if(NOT composable_kernel_POPULATED)
     ${composable_kernel_SOURCE_DIR}/include
     ${composable_kernel_SOURCE_DIR}/library/include)
 
+  file(GLOB_RECURSE all_ck_srcs "${composable_kernel_SOURCE_DIR}/*.cpp")
+  file(GLOB_RECURSE all_ck_utility_srcs "${composable_kernel_SOURCE_DIR}/library/src/utility/*.cpp")
+  set_source_files_properties(${all_ck_srcs} PROPERTIES LANGUAGE HIP)
+
   # build client example with ort builtin ck
   set(client_gemm_01_gemm_srcs ${composable_kernel_SOURCE_DIR}/client_example/01_gemm/gemm.cpp)
   add_executable(client_gemm_01_gemm ${client_gemm_01_gemm_srcs})
   target_link_libraries(client_gemm_01_gemm PRIVATE onnxruntime_composable_kernel_includes device_gemm_instance)
-  set_source_files_properties(${client_gemm_01_gemm_srcs} PROPERTIES LANGUAGE HIP)
+
+  # build profiler with ort builtin ck
+  set(example_gemm_dl_fp16_srcs ${composable_kernel_SOURCE_DIR}/example/01_gemm/gemm_dl_fp16.cpp ${all_ck_utility_srcs})
+  add_executable(example_gemm_dl_fp16 ${example_gemm_dl_fp16_srcs})
+  target_link_libraries(example_gemm_dl_fp16 PRIVATE onnxruntime_composable_kernel_includes device_gemm_instance)
 endif()
