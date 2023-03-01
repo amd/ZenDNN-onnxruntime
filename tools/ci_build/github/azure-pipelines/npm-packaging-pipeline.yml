@@ -41,7 +41,7 @@ stages:
   parameters:
     NpmPackagingMode: ${{ variables.NpmPackagingMode }}
     IsReleasePipeline: true
-    PoolName: 'Win-CPU-2021'
+    PoolName: 'Win-CPU-2019'
     PackageName: 'onnxruntime-web'
 
 - stage: Build_React_Native
@@ -78,7 +78,7 @@ stages:
           artifactName: 'NPM_packages'
           targetPath: '$(Pipeline.Workspace)'
         displayName: 'Download onnxruntime-node Pipeline Artifact'
-      
+
     - ${{ if ne(parameters.NodePipelineId, 'latest') }}:
       - task: DownloadPipelineArtifact@2
         inputs:
@@ -90,17 +90,16 @@ stages:
           artifactName: 'NPM_packages'
           targetPath: '$(Pipeline.Workspace)'
         displayName: 'Download onnxruntime-node Pipeline Artifact'
-    
+
     - task: CopyFiles@2
       inputs:
         sourceFolder: $(Pipeline.Workspace)
         contents: onnxruntime-*.tgz
         targetFolder: $(Build.ArtifactStagingDirectory)
       displayName: 'Copy onnxruntime-node Artifacts'
-    
+
     - task: PublishPipelineArtifact@0
       inputs:
         artifactName: 'onnxruntime-node'
         targetPath: '$(Build.ArtifactStagingDirectory)'
       displayName: 'Publish onnxruntime-node Pipeline Artifact'
-      
