@@ -4090,6 +4090,91 @@ Return true if all elements are true and false otherwise.
       .TypeAndShapeInferenceFunction([](InferenceContext& ctx) {
         propagateShapeAndTypeFromFirstInput(ctx);
       });
+
+  ONNX_CONTRIB_OPERATOR_SCHEMA(AttentionTraining)
+      .SetDomain(kMSDomain)
+      .SinceVersion(1)
+      .SetDoc("AttentionTraining.")
+      .Attr("seed", "(Optional) Seed to the random generator, if not specified we will auto generate one.",
+            AttributeProto::INT, OPTIONAL_VALUE)
+      .Input(0, "Q", "Query tensor with shape [b, seqlen, num_heads, K].", "T")
+      .Input(1, "K", "Key tensor with shape [b, seqlen, num_heads, K].", "T")
+      .Input(2, "V", "Value tensor with shape [b, seqlen, num_heads, Kv].", "T")
+      .Input(3, "Bias", "Bias tensor.", "T", OpSchema::Optional)
+      .Input(4, "Scale", "Scale tensor.", "tensor(float)", OpSchema::Optional)
+      .Input(5, "Ratio", "Dropout ratio.", "tensor(float)", OpSchema::Optional)
+      .Output(0, "Y", "Output tensor with shape [b, seqlen, num_heads, Kv].", "T")
+      .Output(1, "LogSumExp", "LogSumExp tensor for backward.", "tensor(float)")
+      .Output(2, "Seed", "Seed for Dropout backward.", "tensor(int64)", OpSchema::Optional)
+      .Output(3, "Offset", "Offset for Dropout backward.", "tensor(int64)", OpSchema::Optional)
+      .TypeConstraint("T", {"tensor(float16)", "tensor(float)"},
+                      "Constrain input and output types to floating point tensors.")
+      .TypeAndShapeInferenceFunction([](InferenceContext& ctx) {
+        propagateElemTypeFromInputToOutput(ctx, 0, 0);
+        updateOutputElemType(ctx, 1, ONNX_NAMESPACE::TensorProto::FLOAT);
+
+        if (hasInputShape(ctx, 0)) {
+          const TensorShapeProto& query_shape = getInputShape(ctx, 0);
+          auto& query_dims = query_shape.dim();
+          if (query_dims.size() != 4) {
+            fail_shape_inference("Q shape must be 4-dimensional");
+          }
+
+          ONNX_NAMESPACE::TensorShapeProto output_shape;
+          *output_shape.add_dim() = query_dims[0];
+          *output_shape.add_dim() = query_dims[1];
+          *output_shape.add_dim() = query_dims[2];
+          if (hasInputShape(ctx, 2)) {
+            const TensorShapeProto& value_shape = getInputShape(ctx, 2);
+            auto& value_dims = value_shape.dim();
+            if (value_dims.size() != 4) {
+              fail_shape_inference("V shape must be 4-dimensional");
+            }
+            *output_shape.add_dim() = value_dims[3];
+          } else {
+            std::stringstream ss;
+            ss << "attention_output_dim3";
+            output_shape.add_dim()->set_dim_param(ss.str());
+          }
+          updateOutputShape(ctx, 0, output_shape);
+
+          ONNX_NAMESPACE::TensorShapeProto log_sum_exp_shape;
+          *log_sum_exp_shape.add_dim() = query_dims[0];
+          *log_sum_exp_shape.add_dim() = query_dims[2];
+          std::stringstream ss;
+          ss << "log_sum_exp_dim2";
+          log_sum_exp_shape.add_dim()->set_dim_param(ss.str());
+          updateOutputShape(ctx, 1, log_sum_exp_shape);
+        }
+
+        // For Seed and Offset.
+        for (size_t i = 2; i < ctx.getNumOutputs(); ++i) {
+          updateOutputElemType(ctx, i, ONNX_NAMESPACE::TensorProto::INT64);
+          updateOutputShape(ctx, i, {});
+        }
+      });
+
+  ONNX_CONTRIB_OPERATOR_SCHEMA(AttentionTrainingGrad)
+      .SetDomain(kMSDomain)
+      .SinceVersion(1)
+      .SetDoc("AttentionTrainingGrad.")
+      .Input(0, "dY", "Gradient of output.", "T")
+      .Input(1, "Y", "Output tensor with shape [b, seqlen, num_heads, Kv].", "T")
+      .Input(2, "Q", "Query tensor with shape [b, seqlen, num_heads, K].", "T")
+      .Input(3, "K", "Key tensor with shape [b, seqlen, num_heads, K].", "T")
+      .Input(4, "V", "Value tensor with shape [b, seqlen, num_heads, Kv].", "T")
+      .Input(5, "LogSumExp", "LogSumExp tensor.", "tensor(float)")
+      .Input(6, "Bias", "Bias tensor.", "T", OpSchema::Optional)
+      .Input(7, "Scale", "Scale tensor.", "tensor(float)", OpSchema::Optional)
+      .Input(8, "Ratio", "Dropout ratio.", "tensor(float)", OpSchema::Optional)
+      .Input(9, "Seed", "Seed for Dropout.", "tensor(int64)", OpSchema::Optional)
+      .Input(10, "Offset", "Offset for Dropout.", "tensor(int64)", OpSchema::Optional)
+      .Output(0, "dQ", "Gradient of Q.", "T")
+      .Output(1, "dK", "Gradient of K.", "T")
+      .Output(2, "dV", "Gradient of V.", "T")
+      .Output(3, "dBias", "Gradient of bias.", "T", OpSchema::Optional)
+      .TypeConstraint("T", {"tensor(float16)", "tensor(float)"},
+                      "Constrain input and output types to floating point tensors.");
 }
 
 }  // namespace training
