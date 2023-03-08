@@ -27,7 +27,7 @@ parameters:
   default: $(Agent.TempDirectory)/docker
 - name: DockerCacheKeys
   type: string
-  default: 'tools/ci_build/github/linux/docker/**/*.*, !tools/ci_build/github/linux/docker/build_scripts/**, !tools/ci_build/github/linux/docker/scripts/deps.txt'
+  default: 'tools/ci_build/github/linux/docker/**/*, !tools/ci_build/github/linux/docker/build_scripts/**, !tools/ci_build/github/linux/docker/scripts/deps.txt'
 
 steps:
 
