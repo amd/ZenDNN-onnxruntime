@@ -898,7 +898,6 @@ common::Status InferenceSession::TransformGraph(onnxruntime::Graph& graph,
   // Do partitioning based on execution providers' capabilities.
   GraphPartitioner partitioner(kernel_registry_manager, providers);
 
-#ifdef DEBUG_LAYOUT_TRANSFORM
   std::function<void(Graph&)> graph_debug_fn;
   if (transform_layout_fn) {
     int counter = 0;
@@ -911,10 +910,6 @@ common::Status InferenceSession::TransformGraph(onnxruntime::Graph& graph,
 
   ORT_RETURN_IF_ERROR_SESSIONID_(partitioner.Partition(graph, session_state.GetMutableFuncMgr(), transform_layout_fn,
                                                        mode, graph_debug_fn));
-#else
-  ORT_RETURN_IF_ERROR_SESSIONID_(partitioner.Partition(graph, session_state.GetMutableFuncMgr(), transform_layout_fn,
-                                                       mode));
-#endif
 
   // apply Level2 and higher transformers.
   // we do not run Level 1 again as those transformers assume partitioning will run later to do node assignment.
