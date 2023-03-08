@@ -75,7 +75,8 @@ steps:
         --dockerfile "${{ parameters.Dockerfile }}" \
         --context "${{ parameters.Context }}" \
         --docker-build-args "${{ parameters.DockerBuildArgs }}" \
-        --repository "${{ parameters.Repository }}"
+        --repository "${{ parameters.Repository }}" \
+        --use_imagecache
     displayName: "Get ${{ parameters.Repository }} image for ${{ parameters.Dockerfile }}"
 
   - script: |
