@@ -895,8 +895,24 @@ common::Status InferenceSession::TransformGraph(onnxruntime::Graph& graph,
 
   // Do partitioning based on execution providers' capabilities.
   GraphPartitioner partitioner(kernel_registry_manager, providers);
+
+#ifdef DEBUG_LAYOUT_TRANSFORM
+  std::function<void(Graph&)> graph_debug_fn;
+  if (transform_layout_fn) {
+    int counter = 0;
+    graph_debug_fn = [&counter, this](Graph& graph) {
+      if (graph.GraphProtoSyncNeeded()) {
+        ORT_THROW_IF_ERROR(Model::Save(*model_, "post_layout_transform_" + std::to_string(counter++) + ".onnx"));
+      }
+    };
+  }
+
+  ORT_RETURN_IF_ERROR_SESSIONID_(partitioner.Partition(graph, session_state.GetMutableFuncMgr(), transform_layout_fn,
+                                                       mode, graph_debug_fn));
+#else
   ORT_RETURN_IF_ERROR_SESSIONID_(partitioner.Partition(graph, session_state.GetMutableFuncMgr(), transform_layout_fn,
                                                        mode));
+#endif
 
   // apply Level2 and higher transformers.
   // we do not run Level 1 again as those transformers assume partitioning will run later to do node assignment.
@@ -1021,7 +1037,7 @@ Status InferenceSession::LoadOrtModelWithLoader(std::function<Status()> load_ort
                 "The ORT format model version [", fbs_ort_model_version->string_view(),
                 "] is not supported in this build ", ORT_VERSION, ". ",
                 kOrtFormatVersion5BreakingChangeNote);
-#else  // ^^ defined(ORT_MINIMAL_BUILD) ^^ / vv !defined(ORT_MINIMAL_BUILD) vv
+#else   // ^^ defined(ORT_MINIMAL_BUILD) ^^ / vv !defined(ORT_MINIMAL_BUILD) vv
   const auto has_saved_runtime_optimizations = [](const fbs::InferenceSession& fbs_session) -> bool {
     if (const auto* fbs_model = fbs_session.model()) {
       if (const auto* fbs_graph = fbs_model->graph()) {

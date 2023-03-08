@@ -11,7 +11,10 @@ namespace onnxruntime {
 
 class ExecutionProviders;
 class KernelRegistryManager;
-using TransformLayoutFunction = std::function<Status(Graph& graph, bool& modified, IExecutionProvider& current_ep)>;
+
+using TransformCheckerFn = std::function<void(Graph&)>;
+using TransformLayoutFunction = std::function<Status(Graph& graph, bool& modified, IExecutionProvider& current_ep,
+                                                     std::optional<TransformCheckerFn> graph_debug_fn)>;
 
 class GraphPartitioner {
  public:
@@ -30,7 +33,8 @@ class GraphPartitioner {
   // Run partitioning.
   Status Partition(Graph& graph, FuncManager& func_mgr,
                    TransformLayoutFunction transform_layout_function,
-                   Mode mode = Mode::kNormal) const;
+                   Mode mode = Mode::kNormal,
+                   std::optional<TransformCheckerFn> graph_debug_fn = std::nullopt) const;
 
  private:
   ORT_DISALLOW_COPY_ASSIGNMENT_AND_MOVE(GraphPartitioner);

@@ -848,7 +848,10 @@ const std::unordered_set<std::string_view>& GetORTLayoutSensitiveOps() {
   return ort_layout_sensitive_ops;
 }
 
-Status TransformLayoutForEP(Graph& graph, bool& modified, const IExecutionProvider& execution_provider) {
+Status TransformLayoutForEP(Graph& graph, bool& modified, const IExecutionProvider& execution_provider,
+                            std::optional<std::function<void(Graph&)>> debug_graph_fn
+
+) {
   // sub graph recurse will be added later
   auto api_graph = MakeApiGraph(graph, execution_provider.GetAllocator(0, OrtMemTypeDefault), nullptr);
   const auto& layout_sensitive_ops = GetORTLayoutSensitiveOps();
@@ -920,6 +923,10 @@ Status TransformLayoutForEP(Graph& graph, bool& modified, const IExecutionProvid
     }
   }
 
+  if (debug_graph_fn) {
+    (*debug_graph_fn)(graph);
+  }
+
   if (modified) {
     OptimizeResult result =
         onnx_layout_transformation::Optimize(*api_graph, /*allow_extended_ops*/ true, execution_provider.Type(),
@@ -928,6 +935,10 @@ Status TransformLayoutForEP(Graph& graph, bool& modified, const IExecutionProvid
     if (result.error_msg) {
       return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "Optimization after layout transformation failed: ",
                              result.error_msg.value());
+    }
+
+    if (debug_graph_fn) {
+      (*debug_graph_fn)(graph);
     }
   }
 

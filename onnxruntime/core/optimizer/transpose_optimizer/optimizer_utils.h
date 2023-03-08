@@ -65,7 +65,8 @@ const std::unordered_set<std::string_view>& GetORTLayoutSensitiveOps();
 /// <param name="graph">graph to transform</param>
 /// <param name="modified">indicates whether the graph is modified during transformation</param>
 /// <param name="execution_provider">execution provider for which the transformation needs to be performed</param>
-Status TransformLayoutForEP(Graph& graph, bool& modified, const IExecutionProvider& execution_provider);
+Status TransformLayoutForEP(Graph& graph, bool& modified, const IExecutionProvider& execution_provider,
+                            std::optional<std::function<void(Graph&)>> debug_graph_fn = std::nullopt);
 
 /// <summary>
 /// Checks if the opset of the Graph is supported by the layout transformer.
