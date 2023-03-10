@@ -5,7 +5,7 @@ set(JS_ROOT ${REPO_ROOT}/js)
 set(JS_COMMON_ROOT ${JS_ROOT}/common)
 set(JS_NODE_ROOT ${JS_ROOT}/node)
 if (WIN32)
-    set(NPM_CLI cmd /c npm)
+    set(NPM_CLI npm.cmd)
 else()
     set(NPM_CLI npm)
 endif()
@@ -73,6 +73,7 @@ add_custom_target(js_common_npm_ci ALL
 
 add_custom_target(nodejs_binding_wrapper ALL
     COMMAND ${NPM_CLI} ci
+    COMMAND node -p "JSON.stringify(process.env.LIB)"
     COMMAND ${NPM_CLI} run build -- --onnxruntime-build-dir=${CMAKE_CURRENT_BINARY_DIR} --config=${CMAKE_BUILD_TYPE} --arch=${NODEJS_BINDING_ARCH}
     WORKING_DIRECTORY ${JS_NODE_ROOT}
     COMMENT "Using cmake-js to build OnnxRuntime Node.js binding")

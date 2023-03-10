@@ -43,6 +43,7 @@ const args = [
   `--arch=${ARCH}`,
   '--CDnapi_build_version=3',
   `--CDCMAKE_BUILD_TYPE=${CONFIG}`,
+  '-l=silly',
 ];
 if (ONNXRUNTIME_BUILD_DIR && typeof ONNXRUNTIME_BUILD_DIR === 'string') {
   args.push(`--CDONNXRUNTIME_BUILD_DIR=${ONNXRUNTIME_BUILD_DIR}`);
