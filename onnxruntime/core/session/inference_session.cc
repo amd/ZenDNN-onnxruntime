@@ -1998,14 +1998,15 @@ Status InferenceSession::Run(const RunOptions& run_options,
       DeviceStreamCollectionHolder device_stream_collection_holder(session_state_.get());
 #endif
 
-      ORT_CHECK_AND_SET_RETVAL(utils::ExecuteGraph(*session_state_, feeds_fetches_manager, feeds, *p_fetches,
-                                                   session_options_.execution_mode,
-                                                   run_options,
+      if (retval.IsOK()) {
+        retval = utils::ExecuteGraph(*session_state_, feeds_fetches_manager, feeds, *p_fetches,
+                                     session_options_.execution_mode,
+                                     run_options,
 #ifdef ORT_ENABLE_STREAM
-                                                   device_stream_collection_holder,
+                                     device_stream_collection_holder,
 #endif
-                                                   run_logger
-                                                   ));
+                                     run_logger);
+      }
 
       // info all execution providers InferenceSession:Run ended
       for (auto* xp : exec_providers_to_stop) {
