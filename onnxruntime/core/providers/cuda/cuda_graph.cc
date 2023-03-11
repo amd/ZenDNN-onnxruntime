@@ -40,7 +40,7 @@ void CUDAGraph::CaptureBegin() {
 
 void CUDAGraph::CaptureEnd() {
 #if defined(CUDA_VERSION) && CUDA_VERSION >= 10000
-  LOGS_DEFAULT(VERBOSE) << "CUDAGraph capture ends on stream " << stream_;
+  LOGS_DEFAULT(INFO) << "CUDAGraph capture ends on stream " << stream_;
   CUDA_CALL_THROW(cudaStreamEndCapture(stream_, &graph_));
   if (graph_ == NULL) {
     ORT_THROW("CUDAGraph::CaptureEnd: graph_ is NULL");
@@ -60,7 +60,7 @@ Status CUDAGraph::Replay() {
   // Although this function is not thread safe, the lock is not needed here because
   // CUDA EP maintains a separate cuda graph per thread
 #if defined(CUDA_VERSION) && CUDA_VERSION >= 10000
-  LOGS_DEFAULT(INFO) << "Replaying CUDA graph on stream " << stream_;
+  LOGS_DEFAULT(VERBOSE) << "Replaying CUDA graph on stream " << stream_;
   CUDA_RETURN_IF_ERROR(cudaGraphLaunch(graph_exec_, stream_));
   CUDA_RETURN_IF_ERROR(cudaStreamSynchronize(stream_));
 #else
