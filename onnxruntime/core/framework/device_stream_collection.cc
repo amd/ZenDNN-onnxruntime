@@ -117,5 +117,16 @@ Stream* DeviceStreamCollection::GetStream(size_t stream_idx) const {
   return impl_->GetStream(stream_idx);
 }
 
+DeviceStreamCollectionHolder::DeviceStreamCollectionHolder(const SessionState* session_state)
+    : session_state_(session_state),
+      p_(session_state->AcquireDeviceStreamCollection()) {
+}
+
+DeviceStreamCollectionHolder::~DeviceStreamCollectionHolder() {
+  if (p_) {
+    session_state_->RecycleDeviceStreamCollection(std::move(p_));
+  }
+}
+
 }  // namespace onnxruntime
 #endif

@@ -22,6 +22,7 @@ void CUDAGraph::SetStream(cudaStream_t stream) {
 
 void CUDAGraph::CaptureBegin() {
 #if defined(CUDA_VERSION) && CUDA_VERSION >= 10000
+  LOGS_DEFAULT(INFO) << "CUDAGraph capture begins on stream " << stream_;
   ORT_ENFORCE(!has_graph_exec_,
               "This cuda graph has already captured a graph. "
               "Create a new instance to capture a new graph.");
@@ -39,6 +40,7 @@ void CUDAGraph::CaptureBegin() {
 
 void CUDAGraph::CaptureEnd() {
 #if defined(CUDA_VERSION) && CUDA_VERSION >= 10000
+  LOGS_DEFAULT(VERBOSE) << "CUDAGraph capture ends on stream " << stream_;
   CUDA_CALL_THROW(cudaStreamEndCapture(stream_, &graph_));
   if (graph_ == NULL) {
     ORT_THROW("CUDAGraph::CaptureEnd: graph_ is NULL");

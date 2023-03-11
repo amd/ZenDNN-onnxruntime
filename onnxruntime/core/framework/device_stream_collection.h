@@ -46,5 +46,17 @@ class DeviceStreamCollection {
  private:
   std::unique_ptr<DeviceStreamCollectionImpl> impl_;
 };
+
+struct DeviceStreamCollectionHolder {
+  DeviceStreamCollectionHolder(const SessionState* session_state);
+  DeviceStreamCollectionHolder() = delete;
+  DeviceStreamCollectionHolder(const DeviceStreamCollectionHolder&) = delete;
+
+  ~DeviceStreamCollectionHolder();
+
+  const SessionState* session_state_;
+  std::unique_ptr<DeviceStreamCollection> p_;
+};
+
 }  // namespace onnxruntime
 #endif
