@@ -59,7 +59,8 @@ class OnnxModel:
         output_name_to_node = {}
         for node in self.nodes():
             for output_name in node.output:
-                output_name_to_node[output_name] = node
+                if output_name: # could be empty when it is optional output
+                    output_name_to_node[output_name] = node
         return output_name_to_node
 
     def nodes(self):

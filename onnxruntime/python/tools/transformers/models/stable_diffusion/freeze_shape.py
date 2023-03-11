@@ -203,15 +203,27 @@ class ShapeFreezer(OnnxModel):
 
         self.use_static_input()
 
-        with open(temp_model_path, "wb") as out:
-            out.write(self.model.SerializeToString())
-        sess_options = onnxruntime.SessionOptions()
-        sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
-        session = onnxruntime.InferenceSession(
-            temp_model_path,
-            sess_options,
-            providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
-        )
+        self.prune_graph(None, allow_remove_graph_inputs=False)
+
+        if verbose:
+            with open(temp_model_path, "wb") as out:
+                out.write(self.model.SerializeToString())
+                sess_options = onnxruntime.SessionOptions()
+                sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
+                session = onnxruntime.InferenceSession(
+                    temp_model_path,
+                    sess_options,
+                    providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+                )
+        else:
+            model_proto_bytes = onnx._serialize(self.model)
+            sess_options = onnxruntime.SessionOptions()
+            sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
+            session = onnxruntime.InferenceSession(
+                model_proto_bytes,
+                sess_options,
+                providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+            )
 
         elem_type = self.model.graph.input[0].type.tensor_type.elem_type
         inputs = self.create_dummy_inputs(elem_type)
@@ -306,8 +318,10 @@ class ShapeFreezer(OnnxModel):
             )
 
         if output_path is not None:
-            with open(output_path, "wb") as out:
-                out.write(self.model.SerializeToString())
+            # with open(output_path, "wb") as out:
+            #     out.write(self.model.SerializeToString())
+            self.prune_graph(allow_remove_graph_inputs=False)
+            onnx.save(self.model, output_path, save_as_external_data=True, location=output_path + ".data")
 
 
 def set_last_node(onnx_model, last_node_name):
@@ -321,7 +335,9 @@ def set_last_node(onnx_model, last_node_name):
     if last_node:
         first_output_name = onnx_model.model.graph.output[0].name
         onnx_model.replace_output_of_all_nodes(first_output_name, "dummy_output")
+        onnx_model.replace_input_of_all_nodes(last_node.output[0], first_output_name)
         last_node.output[0] = first_output_name
+
     onnx_model.prune_graph(allow_remove_graph_inputs=False)
 
 def parse_arguments():
