@@ -321,8 +321,8 @@ class ShapeFreezer(OnnxModel):
             # with open(output_path, "wb") as out:
             #     out.write(self.model.SerializeToString())
             self.prune_graph(allow_remove_graph_inputs=False)
-            onnx.save(self.model, output_path, save_as_external_data=True, location=output_path + ".data")
-
+            #onnx.save(self.model, output_path, save_as_external_data=True, location=output_path + ".data")
+            onnx.save(self.model, output_path)
 
 def set_last_node(onnx_model, last_node_name):
     fist_output_name = onnx_model.model.graph.output[0]

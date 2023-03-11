@@ -7,9 +7,16 @@ import argparse
 import time
 from onnxruntime import InferenceSession, SessionOptions, OrtValue
 from onnxruntime.transformers.io_binding_helper import TypeHelper
-from benchmark import measure_gpu_memory
 import numpy as np
 import onnxruntime as ort
+
+def measure_memory(func, start_memory=None, enable=False):
+    if enable:
+        from benchmark import measure_gpu_memory
+        return measure_gpu_memory(func, start_memory)
+    elif func is not None:
+        func()
+        return None
 
 class OrtModelBinding:
     def __init__(self, ort_session, io_shape, device_id=0):
@@ -92,22 +99,23 @@ def parse_arguments():
         "--steps",
         required=False,
         type=int,
-        default=5,
+        default=1,
         help="Number of steps. Default is 5.",
     )
 
     args = parser.parse_args()
     return args
 
-def test(args, enable_cuda_graph, output_shape = None):
+def test(args, input_model, enable_cuda_graph, output_shape = None):
     print(args)
 
-    start_memory = measure_gpu_memory(None)
+    start_memory = measure_memory(None)
     print("GPU memory used before loading models:", start_memory)
 
+    # Share allocator not working on CUDA
     # ort_memory_info = ort.OrtMemoryInfo("Cuda", ort.OrtAllocatorType.ORT_ARENA_ALLOCATOR, 0, ort.OrtMemType.DEFAULT)
     # ort_arena_cfg = ort.OrtArenaCfg(
-    #     {
+    #      {
     #         "max_mem": 4000000000,
     #         "arena_extend_strategy": 1,
     #         "initial_chunk_size_bytes": 2000000000,
@@ -120,10 +128,14 @@ def test(args, enable_cuda_graph, output_shape = None):
 
     options = SessionOptions()
     options.log_severity_level = 0
+    options.log_verbosity_level = 0
+    options.enable_mem_pattern = True
+    options.enable_mem_reuse = False
     # options.add_session_config_entry("session.use_env_allocators", "1")
 
     load_start = time.time()
-    session = InferenceSession(args.input, options, providers=[("CUDAExecutionProvider", {'enable_cuda_graph': enable_cuda_graph}), "CPUExecutionProvider"])
+    session = InferenceSession(input_model, options, providers=[("CUDAExecutionProvider",
+                                                                {'enable_cuda_graph': enable_cuda_graph}), "CPUExecutionProvider"])
     load_end = time.time()
     print(f"Session creation took {load_end - load_start} seconds")
 
@@ -145,7 +157,7 @@ def test(args, enable_cuda_graph, output_shape = None):
         "sample": list(sample.shape),
         "timestep": list(timestep.shape),
         "encoder_hidden_states": list(encoder_hidden_states.shape),
-         #"out_sample": [2 * batch_size, 4, height, width],
+        #"out_sample": [2 * batch_size, 4, height, width],
     }
 
     if output_shape:
@@ -159,22 +171,22 @@ def test(args, enable_cuda_graph, output_shape = None):
             model_bindings.io_ort_value["sample"].update_inplace(sample)
             model_bindings.io_ort_value["timestep"].update_inplace(timestep)
             session.run_with_iobinding(model_bindings.io_binding)
-            if output_shape:
+            if "out_sample" in io_shape:
                 output = model_bindings.io_ort_value["out_sample"].numpy()
             else:
                 output = model_bindings.io_binding.get_outputs()[0].numpy()
 
     start = time.time()
-    first_run_memory = measure_gpu_memory(unet_inference, start_memory)
+    first_run_memory = measure_memory(unet_inference, start_memory)
     end = time.time()
     print(f"First inference took {end - start} seconds. Memory usage: {first_run_memory}")
 
     start = time.time()
-    second_run_memory = measure_gpu_memory(unet_inference, start_memory)
+    second_run_memory = measure_memory(unet_inference, start_memory)
     end = time.time()
     print(f"Second inference took {end - start} seconds. Memory usage: {first_run_memory}")
 
-    if output_shape:
+    if "out_sample" in io_shape:
         return model_bindings.io_ort_value["out_sample"].numpy()
     else:
         return model_bindings.io_binding.get_outputs()[0].numpy()
@@ -184,14 +196,12 @@ def main():
     print(args)
 
     print("**Test without CUDA Graph**")
-    output = test(args, False)
-    #print("output", output)
-    print("output shape", output.shape)
+    output = test(args, args.input, False)
+    # print("output", output)
 
     print("**Test with CUDA Graph**")
-    output = test(args, True, output.shape)
-    #print("output", output)
-    print("output shape", output.shape)
+    output = test(args, args.input, True, output.shape)
+    print("output", output)
 
 if __name__ == "__main__":
     main()

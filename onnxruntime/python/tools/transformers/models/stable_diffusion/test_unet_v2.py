@@ -61,6 +61,15 @@ def parse_arguments():
         help="path of unet onnx model.",
     )
 
+    parser.add_argument(
+        "-o",
+        "--output",
+        required=False,
+        type=str,
+        default='test_result.txt',
+        help="path of test result.",
+    )
+
     args = parser.parse_args()
     return args
 
@@ -120,7 +129,7 @@ def run(onnx_model, last_node_name, i):
             print("remaining nodes", len(onnx_model.model.graph.node))
 
             model_proto_bytes = onnx._serialize(onnx_model.model)
-            onnx.save(onnx_model.model, f"onnx_{i}.onnx")
+            #onnx.save(onnx_model.model, f"onnx_{i}.onnx")
 
             try:
                 output = test(model_proto_bytes, False)
@@ -128,12 +137,12 @@ def run(onnx_model, last_node_name, i):
                 is_ok = isinstance(output, np.ndarray)
             except Exception as e:
                 print(e)
-                is_ok = str(e)
+                is_ok = False
 
             result = {"name": last_node_name, "ok": is_ok}
             return result
 
-    result = {"name": last_node_name, "ok": "NA"}
+    result = {"i": i, "name": last_node_name, "ok": "NA"}
     return result
 
 def main():
@@ -147,10 +156,10 @@ def main():
         model = onnx.load_model_from_string(s)
         node_names = [node.name for node in model.graph.node]
         onnx_model = OnnxModel(model)
-        for node in model.graph.node:
-            if node.name == "SkipLayerNorm_AddBias_17":
-                candidate_nodes.append(node.name)
-                good_nodes = onnx_model.get_parent_subgraph_nodes(node, [])
+        # for node in model.graph.node:
+        #     if node.name == "SkipLayerNorm_AddBias_17":
+        #         candidate_nodes.append(node.name)
+        #         good_nodes = onnx_model.get_parent_subgraph_nodes(node, [])
 
         for node in onnx_model.nodes():
             if node in good_nodes:
@@ -164,19 +173,24 @@ def main():
     print("good_nodes:", len(good_nodes))
     print("candidate_nodes:", len(candidate_nodes))
 
-    results = []
-    for i, last_node_name in enumerate(candidate_nodes):
-        print("last node", last_node_name)
-        result = run(onnx_model, last_node_name, i)
-        results.append(result)
+    with open(args.output, 'w') as f:
+        results = []
+        for i, last_node_name in enumerate(candidate_nodes):
+            print("last node", last_node_name)
+            result = run(onnx_model, last_node_name, i)
+            results.append(result)
 
-        print(result)
+            print(f"{i}/{len(candidate_nodes)}", result)
 
-        # Reset onnx model
-        model = onnx.load_model_from_string(s)
-        onnx_model = OnnxModel(model)
+            f.write(str(result))
+            f.write('\n')
+            f.flush()
 
-    print(results)
+            # Reset onnx model
+            model = onnx.load_model_from_string(s)
+            onnx_model = OnnxModel(model)
+
+        print(results)
 
 if __name__ == "__main__":
     main()
