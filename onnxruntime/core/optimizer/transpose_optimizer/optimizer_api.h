@@ -462,7 +462,8 @@ using CostCheckFn =
     std::function<CostCheckResult(const api::GraphRef& graph,
                                   const api::NodeRef& node,
                                   const std::vector<int64_t>& perm,
-                                  const std::unordered_map<std::string, size_t>& outputs_leading_to_transpose)>;
+                                  const std::unordered_set<std::string>& outputs_leading_to_transpose,
+                                  size_t perm_size_base)>;
 
 enum class OptimizerMode {
   OPTIMIZE_TRANSPOSE,        // simple transpose optimization

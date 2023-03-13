@@ -833,7 +833,8 @@ onnxruntime::Node& NodeFromApiNode(onnx_layout_transformation::api::NodeRef& nod
 
 CostCheckResult OrtEPCostCheck(const api::GraphRef& graph, const api::NodeRef& node,
                                const std::vector<int64_t>& /*perm*/,
-                               const std::unordered_map<std::string, size_t>& /*outputs_leading_to_transpose*/) {
+                               const std::unordered_set<std::string>& /*outputs_leading_to_transpose*/,
+                               size_t /*perm_size_base*/) {
   // special case some kernels based on the ORT implementation details
   if (node.GetExecutionProviderType() == kCpuExecutionProvider) {
     if (node.IsOp("MaxPool")) {
@@ -893,15 +894,11 @@ const std::unordered_set<std::string_view>& GetORTLayoutSensitiveOps() {
 static CostCheckResult
 PostLayoutTransformCostCheck(const api::GraphRef& graph, const api::NodeRef& node,
                              const std::vector<int64_t>& perm,
-                             const std::unordered_map<std::string, size_t>& outputs_leading_to_transpose) {
-  auto outputs = node.Outputs();
-  for (auto out : outputs) {
-    auto pos = outputs_leading_to_transpose.find(std::string(out));
-    // Stop if the Transpose whose outpus leading to this node and the Transpose consuming outputs from this node
-    // has different perm rank
-    if (pos != outputs_leading_to_transpose.end() && pos->second != perm.size()) {
-      return CostCheckResult::kStop;
-    }
+                             const std::unordered_set<std::string>& outputs_leading_to_transpose,
+                             size_t perm_size_base) {
+  // Stop if the Transpose perm has differnt size with perm_size_base
+  if (perm_size_base != perm.size()) {
+    return CostCheckResult::kStop;
   }
 
   // we aggressively push the layout transpose nodes
@@ -911,7 +908,7 @@ PostLayoutTransformCostCheck(const api::GraphRef& graph, const api::NodeRef& nod
   }
 
   // for other nodes use the default ORT cost check
-  return OrtEPCostCheck(graph, node, perm, outputs_leading_to_transpose);
+  return OrtEPCostCheck(graph, node, perm, outputs_leading_to_transpose, perm_size_base);
 }
 
 Status TransformLayoutForEP(Graph& graph, bool& modified, const IExecutionProvider& execution_provider) {
