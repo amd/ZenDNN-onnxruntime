@@ -833,7 +833,7 @@ onnxruntime::Node& NodeFromApiNode(onnx_layout_transformation::api::NodeRef& nod
 
 CostCheckResult OrtEPCostCheck(const api::GraphRef& graph, const api::NodeRef& node,
                                const std::vector<int64_t>& /*perm*/,
-                               const std::unordered_set<std::string>& /*outputs_leading_to_transpose*/) {
+                               const std::unordered_map<std::string, size_t>& /*outputs_leading_to_transpose*/) {
   // special case some kernels based on the ORT implementation details
   if (node.GetExecutionProviderType() == kCpuExecutionProvider) {
     if (node.IsOp("MaxPool")) {
@@ -893,14 +893,16 @@ const std::unordered_set<std::string_view>& GetORTLayoutSensitiveOps() {
 static CostCheckResult
 PostLayoutTransformCostCheck(const api::GraphRef& graph, const api::NodeRef& node,
                              const std::vector<int64_t>& perm,
-                             const std::unordered_set<std::string>& outputs_leading_to_transpose) {
-#ifdef USE_QNN
-  //  2, 3 dimension Transpose can also idienfied as layout transpose node, e.g perm [0, 2, 1]
-  //  Qnn layout sensitive ops doesn't support < 2D, exclude if perm rank < 4
-  if (perm.size() < 4) {
-    return CostCheckResult::kFallThrough;
+                             const std::unordered_map<std::string, size_t>& outputs_leading_to_transpose) {
+  auto outputs = node.Outputs();
+  for (auto out : outputs) {
+    auto pos = outputs_leading_to_transpose.find(std::string(out));
+    // Stop if the Transpose whose outpus leading to this node and the Transpose consuming outputs from this node
+    // has different perm rank
+    if (pos != outputs_leading_to_transpose.end() && pos->second != perm.size()) {
+      return CostCheckResult::kStop;
+    }
   }
-#endif
 
   // we aggressively push the layout transpose nodes
   if (perm == ChannelFirstToLastPerm(perm.size()) ||

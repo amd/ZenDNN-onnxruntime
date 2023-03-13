@@ -1694,6 +1694,7 @@ static const std::unordered_map<std::string_view, const HandlerInfo&> handler_ma
     {"Sum", broadcast_node_handler},
     {"Pow", broadcast_node_handler},
     {"Where", broadcast_node_handler},
+    {"MatMul", broadcast_node_handler},
 
     {"Clip", node_1_inp_handler},
     {"CastLike", node_1_inp_handler},
@@ -1771,7 +1772,7 @@ static const HandlerInfo* GetHandler(api::NodeRef& node, bool allow_extended_ops
 
 static int CalculateCost(const api::GraphRef& graph, const api::NodeRef& node,
                          const std::vector<int64_t>& perm,
-                         const std::unordered_set<std::string>& outputs_leading_to_transpose,
+                         const std::unordered_map<std::string, size_t>& outputs_leading_to_transpose,
                          const HandlerInfo& info,
                          const std::vector<size_t>& input_indices) {
   // We require the input cost (number of transposes before the op) and the total cost to strictly decrease.
@@ -1805,7 +1806,7 @@ static int CalculateCost(const api::GraphRef& graph, const api::NodeRef& node,
 // Default cost check. Returns `true` if pushing the Transpose through the node is considered to be beneficial.
 static bool ShouldPushTranspose(const api::GraphRef& graph, const api::NodeRef& node,
                                 const std::vector<int64_t>& perm,
-                                const std::unordered_set<std::string>& outputs_leading_to_transpose,
+                                const std::unordered_map<std::string, size_t>& outputs_leading_to_transpose,
                                 const HandlerInfo& info,
                                 const std::vector<size_t> transposable_input_indices) {
   if (node.IsOp("Transpose")) {
@@ -1819,7 +1820,7 @@ static bool ShouldPushTranspose(const api::GraphRef& graph, const api::NodeRef& 
 // Finds a handler for the node and estimates the cost of pushing a transpose. Does so if deemed beneficial.
 bool ProcessTranspose(OptimizerCtx& ctx, api::NodeRef& transpose, api::NodeRef& node,
                       const std::vector<int64_t>& perm, size_t transpose_input_index,
-                      const std::unordered_set<std::string>& outputs_leading_to_transpose) {
+                      const std::unordered_map<std::string, size_t>& outputs_leading_to_transpose) {
   const HandlerInfo* info = GetHandler(node, ctx.allow_extended_ops);
   if (info == nullptr) {
     return false;
@@ -1890,27 +1891,30 @@ OptimizeResult OptimizeImpl(OptimizerCtx& ctx) {
   OptimizeResult result{};
   const std::vector<std::unique_ptr<api::NodeRef>> nodes = ctx.graph.Nodes();
 
-  std::unordered_set<std::string> outputs_leading_to_transpose;
+  // transpose input or node output, transpose perm rank
+  std::unordered_map<std::string, size_t> outputs_leading_to_transpose;
 
   // First iterate over sorted nodes in reverse order to find which outputs have paths through supported ops to
   // transpose nodes. We pull push transposes towards these outputs.
   for (size_t i = 0; i < nodes.size(); ++i) {
     api::NodeRef& node = *nodes[nodes.size() - i - 1];
     if (node.IsOp("Transpose")) {
-      outputs_leading_to_transpose.insert(std::string(node.Inputs()[0]));
+      std::optional<std::vector<int64_t>> perm = GetPermAttrIfValid(node);
+      outputs_leading_to_transpose.emplace(std::string(node.Inputs()[0]), perm.value().size());
       continue;
     }
 
     auto outputs = node.Outputs();
     for (auto out : outputs) {
-      if (outputs_leading_to_transpose.find(std::string(out)) != outputs_leading_to_transpose.end()) {
+      auto pos = outputs_leading_to_transpose.find(std::string(out));
+      if (pos != outputs_leading_to_transpose.end()) {
         const HandlerInfo* info = GetHandler(node, ctx.allow_extended_ops);
         // Determine if node is supported and produces transposed outputs when pushed.
         if (info != nullptr && info->transposes_outputs) {
           auto input_indices = info->transposible_inputs_fn(ctx, node);
           auto inputs = node.Inputs();
           for (size_t j : input_indices) {
-            outputs_leading_to_transpose.insert(std::string(inputs[j]));
+            outputs_leading_to_transpose.emplace(std::string(inputs[j]), pos->second);
           }
         }
       }
