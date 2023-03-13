@@ -84,6 +84,7 @@ steps:
   - script: |
       test -f ${{ parameters.IMAGE_CACHE_DIR }}/cache.tar && docker load -i ${{ parameters.IMAGE_CACHE_DIR }}/cache.tar
       docker image ls
+      docker images --digest
     displayName: Docker restore
     condition: eq('${{ parameters.UsePipelineCache }}', 'true')
 
@@ -107,7 +108,9 @@ steps:
       mkdir -p "${{ parameters.IMAGE_CACHE_DIR }}"
       docker save -o "${{ parameters.IMAGE_CACHE_DIR }}/cache.tar" ${{ parameters.Repository }}
       docker image ls
+      docker images --digest
       docker system df
+      docker image prune
     displayName: Docker save
     condition: eq('${{ parameters.UsePipelineCache }}', 'true')
 
