@@ -21,4 +21,4 @@ fi
 #requires python3.6 or higher
 python3 $DIR/tools/ci_build/build.py --build_dir $DIR/build/$DIR_OS "$@"
 
-echo "temp change"
+echo "temp change 1"
