@@ -45,8 +45,8 @@ class CudaGraphHelper:
         }
 
         name_to_numpy_type = {}
-        for input in ort_session.get_inputs():
-            name_to_numpy_type[input.name] = ort_type_to_numpy_type[input.type]
+        for _input in ort_session.get_inputs():
+            name_to_numpy_type[_input.name] = ort_type_to_numpy_type[_input.type]
 
         for output in ort_session.get_outputs():
             name_to_numpy_type[output.name] = ort_type_to_numpy_type[output.type]
@@ -119,7 +119,7 @@ class TestInferenceSessionWithCudaGraph(unittest.TestCase):
                 atol=1e-05,
             )
 
-    def testRunUnetModelWithCudaGraph(self):
+    def testRunDiffusionModelWithCudaGraph(self):
         if "CUDAExecutionProvider" in onnxrt.get_available_providers():
             providers = [("CUDAExecutionProvider", {"enable_cuda_graph": True})]
 
