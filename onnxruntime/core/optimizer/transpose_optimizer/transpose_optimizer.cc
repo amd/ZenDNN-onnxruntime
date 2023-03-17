@@ -4,6 +4,7 @@
 #include "optimizer_api.h"
 
 #include <algorithm>
+#include <cassert>
 #include <iostream>
 #include <unordered_map>
 #include <unordered_set>
@@ -1476,21 +1477,27 @@ static void RemoveCancelingTransposeNodes(HandlerArgs& args) {
   }
 }
 
-static bool HandleTranspose(HandlerArgs& args) {
-  // In this handler a transpose leads to another transpose. "transpose" is the 1st and "node" is the 2nd.
-  std::optional<std::vector<int64_t>> node_perm = GetPermAttrIfValid(args.node);
-  if (node_perm == std::nullopt || node_perm->size() != args.perm.size()) {
-    return false;
-  }
-
-  if (args.perm_inv == *node_perm) {
+// helper to support scenario where second node is a Reshape that is logically equivalent to a Transpose.
+// called from HandleTranspose and HandleReshape.
+static bool HandleTransposeImpl(HandlerArgs& args, const std::vector<int64_t>& node_perm) {
+  if (args.perm_inv == node_perm) {
     // Case 1: Permutations cancel.
     RemoveCancelingTransposeNodes(args);
   } else {
     // Case 2: Permutations don't cancel. Compose permutations.
-    std::vector<int64_t> new_perm = ComposePerm(args.perm, *node_perm);
-    args.node.SetAttributeInts("perm", new_perm);
-    args.node.SetInput(0, args.transpose.Inputs()[0]);
+    std::vector<int64_t> new_perm = ComposePerm(args.perm, node_perm);
+
+    // replace Reshape with Transpose if necessary.
+    std::unique_ptr<api::NodeRef> new_node;
+    if (args.node.OpType() == "Reshape") {
+      new_node = SwapNodeOpTypeDomainAndSinceVersion(args.ctx.graph, args.node, "Transpose", "",
+                                                     args.transpose.SinceVersion());
+    }
+
+    api::NodeRef& target_node = new_node ? *new_node : args.node;
+
+    target_node.SetAttributeInts("perm", new_perm);
+    target_node.SetInput(0, args.transpose.Inputs()[0]);
 
     // 2nd transpose no longer references 1st. Remove first if possible.
     if (!args.ctx.graph.HasValueConsumers(args.transpose.Outputs()[0])) {
@@ -1501,51 +1508,148 @@ static bool HandleTranspose(HandlerArgs& args) {
   return true;
 }
 
-constexpr HandlerInfo transpose_handler = {&FirstInput, &HandleTranspose, /*transposes_outputs*/ false};
-
-static bool HandleReshape(HandlerArgs& args) {
-  // We check for a very specific case where Transpose is replaced by Reshape
-  // for performance. For example Transpose(input {1, 1, 1, X}, perm{0, 3, 2, 1}) can be replaced by Reshape
-  // Reshape(input{1, 1, 1, X}, shape{1, X, 1, 1})
-  // During transpose optimization we need to detect such reshape nodes so that we can remove them if possible.
-
-  // Get transpose input shape and validate rank
-  auto transpose_input_shape = args.ctx.graph.GetValueInfo(args.transpose.Inputs()[0])->Shape();
-  if (!transpose_input_shape.has_value() || transpose_input_shape->size() != 4) {
+static bool HandleTranspose(HandlerArgs& args) {
+  // In this handler a transpose leads to another transpose. "transpose" is the 1st and "node" is the 2nd.
+  std::optional<std::vector<int64_t>> node_perm = GetPermAttrIfValid(args.node);
+  if (node_perm == std::nullopt || node_perm->size() != args.perm.size()) {
     return false;
   }
 
-  // Check only 1 dim is not equal to 1. This is to validate that tranpose and reshape are truly canceling nodes
-  // and can be therefore removed.
-  int num_dims_not_equal_to_1 = 0;
-  for (int i = 0; i < 4; i++) {
-    if (transpose_input_shape->data()[i] != 1) {
-      num_dims_not_equal_to_1++;
-      if (num_dims_not_equal_to_1 > 1) {
-        return false;
+  return HandleTransposeImpl(args, *node_perm);
+}
+
+constexpr HandlerInfo transpose_handler = {&FirstInput, &HandleTranspose, /*transposes_outputs*/ false};
+
+static bool FinalizeReshapeShape(const std::vector<int64_t>& input_shape,      // Reshape input 0
+                                 const std::vector<int64_t>& requested_shape,  // Reshape input 1
+                                 bool allow_zero,
+                                 std::vector<int64_t>& final_shape) {
+  // we need a concrete input shape to handle Reshape here
+  int64_t total_size = 1;
+  for (auto dim : input_shape) {
+    if (dim <= 0)
+      return false;  // potentially valid but we need a fixed value.
+
+    total_size *= dim;
+  }
+
+  auto input_rank = input_shape.size();
+  auto rank = requested_shape.size();
+
+  if (input_rank != rank)
+    return false;  // potentially valid but to treat a Reshape as a Transpose the rank must match
+
+  ptrdiff_t unknown_dim = -1;
+  int64_t size = 1;
+
+  final_shape = requested_shape;
+
+  for (size_t i = 0; i < rank; ++i) {
+    if (requested_shape[i] == -1) {
+      if (unknown_dim != -1)
+        return false;  // invalid: only one -1 dim allowed
+
+      unknown_dim = i;
+    } else {
+      if (!allow_zero && requested_shape[i] == 0) {
+        final_shape[i] = input_shape[i];
       }
+
+      size *= final_shape[i];
     }
   }
 
-  // Get shape input of reshape node
-  auto shape_data = args.ctx.graph.GetConstant(args.node.Inputs()[1]);
-  if (shape_data == nullptr || shape_data->Data().size() == 0) {
-    return false;
-  }
+  if (unknown_dim != -1) {
+    // calculate unknown dimension
+    if (size == 0 || (total_size % size) != 0)
+      return false;  // invalid: dims are mismatched
 
-  // Check whether transpose cancels with reshape node
-  // We check if shape of transpose node's input matches the shape data
-  // provided for reshape node.
-  auto reshape_output_shape = DataInt64(*shape_data);
-  if (reshape_output_shape != transpose_input_shape) {
-    return false;
+    final_shape[unknown_dim] = total_size / size;
+  } else {
+    if (size != total_size)
+      return false;  // invalid: dims are mismatched
   }
-
-  // Transpose and Reshape cancel each other. Remove both the nodes.
-  // reshape is really a transpose which is converting the layout from NHWC -> NCHW or vice-versa
-  RemoveCancelingTransposeNodes(args);
 
   return true;
+}
+
+static bool HandleReshape(HandlerArgs& args) {
+  // A Reshape can be logically equivalent to a Transpose if all dims with a value > 1 remain in the same order
+  // and do not change size. If so, we can use HandleTransposeImpl to merge them.
+  //  e.g. Reshape(input {1, 512, 4, 1}, shape{1, 1, 512, 4}) is equivalent to Transpose with perms { 1, 3, 2, 1 }
+  //       Reshape(input {1, 1, 512, 4}, shape{512, 4, 1, 1}) is equivalent to Transpose with perms { 2, 3, 0, 1 }
+  //       Reshape(input {1, 512, 1, 4}, shape{1, 512, 4, 1}) is equivalent to Transpose with perms { 0, 1, 3, 2 }
+  //
+
+  // Get transpose input shape
+  auto transpose_input_shape = args.ctx.graph.GetValueInfo(args.transpose.Inputs()[0])->Shape();
+  if (!transpose_input_shape.has_value()) {
+    return false;
+  }
+
+  auto transpose_output_shape = args.ctx.graph.GetValueInfo(args.transpose.Outputs()[0])->Shape();
+  // given transpose_input_shape had a value the shape inferencing should have calculated this.
+  // if this fails we could read the perms to calculate but that _really_ should not be necessary
+  assert(transpose_input_shape.has_value());
+
+  // `shape` input of reshape node is required to be constant
+  auto requested_shape_data = args.ctx.graph.GetConstant(args.node.Inputs()[1]);
+  if (requested_shape_data == nullptr || requested_shape_data->Data().size() == 0) {
+    return false;
+  }
+
+  auto reshape_requested_shape = DataInt64(*requested_shape_data);
+
+  // need rank to match for Reshape to be equivalent to a Transpose
+  if (transpose_input_shape->size() != reshape_requested_shape.size()) {
+    return false;
+  }
+
+  // need to process the requested shape to handle any -1 or 0 values.
+  auto allow_zero_attr = args.node.GetAttributeInt("allowzero");
+  int64_t allow_zero = allow_zero_attr ? *allow_zero_attr : 0;
+
+  std::vector<int64_t> reshape_output_shape;
+  if (!FinalizeReshapeShape(*transpose_output_shape, reshape_requested_shape, allow_zero, reshape_output_shape)) {
+    return false;
+  }
+
+  // if possible calculate the perms
+  std::vector<int64_t> input_dims(*transpose_output_shape);
+  std::vector<int64_t> perms(reshape_output_shape.size(), -1);
+
+  auto reshape_out_cur = reshape_output_shape.begin();
+  auto reshape_out_end = reshape_output_shape.end();
+  auto input_begin = input_dims.begin();
+  auto input_end = input_dims.end();
+
+  for (size_t i = 0; i < perms.size(); ++i) {
+    // start from the beginning each time looking for the first unused input dim that matches the current output dim
+    auto cur = input_begin;
+    auto target_dim = *reshape_out_cur++;
+    while (*cur != target_dim) {
+      if (*cur == -1) {
+        // previously used
+      } else if (*cur != 1 && target_dim != 1) {
+        // failure. mis-match of ordering of dim with data
+        return false;
+      }
+
+      if (++cur == input_end) {
+        // failure: ran out of input and didn't find match for target_dim
+        return false;
+      }
+    }
+
+    // if we got here we found a valid match.
+    // update perms with the input dim index and set the input_dim value to -1 to mark it as used.
+    // narrow to int32 so we can use as an int64_t value and size_t index without warnings/multiple casts
+    int32_t input_idx = gsl::narrow_cast<int32_t>(cur - input_begin);
+    perms[i] = input_idx;
+    input_dims[input_idx] = -1;
+  }
+
+  return HandleTransposeImpl(args, perms);
 }
 
 constexpr HandlerInfo reshape_handler = {&FirstInput, &HandleReshape, /*transposes_outputs*/ false};

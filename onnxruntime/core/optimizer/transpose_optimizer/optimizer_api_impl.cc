@@ -894,9 +894,11 @@ static CostCheckResult
 PostLayoutTransformCostCheck(const api::GraphRef& graph, const api::NodeRef& node,
                              const std::vector<int64_t>& perm,
                              const std::unordered_set<std::string>& outputs_leading_to_transpose) {
-  // we aggressively push the layout transpose nodes
-  if (perm == ChannelFirstToLastPerm(perm.size()) ||
-      perm == ChannelLastToFirstPerm(perm.size())) {
+  // we aggressively push the layout transpose nodes unless we are hitting a Concat node.
+  // Exception: pushing through a Concat can result in Transpose nodes being added to all the other inputs which
+  // can potentially be worse for performance. Use the cost check in that case.
+  if (node.OpType() != "Concat" &&
+      (perm == ChannelFirstToLastPerm(perm.size()) || perm == ChannelLastToFirstPerm(perm.size()))) {
     return CostCheckResult::kPushTranspose;
   }
 
