@@ -252,7 +252,7 @@ void InferenceSession::ConstructorCommon(const SessionOptions& session_options,
 
 #if !defined(ORT_MINIMAL_BUILD)
   // Update the number of steps for the graph transformer manager using the "finalized" session options
-  ORT_ENFORCE(graph_transformation_mgr_.SetSteps(session_options_.max_num_graph_transformation_steps).IsOK());
+  ORT_ENFORCE(graph_transformer_mgr_.SetSteps(session_options_.max_num_graph_transformation_steps).IsOK());
 #endif
 
   bool set_denormal_as_zero =
@@ -365,7 +365,7 @@ void InferenceSession::ConstructorCommon(const SessionOptions& session_options,
 InferenceSession::InferenceSession(const SessionOptions& session_options, const Environment& session_env)
     :
 #if !defined(ORT_MINIMAL_BUILD)
-      graph_transformation_mgr_(session_options.max_num_graph_transformation_steps),
+      graph_transformer_mgr_(session_options.max_num_graph_transformation_steps),
       insert_cast_transformer_("CastFloat16Transformer"),
 #endif
       logging_manager_(session_env.GetLoggingManager()),
@@ -380,7 +380,7 @@ InferenceSession::InferenceSession(const SessionOptions& session_options,
                                    onnxruntime::concurrency::ThreadPool* external_inter_op_thread_pool)
     :
 #if !defined(ORT_MINIMAL_BUILD)
-      graph_transformation_mgr_(session_options.max_num_graph_transformation_steps),
+      graph_transformer_mgr_(session_options.max_num_graph_transformation_steps),
       insert_cast_transformer_("CastFloat16Transformer"),
 #endif
       logging_manager_(session_env.GetLoggingManager()),
@@ -395,7 +395,7 @@ InferenceSession::InferenceSession(const SessionOptions& session_options,
 InferenceSession::InferenceSession(const SessionOptions& session_options, const Environment& session_env,
                                    const PathString& model_uri)
     : model_location_(model_uri),
-      graph_transformation_mgr_(session_options.max_num_graph_transformation_steps),
+      graph_transformer_mgr_(session_options.max_num_graph_transformation_steps),
       insert_cast_transformer_("CastFloat16Transformer"),
       logging_manager_(session_env.GetLoggingManager()),
       environment_(session_env) {
@@ -417,7 +417,7 @@ InferenceSession::InferenceSession(const SessionOptions& session_options,
 
 InferenceSession::InferenceSession(const SessionOptions& session_options, const Environment& session_env,
                                    std::istream& model_istream)
-    : graph_transformation_mgr_(session_options.max_num_graph_transformation_steps),
+    : graph_transformer_mgr_(session_options.max_num_graph_transformation_steps),
       insert_cast_transformer_("CastFloat16Transformer"),
       logging_manager_(session_env.GetLoggingManager()),
       environment_(session_env) {
@@ -430,7 +430,7 @@ InferenceSession::InferenceSession(const SessionOptions& session_options, const 
 
 InferenceSession::InferenceSession(const SessionOptions& session_options, const Environment& session_env,
                                    const void* model_data, int model_data_len)
-    : graph_transformation_mgr_(session_options.max_num_graph_transformation_steps),
+    : graph_transformer_mgr_(session_options.max_num_graph_transformation_steps),
       insert_cast_transformer_("CastFloat16Transformer"),
       logging_manager_(session_env.GetLoggingManager()),
       environment_(session_env) {
@@ -571,7 +571,7 @@ common::Status InferenceSession::RegisterGraphTransformer(
                           "Graph transformers must be registered before the session is initialized.");
   }
 
-  return graph_transformation_mgr_.Register(std::move(p_graph_transformer), level);
+  return graph_transformer_mgr_.Register(std::move(p_graph_transformer), level);
 }
 
 common::Status InferenceSession::SaveToOrtFormat(const PathString& filepath) const {
@@ -866,7 +866,7 @@ common::Status InferenceSession::Load() {
 }
 
 common::Status InferenceSession::TransformGraph(onnxruntime::Graph& graph,
-                                                const onnxruntime::GraphTransformerManager& graph_transformer_mgr,
+                                                // const onnxruntime::GraphTransformerManager& graph_transformer_mgr,
                                                 const ExecutionProviders& providers,
                                                 KernelRegistryManager& kernel_registry_manager,
                                                 const InsertCastTransformer& insert_cast_transformer,
@@ -881,7 +881,7 @@ common::Status InferenceSession::TransformGraph(onnxruntime::Graph& graph,
 
   // first apply execution provider independent level 1 graph optimizations.
   ORT_RETURN_IF_ERROR_SESSIONID_(
-      graph_transformer_mgr.ApplyTransformers(graph, TransformerLevel::Level1, *session_logger_));
+      graph_transformer_mgr_.ApplyTransformers(graph, TransformerLevel::Level1, *session_logger_));
 
   // if saving model to ORT format we only assign nodes a custom EP can handle and don't compile them.
   // we do this to preserve the original nodes in the model but prevent optimizers from changing them.
@@ -890,10 +890,25 @@ common::Status InferenceSession::TransformGraph(onnxruntime::Graph& graph,
   auto mode = saving_model_in_ort_format ? GraphPartitioner::Mode::kAssignOnly
                                          : GraphPartitioner::Mode::kNormal;
 
+  TransformLayoutFunction transform_layout_fn = nullptr;
+
   // only provide NCWH to NHWC layout transformer if supported
-  TransformLayoutFunction transform_layout_fn = layout_transformer::IsSupportedOpset(graph)
-                                                    ? layout_transformer::TransformLayoutForEP
-                                                    : nullptr;
+  if (layout_transformer::IsSupportedOpset(graph)) {
+    // we want to run L1 transformers after the layout transform primarily to constant fold any initializers
+    // that get converted to an alternative layout. to do that we create a lambda to wrap the two operations together.
+    transform_layout_fn = [this](Graph& graph_to_transform, bool& modified,
+                                 const IExecutionProvider& execution_provider) -> Status {
+      ORT_RETURN_IF_ERROR_SESSIONID_(
+          layout_transformer::TransformLayoutForEP(graph_to_transform, modified, execution_provider));
+
+      if (modified) {
+        ORT_RETURN_IF_ERROR_SESSIONID_(
+            graph_transformer_mgr_.ApplyTransformers(graph_to_transform, TransformerLevel::Level1, *session_logger_));
+      }
+
+      return Status::OK();
+    };
+  }
 
   // Do partitioning based on execution providers' capabilities.
   GraphPartitioner partitioner(kernel_registry_manager, providers);
@@ -904,7 +919,7 @@ common::Status InferenceSession::TransformGraph(onnxruntime::Graph& graph,
   // we do not run Level 1 again as those transformers assume partitioning will run later to do node assignment.
   for (int i = static_cast<int>(TransformerLevel::Level2); i <= static_cast<int>(TransformerLevel::MaxLevel); i++) {
     ORT_RETURN_IF_ERROR_SESSIONID_(
-        graph_transformer_mgr.ApplyTransformers(graph, static_cast<TransformerLevel>(i), *session_logger_));
+        graph_transformer_mgr_.ApplyTransformers(graph, static_cast<TransformerLevel>(i), *session_logger_));
   }
 
   bool modified = false;
@@ -1023,7 +1038,7 @@ Status InferenceSession::LoadOrtModelWithLoader(std::function<Status()> load_ort
                 "The ORT format model version [", fbs_ort_model_version->string_view(),
                 "] is not supported in this build ", ORT_VERSION, ". ",
                 kOrtFormatVersion5BreakingChangeNote);
-#else  // ^^ defined(ORT_MINIMAL_BUILD) ^^ / vv !defined(ORT_MINIMAL_BUILD) vv
+#else   // ^^ defined(ORT_MINIMAL_BUILD) ^^ / vv !defined(ORT_MINIMAL_BUILD) vv
   const auto has_saved_runtime_optimizations = [](const fbs::InferenceSession& fbs_session) -> bool {
     if (const auto* fbs_model = fbs_session.model()) {
       if (const auto* fbs_graph = fbs_model->graph()) {
@@ -1377,7 +1392,7 @@ common::Status InferenceSession::Initialize() {
       };
 
       // add predefined transformers
-      ORT_RETURN_IF_ERROR_SESSIONID_(AddPredefinedTransformers(graph_transformation_mgr_,
+      ORT_RETURN_IF_ERROR_SESSIONID_(AddPredefinedTransformers(graph_transformer_mgr_,
                                                                session_options_.graph_optimization_level,
                                                                minimal_build_optimization_handling,
                                                                record_runtime_optimization_produced_op_schema));
@@ -1408,7 +1423,7 @@ common::Status InferenceSession::Initialize() {
 #endif
 
       // apply any transformations to the main graph and any subgraphs
-      ORT_RETURN_IF_ERROR_SESSIONID_(TransformGraph(graph, graph_transformation_mgr_,
+      ORT_RETURN_IF_ERROR_SESSIONID_(TransformGraph(graph,  // graph_transformer_mgr_,
                                                     execution_providers_, kernel_registry_manager_,
                                                     insert_cast_transformer_,
                                                     *session_state_,
