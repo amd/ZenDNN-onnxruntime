@@ -865,13 +865,7 @@ common::Status InferenceSession::Load() {
   return LoadWithLoader(loader, "model_loading_from_saved_proto");
 }
 
-common::Status InferenceSession::TransformGraph(onnxruntime::Graph& graph,
-                                                // const onnxruntime::GraphTransformerManager& graph_transformer_mgr,
-                                                const ExecutionProviders& providers,
-                                                KernelRegistryManager& kernel_registry_manager,
-                                                const InsertCastTransformer& insert_cast_transformer,
-                                                SessionState& session_state,
-                                                bool saving_model_in_ort_format) {
+common::Status InferenceSession::TransformGraph(onnxruntime::Graph& graph, bool saving_model_in_ort_format) {
   // The transformer order:
   // 1. run level 1 optimizations. these only use ONNX operators.
   // 2. partition nodes based on EP capabilities. EPs may fuse nodes during this process.
@@ -897,23 +891,50 @@ common::Status InferenceSession::TransformGraph(onnxruntime::Graph& graph,
     // we want to run L1 transformers after the layout transform primarily to constant fold any initializers
     // that get converted to an alternative layout. to do that we create a lambda to wrap the two operations together.
     transform_layout_fn = [this](Graph& graph_to_transform, bool& modified,
-                                 const IExecutionProvider& execution_provider) -> Status {
+                                 const IExecutionProvider& execution_provider,
+                                 std::optional<DebugGraphFn> debug_graph_fn) -> Status {
       ORT_RETURN_IF_ERROR_SESSIONID_(
-          layout_transformer::TransformLayoutForEP(graph_to_transform, modified, execution_provider));
+          layout_transformer::TransformLayoutForEP(graph_to_transform, modified, execution_provider,
+                                                   debug_graph_fn));
 
       if (modified) {
         ORT_RETURN_IF_ERROR_SESSIONID_(
             graph_transformer_mgr_.ApplyTransformers(graph_to_transform, TransformerLevel::Level1, *session_logger_));
+
+        // debug the graph after the L1 transformers have run against any layout transformation changes.
+        // this is prior to GraphPartitioner::GetCapabilityForEP calling IExecutionProvider::GetCapability the second
+        // time to validate the EP that requested the layout transformation can take all the nodes using the new layout.
+        // if that fails, this allows debugging the graph used in that GetCapability call.
+        if (debug_graph_fn) {
+          (*debug_graph_fn)(graph_to_transform);
+        }
       }
 
       return Status::OK();
     };
   }
 
+  // debug infrastructure for layout transformation. it's extremely difficult to trace the transpose optimizer changes
+  // manually, so dumping out the model so it can be viewed in Netron makes it far easier
+  DebugGraphFn debug_graph_fn;
+  if (transform_layout_fn) {
+    bool enable_debug = session_options_.config_options.GetConfigOrDefault(kDebugLayoutTransformation, "0") == "1";
+
+    if (enable_debug) {
+      int counter = 0;
+      debug_graph_fn = [&counter, this](const Graph& graph) {
+        if (graph.GraphProtoSyncNeeded()) {
+          ORT_THROW_IF_ERROR(
+              Model::Save(*model_, "post_layout_transform_step_" + std::to_string(counter++) + ".onnx"));
+        }
+      };
+    }
+  }
+
   // Do partitioning based on execution providers' capabilities.
-  GraphPartitioner partitioner(kernel_registry_manager, providers);
-  ORT_RETURN_IF_ERROR_SESSIONID_(partitioner.Partition(graph, session_state.GetMutableFuncMgr(), transform_layout_fn,
-                                                       mode));
+  GraphPartitioner partitioner(kernel_registry_manager_, execution_providers_);
+  ORT_RETURN_IF_ERROR_SESSIONID_(partitioner.Partition(graph, session_state_->GetMutableFuncMgr(), transform_layout_fn,
+                                                       mode, debug_graph_fn));
 
   // apply Level2 and higher transformers.
   // we do not run Level 1 again as those transformers assume partitioning will run later to do node assignment.
@@ -924,15 +945,15 @@ common::Status InferenceSession::TransformGraph(onnxruntime::Graph& graph,
 
   bool modified = false;
   // Insert cast node/s.
-  ORT_RETURN_IF_ERROR_SESSIONID_(insert_cast_transformer.Apply(graph, modified, *session_logger_));
+  ORT_RETURN_IF_ERROR_SESSIONID_(insert_cast_transformer_.Apply(graph, modified, *session_logger_));
 
   std::vector<std::string> provider_types;
-  for (auto& provider_ptr : providers) {
+  for (auto& provider_ptr : execution_providers_) {
     provider_types.push_back(provider_ptr->Type());
   }
 
   // Insert copy node/s.
-  MemcpyTransformer copy_transformer{provider_types, kernel_registry_manager};
+  MemcpyTransformer copy_transformer{provider_types, kernel_registry_manager_};
   ORT_RETURN_IF_ERROR_SESSIONID_(copy_transformer.Apply(graph, modified, *session_logger_));
 
   return common::Status::OK();
@@ -1423,11 +1444,7 @@ common::Status InferenceSession::Initialize() {
 #endif
 
       // apply any transformations to the main graph and any subgraphs
-      ORT_RETURN_IF_ERROR_SESSIONID_(TransformGraph(graph,  // graph_transformer_mgr_,
-                                                    execution_providers_, kernel_registry_manager_,
-                                                    insert_cast_transformer_,
-                                                    *session_state_,
-                                                    saving_ort_format));
+      ORT_RETURN_IF_ERROR_SESSIONID_(TransformGraph(graph, saving_ort_format));
 
       // now that all the transforms are done, call Resolve on the main graph. this will recurse into the subgraphs.
       ORT_RETURN_IF_ERROR_SESSIONID_(graph.Resolve());

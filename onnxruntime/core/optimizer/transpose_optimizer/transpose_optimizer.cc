@@ -1484,20 +1484,27 @@ static bool HandleTransposeImpl(HandlerArgs& args, const std::vector<int64_t>& n
     // Case 1: Permutations cancel.
     RemoveCancelingTransposeNodes(args);
   } else {
-    // Case 2: Permutations don't cancel. Compose permutations.
+    // Case 2: Permutations don't cancel but can be merged. Update 2nd Transpose with merged perms and remove the 1st
+    // Transpose. Keeping the 2nd Transpose is simpler as no updates are required to downstream nodes, and all we have
+    // to do is use the input from the 1st Transpose in the updated 2nd Transpose.
     std::vector<int64_t> new_perm = ComposePerm(args.perm, node_perm);
 
-    // replace Reshape with Transpose if necessary.
     std::unique_ptr<api::NodeRef> new_node;
     if (args.node.OpType() == "Reshape") {
-      new_node = SwapNodeOpTypeDomainAndSinceVersion(args.ctx.graph, args.node, "Transpose", "",
-                                                     args.transpose.SinceVersion());
+      // replace Reshape with Transpose to simplify the logic.
+      // use the same input as the 1st Transpose, move the output from the Reshape to the new Transpose node,
+      // and remove the Reshape node.
+      new_node = args.ctx.graph.AddNode("Transpose", {args.transpose.Inputs()[0]}, 1);
+      args.ctx.graph.MoveOutput(args.node, 0, *new_node, 0);
+      args.ctx.graph.RemoveNode(args.node);
+    } else {
+      // use the input from the 1st Transpose to the 2nd.
+      args.node.SetInput(0, args.transpose.Inputs()[0]);
     }
 
+    // set the perm attribute to the merged version
     api::NodeRef& target_node = new_node ? *new_node : args.node;
-
     target_node.SetAttributeInts("perm", new_perm);
-    target_node.SetInput(0, args.transpose.Inputs()[0]);
 
     // 2nd transpose no longer references 1st. Remove first if possible.
     if (!args.ctx.graph.HasValueConsumers(args.transpose.Outputs()[0])) {
@@ -1527,8 +1534,9 @@ static bool FinalizeReshapeShape(const std::vector<int64_t>& input_shape,      /
   // we need a concrete input shape to handle Reshape here
   int64_t total_size = 1;
   for (auto dim : input_shape) {
-    if (dim <= 0)
-      return false;  // potentially valid but we need a fixed value.
+    if (dim < 0) {
+      return false;  // potentially valid symbolic dim denoted by -1 but we need a fixed value.
+    }
 
     total_size *= dim;
   }
@@ -1536,8 +1544,9 @@ static bool FinalizeReshapeShape(const std::vector<int64_t>& input_shape,      /
   auto input_rank = input_shape.size();
   auto rank = requested_shape.size();
 
-  if (input_rank != rank)
+  if (input_rank != rank) {
     return false;  // potentially valid but to treat a Reshape as a Transpose the rank must match
+  }
 
   ptrdiff_t unknown_dim = -1;
   int64_t size = 1;
@@ -1546,11 +1555,14 @@ static bool FinalizeReshapeShape(const std::vector<int64_t>& input_shape,      /
 
   for (size_t i = 0; i < rank; ++i) {
     if (requested_shape[i] == -1) {
-      if (unknown_dim != -1)
+      if (unknown_dim != -1) {
         return false;  // invalid: only one -1 dim allowed
+      }
 
       unknown_dim = i;
     } else {
+      // if allow_zero is true we keep the 0 from the requested_shape as-is. 
+	  // if allow_zero is false we copy the dim value from the input_shape.
       if (!allow_zero && requested_shape[i] == 0) {
         final_shape[i] = input_shape[i];
       }
@@ -1561,13 +1573,15 @@ static bool FinalizeReshapeShape(const std::vector<int64_t>& input_shape,      /
 
   if (unknown_dim != -1) {
     // calculate unknown dimension
-    if (size == 0 || (total_size % size) != 0)
+    if (size == 0 || (total_size % size) != 0) {
       return false;  // invalid: dims are mismatched
+    }
 
     final_shape[unknown_dim] = total_size / size;
   } else {
-    if (size != total_size)
+    if (size != total_size) {
       return false;  // invalid: dims are mismatched
+    }
   }
 
   return true;
@@ -1606,8 +1620,14 @@ static bool HandleReshape(HandlerArgs& args) {
   }
 
   // need to process the requested shape to handle any -1 or 0 values.
-  auto allow_zero_attr = args.node.GetAttributeInt("allowzero");
-  int64_t allow_zero = allow_zero_attr ? *allow_zero_attr : 0;
+  int64_t allow_zero = 0;  // default is to treat a 0 as copying the value from the input shape.
+
+  if (args.node.SinceVersion() > 13) {
+    auto allow_zero_attr = args.node.GetAttributeInt("allowzero");
+    if (allow_zero_attr) {
+      allow_zero = *allow_zero_attr;
+    }
+  }
 
   std::vector<int64_t> reshape_output_shape;
   if (!FinalizeReshapeShape(*transpose_output_shape, reshape_requested_shape, allow_zero, reshape_output_shape)) {
@@ -2214,5 +2234,4 @@ std::unique_ptr<api::NodeRef> SwapNodeOpTypeDomainAndSinceVersion(api::GraphRef&
                                                                   int since_version) {
   return SwapNodeImpl(graph, node, op_type, domain, since_version);
 }
-
 }  // namespace onnx_layout_transformation
