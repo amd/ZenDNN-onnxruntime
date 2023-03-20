@@ -905,7 +905,7 @@ common::Status InferenceSession::TransformGraph(onnxruntime::Graph& graph, bool 
         // this is prior to GraphPartitioner::GetCapabilityForEP calling IExecutionProvider::GetCapability the second
         // time to validate the EP that requested the layout transformation can take all the nodes using the new layout.
         // if that fails, this allows debugging the graph used in that GetCapability call.
-        if (debug_graph_fn) {
+        if (debug_graph_fn && *debug_graph_fn) {
           (*debug_graph_fn)(graph_to_transform);
         }
       }

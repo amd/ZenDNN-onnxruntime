@@ -981,7 +981,7 @@ Status TransformLayoutForEP(Graph& graph, bool& modified, const IExecutionProvid
 
   if (modified) {
     // debug the changes made inserting Transpose nodes around layout sensitive ops.
-    if (debug_graph_fn) {
+    if (debug_graph_fn && *debug_graph_fn) {
       (*debug_graph_fn)(graph);
     }
 
@@ -995,8 +995,8 @@ Status TransformLayoutForEP(Graph& graph, bool& modified, const IExecutionProvid
                              result.error_msg.value());
     }
 
-    // debug optimization of the new Tranpose nodes using PostLayoutTransformCostCheck 
-    if (debug_graph_fn) {
+    // debug optimization of the new Tranpose nodes using PostLayoutTransformCostCheck
+    if (debug_graph_fn && *debug_graph_fn) {
       (*debug_graph_fn)(graph);
     }
   }

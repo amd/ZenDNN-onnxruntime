@@ -4397,10 +4397,12 @@ TEST(TransposeOptimizerTests, RegressionTest_GitHubIssue12151) {
 }
 
 // Test a Transpose node followed by a Reshape that is logically equivalent to an Transpose can be merged.
-// The test graph was extracted from a production model
-TEST(TransposeOptimizerTests, TransposeReshape) {
+// The test graph was extracted from a model we were trying to use with the QNN EP.
+TEST(TransposeOptimizerTests, QnnTransposeReshape) {
+  // test uses internal testing EP with static kernels which requires a full build
+#if !defined(ORT_MINIMAL_BUILD)
   Status status;
-  auto model_uri = ORT_TSTR("D:\\src\\github\\ort.1\\onnxruntime\\test\\testdata\\layout_transform_reshape.onnx");
+  auto model_uri = ORT_TSTR("testdata/layout_transform_reshape.onnx");
 
   SessionOptions so;
 
@@ -4410,13 +4412,13 @@ TEST(TransposeOptimizerTests, TransposeReshape) {
   // changes during the layout transformation process.
   ASSERT_STATUS_OK(so.config_options.AddConfigEntry(kDebugLayoutTransformation, "1"));
 
+  using InternalTestingEP = onnxruntime::internal_testing_ep::InternalTestingExecutionProvider;
+
+
   // set the test EP to support all ops in the model so that the layout transform applies to all nodes
-  std::unique_ptr<IExecutionProvider> internal_testing_ep(
-      new internal_testing_ep::InternalTestingExecutionProvider(
-          {"Add", "Concat", "Conv", "Div", "GlobalAveragePool", "MatMul", "Mul", "ReduceMean", "Reshape", "Slice",
-           "Squeeze", "Sub", "Transpose", "Unsqueeze"},
-          {},
-          DataLayout::NHWC));
+  const std::unordered_set<std::string> empty_set;
+  auto internal_testing_ep = std::make_unique<InternalTestingEP>(empty_set, empty_set, DataLayout::NHWC);
+  internal_testing_ep->EnableStaticKernels().TakeAllNodes();
 
   InferenceSessionWrapper session{so, GetEnvironment()};
   ASSERT_STATUS_OK(session.RegisterExecutionProvider(std::move(internal_testing_ep)));
@@ -4443,6 +4445,7 @@ TEST(TransposeOptimizerTests, TransposeReshape) {
     EXPECT_TRUE(node.GetExecutionProviderType() == expected_ep) << node.OpType() << " node named '" << node.Name()
                                                                 << "' was not assigned to the internal testing EP.";
   }
+#endif
 }
 }  // namespace test
 }  // namespace onnxruntime
