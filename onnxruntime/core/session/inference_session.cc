@@ -889,7 +889,8 @@ common::Status InferenceSession::TransformGraph(onnxruntime::Graph& graph, bool 
   // only provide NCWH to NHWC layout transformer if supported
   if (layout_transformer::IsSupportedOpset(graph)) {
     // we want to run L1 transformers after the layout transform primarily to constant fold any initializers
-    // that get converted to an alternative layout. to do that we create a lambda to wrap the two operations together.
+    // that get converted to an alternative layout.
+    // create a lambda to combine the two operations in the layout transformation function
     transform_layout_fn = [this](Graph& graph_to_transform, bool& modified,
                                  const IExecutionProvider& execution_provider,
                                  std::optional<DebugGraphFn> debug_graph_fn) -> Status {
@@ -903,7 +904,7 @@ common::Status InferenceSession::TransformGraph(onnxruntime::Graph& graph, bool 
 
         // debug the graph after the L1 transformers have run against any layout transformation changes.
         // this is prior to GraphPartitioner::GetCapabilityForEP calling IExecutionProvider::GetCapability the second
-        // time to validate the EP that requested the layout transformation can take all the nodes using the new layout.
+        // time to validate the EP that requested the layout transformation can take all nodes using the new layout.
         // if that fails, this allows debugging the graph used in that GetCapability call.
         if (debug_graph_fn && *debug_graph_fn) {
           (*debug_graph_fn)(graph_to_transform);

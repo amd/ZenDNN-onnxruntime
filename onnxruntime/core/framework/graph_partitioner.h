@@ -12,6 +12,10 @@ namespace onnxruntime {
 class ExecutionProviders;
 class KernelRegistryManager;
 
+// infrastructure to allow debugging the graph modifications made during layout transformation that is controlled
+// by GraphPartitioner. If provided, the DebugGraphFn will be called at various points of the process.
+// See kDebugLayoutTransformation in /include/onnxruntime/core/session/onnxruntime_session_options_config_keys.h for
+// more details.
 using DebugGraphFn = std::function<void(const Graph&)>;
 using TransformLayoutFunction = std::function<Status(Graph& graph, bool& modified, IExecutionProvider& current_ep,
                                                      std::optional<DebugGraphFn> debug_graph_fn)>;

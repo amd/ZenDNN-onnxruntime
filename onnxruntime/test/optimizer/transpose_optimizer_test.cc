@@ -4414,7 +4414,6 @@ TEST(TransposeOptimizerTests, QnnTransposeReshape) {
 
   using InternalTestingEP = onnxruntime::internal_testing_ep::InternalTestingExecutionProvider;
 
-
   // set the test EP to support all ops in the model so that the layout transform applies to all nodes
   const std::unordered_set<std::string> empty_set;
   auto internal_testing_ep = std::make_unique<InternalTestingEP>(empty_set, empty_set, DataLayout::NHWC);
@@ -4422,7 +4421,6 @@ TEST(TransposeOptimizerTests, QnnTransposeReshape) {
 
   InferenceSessionWrapper session{so, GetEnvironment()};
   ASSERT_STATUS_OK(session.RegisterExecutionProvider(std::move(internal_testing_ep)));
-
   ASSERT_STATUS_OK(session.Load(model_uri));
   ASSERT_STATUS_OK(session.Initialize());
 

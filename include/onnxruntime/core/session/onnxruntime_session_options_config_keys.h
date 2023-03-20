@@ -185,11 +185,15 @@ static const char* const kNodePartitionConfigFile = "session.node_partition_conf
 //    Hence 64-65 is an invalid configuration, because a windows thread cannot be attached to processors across group boundary.
 static const char* const kOrtSessionOptionsConfigIntraOpThreadAffinities = "session.intra_op_thread_affinities";
 
-// This option will dump out the model multiple times to assist debugging any issues without layout transformation.
-// The model will be dumped after insertion of the layout transformation Transpose nodes (step 1),
-// after those are optimized (step 2), and finally after the L1 transformers are applied to the updated graph (step 3).
-// Model is saved to filename post_layout_transform_step_<step_number>.onnx.
-// It is primarily intended for developer usage
-// It is only relevant if an execution provider that requests NHWC layout is enabled such as NNAPI, XNNPACK or QNN.
+// This option will dump out the model to assist debugging any issues with layout transformation,
+// and is primarily intended for developer usage. It is only relevant if an execution provider that requests
+// NHWC layout is enabled such as NNAPI, XNNPACK or QNN.
+//
 // Default is off. Set to "1" to enable.
+//
+// If modified by layout transformation the model will be dumped after these steps:
+//   1) insertion of the layout transformation Transpose nodes
+//   2) after those are optimized using the transpose optimizer,
+//   3) after the L1 transformers are applied to the updated graph.
+// The model will be saved to filename post_layout_transform_step_<step_number>.onnx.
 static const char* const kDebugLayoutTransformation = "session.debug_layout_transformation";

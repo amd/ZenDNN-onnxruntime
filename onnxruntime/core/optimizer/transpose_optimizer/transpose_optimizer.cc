@@ -4,7 +4,6 @@
 #include "optimizer_api.h"
 
 #include <algorithm>
-#include <cassert>
 #include <iostream>
 #include <unordered_map>
 #include <unordered_set>
@@ -1561,8 +1560,8 @@ static bool FinalizeReshapeShape(const std::vector<int64_t>& input_shape,      /
 
       unknown_dim = i;
     } else {
-      // if allow_zero is true we keep the 0 from the requested_shape as-is. 
-	  // if allow_zero is false we copy the dim value from the input_shape.
+      // if allow_zero is true we keep the 0 from the requested_shape as-is.
+      // if allow_zero is false we copy the dim value from the input_shape.
       if (!allow_zero && requested_shape[i] == 0) {
         final_shape[i] = input_shape[i];
       }
@@ -1590,9 +1589,9 @@ static bool FinalizeReshapeShape(const std::vector<int64_t>& input_shape,      /
 static bool HandleReshape(HandlerArgs& args) {
   // A Reshape can be logically equivalent to a Transpose if all dims with a value > 1 remain in the same order
   // and do not change size. If so, we can use HandleTransposeImpl to merge them.
-  //  e.g. Reshape(input {1, 512, 4, 1}, shape{1, 1, 512, 4}) is equivalent to Transpose with perms { 1, 3, 2, 1 }
-  //       Reshape(input {1, 1, 512, 4}, shape{512, 4, 1, 1}) is equivalent to Transpose with perms { 2, 3, 0, 1 }
-  //       Reshape(input {1, 512, 1, 4}, shape{1, 512, 4, 1}) is equivalent to Transpose with perms { 0, 1, 3, 2 }
+  //  e.g. Reshape(input {1, 512, 4, 1}, shape {1, 1, 512, 4}) is equivalent to Transpose with perms { 1, 3, 2, 1 }
+  //       Reshape(input {1, 1, 512, 4}, shape {512, 4, 1, 1}) is equivalent to Transpose with perms { 2, 3, 0, 1 }
+  //       Reshape(input {1, 512, 1, 4}, shape {1, 512, 4, 1}) is equivalent to Transpose with perms { 0, 1, 3, 2 }
   //
 
   // Get transpose input shape
@@ -1602,9 +1601,11 @@ static bool HandleReshape(HandlerArgs& args) {
   }
 
   auto transpose_output_shape = args.ctx.graph.GetValueInfo(args.transpose.Outputs()[0])->Shape();
-  // given transpose_input_shape had a value the shape inferencing should have calculated this.
-  // if this fails we could read the perms to calculate but that _really_ should not be necessary
-  assert(transpose_input_shape.has_value());
+  if (!transpose_output_shape.has_value()) {
+    // given transpose_input_shape had a value the shape inferencing should have calculated this.
+    // we could read the perms to calculate but that _really_ should not be necessary
+    return false;
+  }
 
   // `shape` input of reshape node is required to be constant
   auto requested_shape_data = args.ctx.graph.GetConstant(args.node.Inputs()[1]);
@@ -1619,9 +1620,9 @@ static bool HandleReshape(HandlerArgs& args) {
     return false;
   }
 
-  // need to process the requested shape to handle any -1 or 0 values.
-  int64_t allow_zero = 0;  // default is to treat a 0 as copying the value from the input shape.
+  // process the requested shape to handle any -1 or 0 values.
 
+  int64_t allow_zero = 0;  // default is to treat a 0 as copying the value from the input shape.
   if (args.node.SinceVersion() > 13) {
     auto allow_zero_attr = args.node.GetAttributeInt("allowzero");
     if (allow_zero_attr) {
@@ -1634,7 +1635,7 @@ static bool HandleReshape(HandlerArgs& args) {
     return false;
   }
 
-  // if possible calculate the perms
+  // calculate the perms if the Reshape node is equivalent to a Transpose
   std::vector<int64_t> input_dims(*transpose_output_shape);
   std::vector<int64_t> perms(reshape_output_shape.size(), -1);
 
@@ -1643,6 +1644,10 @@ static bool HandleReshape(HandlerArgs& args) {
   auto input_begin = input_dims.begin();
   auto input_end = input_dims.end();
 
+  // for each output dim find the input dim that maps to it.
+  // an input dim with value of '1' can be anywhere.
+  // input dims with values != 1 must be in the same order in the output dims.
+  // set the value of the input dim to -1 to mark it as used.
   for (size_t i = 0; i < perms.size(); ++i) {
     // start from the beginning each time looking for the first unused input dim that matches the current output dim
     auto cur = input_begin;
