@@ -4,7 +4,7 @@ from typing import Dict, List, Union
 import numpy
 import torch
 
-from onnxruntime import InferenceSession
+from onnxruntime import InferenceSession, OrtValue
 
 logger = logging.getLogger(__name__)
 
@@ -205,3 +205,68 @@ class IOBindingHelper:
             else:
                 ort_outputs.append(copy_tensor)
         return ort_outputs
+
+
+class StaticShapeIOBindingHelper:
+    def __init__(
+        self,
+        ort_session: InferenceSession,
+        io_shape: Dict[str, List[int]],
+        device_type: str = "cuda",
+        device_id: int = 0,
+    ):
+        for input in ort_session.get_inputs():
+            assert input.name in io_shape
+
+        self.input_names = [input.name for input in ort_session.get_inputs()]
+        self.output_names = [output.name for output in ort_session.get_outputs()]
+
+        self.io_shape = io_shape
+        self.io_numpy_type = TypeHelper.get_io_numpy_type_map(ort_session)
+        self.io_binding = ort_session.io_binding()
+        self.io_ort_value = {}
+
+        for name in self.input_names:
+            ort_value = OrtValue.ortvalue_from_shape_and_type(
+                io_shape[name], self.io_numpy_type[name], device_type, device_id
+            )
+            self.io_ort_value[name] = ort_value
+            self.io_binding.bind_ortvalue_input(name, ort_value)
+
+        for name in self.output_names:
+            if name in io_shape:
+                ort_value = OrtValue.ortvalue_from_shape_and_type(
+                    io_shape[name], self.io_numpy_type[name], device_type, device_id
+                )
+                self.io_ort_value[name] = ort_value
+                self.io_binding.bind_ortvalue_output(name, ort_value)
+            else:
+                self.io_binding.bind_output(name, device_type)
+
+    def ort_type_to_numpy_type(ort_type: str):
+        ort_type_to_numpy_type_map = {
+            "tensor(int64)": numpy.longlong,
+            "tensor(int32)": numpy.intc,
+            "tensor(float)": numpy.float32,
+            "tensor(float16)": numpy.float16,
+            "tensor(bool)": bool,
+        }
+        if ort_type not in ort_type_to_numpy_type_map:
+            raise ValueError(f"{ort_type} not found in map")
+
+        return ort_type_to_numpy_type_map[ort_type]
+
+    def update_inputs(self, inputs: Dict[str, numpy.ndarray]):
+        for input_name in self.input_names:
+            assert input_name in inputs
+            self.io_ort_value[input_name].update_inplace(inputs[input_name])
+
+    def get_output(self, output_name: str):
+        if output_name in self.io_shape:
+            return self.io_ort_value[output_name].numpy()
+
+        for i, name in enumerate(self.output_names):
+            if name == output_name:
+                return self.io_binding.get_outputs()[i].numpy()
+
+        raise ValueError("invalid output name")

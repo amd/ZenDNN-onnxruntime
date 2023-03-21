@@ -122,26 +122,29 @@ def measure_gpu_memory(func, start_memory=None):
     return None
 
 
-def get_ort_pipeline(model_name: str, directory: str, provider: str, disable_safety_checker: bool):
-    from diffusers import DPMSolverMultistepScheduler, OnnxStableDiffusionPipeline
+def get_ort_pipeline(model_name: str, directory: str, providers: list, disable_safety_checker: bool):
+    # from diffusers import DPMSolverMultistepScheduler, OnnxStableDiffusionPipeline
+    from diffusers import DPMSolverMultistepScheduler
+    from pipeline import OrtStableDiffusionPipeline
 
     import onnxruntime
 
     if directory is not None:
         assert os.path.exists(directory)
         session_options = onnxruntime.SessionOptions()
-        pipe = OnnxStableDiffusionPipeline.from_pretrained(
+        pipe = OrtStableDiffusionPipeline.from_pretrained(
             directory,
-            provider=provider,
+            provider=providers,
             sess_options=session_options,
         )
     else:
-        pipe = OnnxStableDiffusionPipeline.from_pretrained(
+        pipe = OrtStableDiffusionPipeline.from_pretrained(
             model_name,
             revision="onnx",
-            provider=provider,
+            provider=providers,
             use_auth_token=True,
         )
+
     pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
     pipe.set_progress_bar_config(disable=True)
 
@@ -304,7 +307,6 @@ def run_torch_pipeline(
 def run_ort(
     model_name: str,
     directory: str,
-    provider: str,
     batch_size: int,
     disable_safety_checker: bool,
     height,
@@ -314,8 +316,30 @@ def run_ort(
     batch_count,
     start_memory,
 ):
+    # cuda_provider_settings = {"arena_extend_strategy": "kSameAsRequested"}
+    # cuda_providers = [("CUDAExecutionProvider", cuda_provider_settings), "CPUExecutionProvider"]
+    # providers = {
+    #     "unet": cuda_providers,
+    #     "safety_checker": cuda_providers,
+    #     "text_encoder": cuda_providers,
+    #     "vae_decoder": cuda_providers,
+    #     "vae_encoder": cuda_providers,
+    # }
+    # providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    # providers = [("CUDAExecutionProvider", {"arena_extend_strategy": "kSameAsRequested"}), "CPUExecutionProvider"]
+
+    providers = {
+        # "unet": [("CUDAExecutionProvider", {"enable_cuda_graph": True}), "CPUExecutionProvider"],
+        "unet": ["CUDAExecutionProvider", "CPUExecutionProvider"],
+        "safety_checker": ["CUDAExecutionProvider", "CPUExecutionProvider"],
+        "text_encoder": ["CUDAExecutionProvider", "CPUExecutionProvider"],
+        # "vae_decoder": [("CUDAExecutionProvider", {"enable_cuda_graph": True}), "CPUExecutionProvider"],
+        "vae_decoder": ["CUDAExecutionProvider", "CPUExecutionProvider"],
+        "vae_encoder": ["CUDAExecutionProvider", "CPUExecutionProvider"],
+    }
+
     load_start = time.time()
-    pipe = get_ort_pipeline(model_name, directory, provider, disable_safety_checker)
+    pipe = get_ort_pipeline(model_name, directory, providers, disable_safety_checker)
     load_end = time.time()
     print(f"Model loading took {load_end - load_start} seconds")
 
@@ -328,7 +352,7 @@ def run_ort(
         {
             "model_name": model_name,
             "directory": directory,
-            "provider": provider,
+            "provider": providers,
             "disable_safety_checker": disable_safety_checker,
         }
     )
@@ -411,7 +435,8 @@ def parse_arguments():
         "--pipeline",
         required=False,
         type=str,
-        default=None,
+        # default=None,
+        default="/work/tlwu/sd_onnx/sd-v1-5-fp16-freeze-shape/",
         help="Directory of saved onnx pipeline. It could be output directory of optimize_pipeline.py.",
     )
 
@@ -507,11 +532,9 @@ def main():
     if args.engine == "onnxruntime":
         assert args.pipeline, "--pipeline should be specified for onnxruntime engine"
 
-        provider = "CUDAExecutionProvider"
         result = run_ort(
             sd_model,
             args.pipeline,
-            provider,
             args.batch_size,
             not args.enable_safety_checker,
             args.height,
@@ -566,5 +589,9 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        print(e)
         tb = sys.exc_info()
         print(e.with_traceback(tb[2]))
