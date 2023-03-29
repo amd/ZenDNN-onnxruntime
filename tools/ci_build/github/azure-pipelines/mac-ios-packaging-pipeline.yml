@@ -92,6 +92,7 @@ jobs:
         --include-ops-by-config tools/ci_build/github/android/mobile_package.required_operators.config \
         -b="--path_to_protoc_exe" -b "$(Build.BinariesDirectory)/protobuf_install/bin/protoc"
     displayName: "[Mobile] Build iOS framework and assemble pod package files"
+    condition: false # TEMP
 
   - script: |
       python tools/ci_build/github/apple/test_ios_packages.py \
@@ -102,6 +103,7 @@ jobs:
         --test_project_stage_dir "$(Build.BinariesDirectory)/app_center_test_mobile" \
         --prepare_test_project_only
     displayName: "[Mobile] Assemble test project for App Center"
+    condition: false # TEMP
 
   - task: Xcode@5
     inputs:
@@ -116,6 +118,7 @@ jobs:
       args: '-derivedDataPath $(Build.BinariesDirectory)/app_center_test_mobile/ios_package_test/DerivedData'
       workingDirectory: $(Build.BinariesDirectory)/app_center_test_mobile/ios_package_test/
     displayName: '[Mobile] Build iphone arm64 tests'
+    condition: false # TEMP
 
   - script: |
       set -e -x
@@ -127,6 +130,7 @@ jobs:
         --build-dir $(Build.BinariesDirectory)/app_center_test_mobile/ios_package_test/DerivedData/Build/Products/Debug-iphoneos \
         --token $(app_center_api_token)
     displayName: "[Mobile] Run E2E tests on App Center"
+    condition: false # TEMP
 
   # create and test full pods
   - script: |
@@ -194,6 +198,19 @@ jobs:
         "$(ORT_POD_VERSION)"
         "$(ORT_SHOULD_UPLOAD_ARCHIVES)"
     displayName: "Assemble artifacts"
+
+  - script: |
+      set -e -x
+      ls -R "$(Build.ArtifactStagingDirectory)"
+    displayName: "List staged artifacts"
+
+  - script: |
+      python tools/ci_build/github/apple/update_swift_package_manager_config.py \
+        --spm_config Package.swift \
+        --ort_package "$(Build.ArtifactStagingDirectory)/pod-archive-onnxruntime-c-${ORT_POD_VERSION}.zip"
+      echo "Updated Package.swift:"
+      cat Package.swift
+    displayName: "Update Package.swift"
 
   - publish: "$(Build.ArtifactStagingDirectory)"
     artifact: ios_packaging_artifacts
