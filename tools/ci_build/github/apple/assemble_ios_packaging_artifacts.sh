@@ -49,8 +49,8 @@ assemble_and_upload_pod() {
   popd
 }
 
-assemble_and_upload_pod "onnxruntime-mobile-c"
-assemble_and_upload_pod "onnxruntime-mobile-objc"
+# assemble_and_upload_pod "onnxruntime-mobile-c"
+# assemble_and_upload_pod "onnxruntime-mobile-objc"
 assemble_and_upload_pod "onnxruntime-c"
 assemble_and_upload_pod "onnxruntime-objc"
 
