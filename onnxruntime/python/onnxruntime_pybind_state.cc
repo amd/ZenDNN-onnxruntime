@@ -947,6 +947,14 @@ void addGlobalMethods(py::module& m) {
           throw std::runtime_error("Error when creating and registering allocator: " + st.ErrorMessage());
         }
       });
+  m.def(
+      "create_and_register_cuda_allocator", [](int device_id, size_t gpu_mem_limit, OrtArenaCfg* arena_cfg)->void{
+        auto env = GetEnv();
+        auto st = env->CreateAndRegisterCudaAllocator(device_id, gpu_mem_limit, arena_cfg);
+        if (!st.IsOK()) {
+          throw std::runtime_error("Error when creating and registering cuda allocator: " + st.ErrorMessage());
+        }
+      });
 
 #ifdef USE_OPENVINO
   m.def(

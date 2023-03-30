@@ -42,11 +42,18 @@
 #include "orttraining/core/optimizer/graph_transformer_registry.h"
 #endif
 
+//#include "core/providers/cuda/cuda_allocator.h"
+#include "core/providers/cuda/cuda_provider_options.h"
+#include "core/providers/cuda/cuda_provider_factory.h"
+#include "core/providers/cuda/cuda_execution_provider_info.h"
+
 namespace onnxruntime {
 using namespace ::onnxruntime::common;
 using namespace ONNX_NAMESPACE;
 
 std::once_flag schemaRegistrationOnceFlag;
+
+ProviderInfo_CUDA& GetProviderInfo_CUDA();
 
 Status Environment::Create(std::unique_ptr<logging::LoggingManager> logging_manager,
                            std::unique_ptr<Environment>& environment,
@@ -78,11 +85,11 @@ static bool AreOrtMemoryInfosEquivalent(
 Status Environment::RegisterAllocator(AllocatorPtr allocator) {
   const auto& mem_info = allocator->Info();
 
-  if (mem_info.device.Type() != OrtDevice::CPU) {
-    return ORT_MAKE_STATUS(ONNXRUNTIME, INVALID_ARGUMENT,
-                           "Only CPU allocators can be shared between "
-                           "multiple sessions for now.");
-  }
+//  if (mem_info.device.Type() != OrtDevice::CPU) {
+//    return ORT_MAKE_STATUS(ONNXRUNTIME, INVALID_ARGUMENT,
+//                           "Only CPU allocators can be shared between "
+//                           "multiple sessions for now.");
+//  }
 
   // We don't expect millions of allocators getting registered. Hence linear search should be fine.
   auto ite = std::find_if(std::begin(shared_allocators_),
@@ -105,7 +112,7 @@ Status Environment::RegisterAllocator(AllocatorPtr allocator) {
   }
 
   shared_allocators_.insert(ite, allocator);
-
+  std::cout << "register successfully\n";
   return Status::OK();
 }
 
@@ -168,6 +175,15 @@ Status Environment::CreateAndRegisterAllocator(const OrtMemoryInfo& mem_info, co
   }
 
   return RegisterAllocator(allocator_ptr);
+}
+
+Status Environment::CreateAndRegisterCudaAllocator(int device_id, size_t gpu_mem_limit, OrtArenaCfg* arena_cfg) {
+  //AllocatorCreationInfo alloc_creation_info{[](OrtDevice::DeviceId id) { return std::make_unique<CUDAAllocator>(id, "CUDA"); }, static_cast<OrtDevice::DeviceId>(cuda_provider_option_v2->device_id), true, *arena_cfg, true, false};
+  //AllocatorPtr allocator = CreateAllocator(alloc_creation_info);
+  OrtCUDAProviderOptionsV2 cuda_provider_option_v2{};
+  CUDAExecutionProviderExternalAllocatorInfo external_info{};
+  AllocatorPtr allocator = GetProviderInfo_CUDA().CreateCudaAllocator(static_cast<int16_t>(device_id), gpu_mem_limit, static_cast<ArenaExtendStrategy>(arena_cfg->arena_extend_strategy), external_info, arena_cfg);
+  return RegisterAllocator(allocator);
 }
 
 Status Environment::UnregisterAllocator(const OrtMemoryInfo& mem_info) {

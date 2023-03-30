@@ -81,6 +81,8 @@ class Environment {
 
   Environment() = default;
 
+  Status CreateAndRegisterCudaAllocator(int device_id, size_t gpu_mem_limit, OrtArenaCfg* arena_cfg);
+
  private:
   ORT_DISALLOW_COPY_ASSIGNMENT_AND_MOVE(Environment);
   Status Initialize(std::unique_ptr<logging::LoggingManager> logging_manager,
