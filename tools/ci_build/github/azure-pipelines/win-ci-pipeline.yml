@@ -23,7 +23,7 @@ stages:
         ORT_EP_NAME: CPU
         GenerateDocumentation: false
         WITH_CACHE: true
-        MachinePool: 'Win-CPU-2019'
+        MachinePool: 'onnxruntime-Win-CPU-2019'
 
 - stage: x64_release
   dependsOn: []
@@ -45,7 +45,7 @@ stages:
         ORT_EP_NAME: CPU
         GenerateDocumentation: false
         WITH_CACHE: true
-        MachinePool: 'Win-CPU-2019'
+        MachinePool: 'onnxruntime-Win-CPU-2019'
 
 - stage: x64_release_dnnl
   dependsOn: []
@@ -65,7 +65,7 @@ stages:
         ORT_EP_NAME: DNNL
         GenerateDocumentation: false
         WITH_CACHE: true
-        MachinePool: 'Win-CPU-2019'
+        MachinePool: 'onnxruntime-Win-CPU-2019'
 
 - stage: x64_release_xnnpack
   dependsOn: []
@@ -85,7 +85,7 @@ stages:
         ORT_EP_NAME: XNNPACK
         GenerateDocumentation: false
         WITH_CACHE: true
-        MachinePool: 'Win-CPU-2019'
+        MachinePool: 'onnxruntime-Win-CPU-2019'
 
 - stage: x64_release_winml
   dependsOn: []
@@ -107,7 +107,7 @@ stages:
         ORT_EP_NAME: CPU
         GenerateDocumentation: false
         WITH_CACHE: true
-        MachinePool: 'Win-CPU-2019'
+        MachinePool: 'onnxruntime-Win-CPU-2019'
 
 - stage: x86_release
   dependsOn: []
@@ -127,7 +127,7 @@ stages:
         ORT_EP_NAME: CPU
         GenerateDocumentation: false
         WITH_CACHE: true
-        MachinePool: 'Win-CPU-2019'
+        MachinePool: 'onnxruntime-Win-CPU-2019'
 
 - stage: training_x64_debug
   dependsOn: []
@@ -209,4 +209,4 @@ stages:
         ORT_EP_NAME: CPU
         GenerateDocumentation: false
         WITH_CACHE: true
-        MachinePool: 'Win-CPU-2019'
+        MachinePool: 'onnxruntime-Win-CPU-2019'
