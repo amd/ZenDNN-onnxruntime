@@ -210,7 +210,13 @@ jobs:
         --ort_package "$(Build.ArtifactStagingDirectory)/pod-archive-onnxruntime-c-${ORT_POD_VERSION}.zip"
       echo "Updated Package.swift:"
       cat Package.swift
-    displayName: "Update Package.swift"
+    displayName: "Update Package.swift to use onnxruntime-c pod from build"
+
+  # xcodebuild will implicitly use Package.swift and build/run the .testTarget (tests in swift/onnxTests)
+  - script: |
+      set -e -x
+      xcodebuild test -scheme onnxruntime -destination 'platform=iOS Simulator,name=iPhone 14'
+    displayName: "Test Package.swift usage"
 
   - publish: "$(Build.ArtifactStagingDirectory)"
     artifact: ios_packaging_artifacts
