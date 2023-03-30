@@ -61,7 +61,7 @@ def update_swift_package(spm_config_path: pathlib.Path, ort_package_path: Union[
                     new_url_line = url_line[: start_url_value + 1] + str(ort_package_path) + '",\n'
                 else:
                     start_url = url_line.find('url:')
-                    new_url_line = url_line[: start_url] + f'path: "{ort_package_path}")\n'
+                    new_url_line = url_line[: start_url] + f'path: "{ort_package_path}"),\n'
 
                 new_config.append(line)
                 new_config.append(new_url_line)
