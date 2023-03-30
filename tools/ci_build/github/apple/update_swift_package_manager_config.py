@@ -14,10 +14,13 @@ def calc_checksum(filename: pathlib.Path):
 
 
 # find this section in Package.swift and replace the values for url and checksum
+# 'url:' has to be converted to 'path:' to work with a filepath
 #
 #   .binaryTarget(name: "onnxruntime",
 #      url: "https://onnxruntimepackages.z14.web.core.windows.net/pod-archive-onnxruntime-c-1.14.0.zip",
 #      checksum: "c89cd106ff02eb3892243acd7c4f2bd8e68c2c94f2751b5e35f98722e10c042b"),
+#
+
 def update_swift_package(spm_config_path: pathlib.Path, ort_package_path: pathlib.Path):
     updated = False
     new_config = []
@@ -32,10 +35,10 @@ def update_swift_package(spm_config_path: pathlib.Path, ort_package_path: pathli
                 assert "url:" in url_line
                 assert "checksum:" in checksum_line
 
-                start_url = url_line.find('"')
-                start_checksum = checksum_line.find('"')
-                new_url_line = url_line[: start_url + 1] + str(ort_package_path) + '",\n'
-                new_checksum_line = checksum_line[: start_checksum + 1] + checksum + '"),\n'
+                start_url = url_line.find('url:')
+                start_checksum_value = checksum_line.find('"')
+                new_url_line = url_line[: start_url] + f'file: "{ort_package_path}",\n'
+                new_checksum_line = checksum_line[: start_checksum_value + 1] + checksum + '"),\n'
 
                 new_config.append(line)
                 new_config.append(new_url_line)
