@@ -110,6 +110,7 @@ if __name__ == "__main__":
     if args.ort_package.startswith("http"):
         ort_package = args.ort_package
     else:
-        ort_package = pathlib.Path(args.ort_package).resolve(strict=True)
+        # we need to leave this as a relative path to make SPM happy so don't call resolve
+        ort_package = pathlib.Path(args.ort_package)
 
     update_swift_package(spm_config, ort_package)
