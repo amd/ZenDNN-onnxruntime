@@ -4,6 +4,7 @@
 #include "core/framework/allocator.h"
 #include "core/framework/bfc_arena.h"
 #include <type_traits>
+#include <iostream>
 
 namespace onnxruntime {
 BFCArena::BFCArena(std::unique_ptr<IAllocator> resource_allocator,
@@ -309,6 +310,7 @@ void* BFCArena::AllocateRawInternal(size_t num_bytes,
     LOGS_DEFAULT(VERBOSE) << "tried to allocate 0 bytes";
     return nullptr;
   }
+  //std::cout<<"AllocateRawInternal(), stream:"<<stream<<"\n";
   // First, always allocate memory of at least kMinAllocationSize
   // bytes, and always allocate multiples of kMinAllocationSize bytes
   // so all memory addresses are nicely byte aligned.
@@ -341,6 +343,7 @@ void* BFCArena::AllocateRawInternal(size_t num_bytes,
 
   // Try to extend
   auto status = Extend(rounded_bytes);
+  //std::cout<<"In Extend()\n";
   if (status.IsOK()) {
     chunk = FindChunkPtr(bin_num, rounded_bytes, num_bytes, stream, false);
     if (chunk != nullptr) {
@@ -425,6 +428,12 @@ BFCArena::Chunk* BFCArena::FindChunkPtr(BinNum bin_num, size_t rounded_bytes,
                            !chunk->stream ||
                            (stream && chunk->stream &&
                             chunk->stream_timestamp < stream->GetLastSyncTimestampWithTargetStream(chunk->stream));
+//        std::cout<<"chunk->stream:"<<chunk->stream<<", stream:"<<stream<<", chunk timestamp:"<<chunk->stream_timestamp<<", safe_to_use:"
+//                 <<safe_to_use<<", allow_chunk_from_different_stream:"<<allow_chunk_from_different_stream<<", ";
+//        if (stream != nullptr) {
+//          std::cout<<"stream GetLastSyncTimestamp:"<<stream->GetLastSyncTimestampWithTargetStream(chunk->stream)<<",";
+//        }
+//        std::cout<<"\n";
         if (safe_to_use) {
           // the chunk with same stream has higher priority.
           return SplitFreeChunkFromBin(&b->free_chunks, citer, rounded_bytes, num_bytes);
@@ -875,6 +884,12 @@ void StreamAwareArena::SecureTheChunk(Stream* chunk_stream, Stream* target_strea
     target_stream->UpdateStreamClock(notification->GetStreamSyncTable());
     // it should be ok to release the notification now, as the wait is already launch to stream.
   }
+}
+
+void StreamAwareArena::Test(Stream* chunk_stream) {
+  auto notification = chunk_stream->CreateNotification(1);
+  notification->ActivateAndUpdate();
+  chunk_stream->UpdateStreamClock(notification->GetStreamSyncTable());
 }
 #endif
 }  // namespace onnxruntime
