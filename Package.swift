@@ -1,24 +1,24 @@
+// swift-tools-version: 5.7
+//   The swift-tools-version declares the minimum version of Swift required to build this package and MUST be the first
+//   line of this file.
+//
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
-//
-// swift-tools-version: 5.7
-//   The swift-tools-version declares the minimum version of Swift required to build this package.
 //
 // A user of the Swift Package Manager (SPM) package will consume this file directly from the ORT github repository.
 // For context, the end user's config will look something like:
 //
 //     dependencies: [
-//       .package(url: "https://github.com/microsoft/onnxruntime", branch: "rel-1.14.0-spm"),
+//       .package(url: "https://github.com/microsoft/onnxruntime", branch: "rel-1.14.0"),
 //       ...
 //     ],
 //
 // NOTE: The direct consumption creates a somewhat complicated setup to 'release' a new version of the ORT SPM package.
-//  Proposed steps:
+//  PROPOSED steps:
 //   - release new ORT version, including the iOS pod archive for the native ORT library
 //   - update the `url:` field in this file to point to the onnxruntime-c pod archive for the release.
 //     - use tools/ci_build/github/apple/update_swift_package_manager_config.py
-//   - once Package.swift is updated and checked in, add a tag to the commit with the release tag and '-spm' suffix
-//     - e.g. rel-1.14.0-spm for the 1.14.0 release
+//   - once Package.swift is updated and checked in, cherry pick the updated file to the release branch.
 
 import PackageDescription
 
