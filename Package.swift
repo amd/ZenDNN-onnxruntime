@@ -33,7 +33,7 @@ let package = Package(
     dependencies: [],
     targets: [
         .target(name: "OnnxRuntimeBindings",
-                dependencies: ["OnnxRuntimeNativePod"],
+                dependencies: ["onnxruntime"],
                 path: "objectivec",
                 exclude: ["test", "docs"],
                 cxxSettings: [
@@ -50,7 +50,7 @@ let package = Package(
         // e.g. python3 ./tools/ci_build/github/apple/update_swift_package_manager_config.py
         //        --spm_config ./Package.swift
         //        --ort_package "https://onnxruntimepackages.z14.web.core.windows.net/pod-archive-onnxruntime-c-1.14.0.zip"
-        .binaryTarget(name: "OnnxRuntimeNativePod",
+        .binaryTarget(name: "onnxruntime",
                       url: "https://onnxruntimepackages.z14.web.core.windows.net/pod-archive-onnxruntime-c-1.14.0.zip",
                       checksum: "c89cd106ff02eb3892243acd7c4f2bd8e68c2c94f2751b5e35f98722e10c042b"),
 
