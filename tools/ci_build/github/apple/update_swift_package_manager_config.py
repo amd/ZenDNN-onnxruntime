@@ -37,7 +37,7 @@ def checksum_remote_package(package_url: str):
 # find the below section in Package.swift and replace the values for url: and checksum:.
 # If replacing with a local file, 'url:' -> 'file:' and we don't have a checksum
 #
-#   .binaryTarget(name: "OnnxRuntimeNativePod",
+#   .binaryTarget(name: "onnxruntime",
 #      url: "https://onnxruntimepackages.z14.web.core.windows.net/pod-archive-onnxruntime-c-1.14.0.zip",
 #      checksum: "c89cd106ff02eb3892243acd7c4f2bd8e68c2c94f2751b5e35f98722e10c042b"),
 #
@@ -48,7 +48,7 @@ def update_swift_package(spm_config_path: pathlib.Path, ort_package_path: Union[
     new_config = []
     with open(spm_config_path) as config:
         while line := config.readline():
-            if '.binaryTarget(name: "OnnxRuntimeNativePod"' in line:
+            if '.binaryTarget(name: "onnxruntime"' in line:
                 # find and update the following 2 lines
                 url_line = config.readline()
                 checksum_line = config.readline()
