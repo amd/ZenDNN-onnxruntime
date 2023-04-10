@@ -137,6 +137,20 @@ module.exports = function (config) {
         browser: 'Chrome',
         browser_version: '91'
       },
+      BS_MAC_13_Safari_16_3: {
+        base: 'BrowserStack',
+        os: 'OS X',
+        os_version: 'Ventura',
+        browser: 'Safari',
+        browser_version: '16.3'
+      },
+      BS_MAC_13_Chrome_112: {
+        base: 'BrowserStack',
+        os: 'OS X',
+        os_version: 'Ventura',
+        browser: 'Chrome',
+        browser_version: '112.0'
+      },
 
       // iPhone
       //
@@ -153,6 +167,13 @@ module.exports = function (config) {
         real_mobile: true,
         os: 'ios',
         os_version: '13'
+      },
+      BS_IOS_16_iPhone14: {
+        base: 'BrowserStack',
+        device: 'iPhone 14',
+        real_mobile: true,
+        os: 'ios',
+        os_version: '16'
       },
 
       // Android
@@ -177,7 +198,21 @@ module.exports = function (config) {
         real_mobile: true,
         os: 'android',
         os_version: '10.0'
-      }
+      },
+      BS_ANDROID_13_Pixel_7: {
+        base: 'BrowserStack',
+        device: 'Google Pixel 7',
+        real_mobile: true,
+        os: 'android',
+        os_version: '13.0'
+      },
+      BS_ANDROID_12_Galaxy_Tab_S8: {
+        base: 'BrowserStack',
+        device: 'Samsung Galaxy Tab S8',
+        real_mobile: true,
+        os: 'android',
+        os_version: '12.0'
+      },
     }
   });
 };
