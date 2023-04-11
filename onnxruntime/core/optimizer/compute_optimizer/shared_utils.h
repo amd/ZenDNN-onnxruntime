@@ -157,16 +157,22 @@ std::pair<bool, std::vector<DimCompare>> CompareInputShapeWithOutputShape(
     const ONNX_NAMESPACE::TensorShapeProto* target_shape);
 
 /**
- * @brief Get ONNX opset version.
+ * @brief Get opset version from the graph.
  */
 int GetONNXOpSetVersion(const Graph& graph);
 
 /**
- * @brief Create Initializer from given vector and name.
+ * @brief Create an initializer from given dims/value vector and name.
+ *
+ * @param dims A int vector as the shape of the created initializer. If we want to create a scalar initializer,
+ *   we should pass an empty vector.
+ * @param values A int vector containing the value buffer.
  */
 
-NodeArg* Create1DInitializerFromVector(Graph& graph, const InlinedVector<int64_t>& values,
-                                       const std::string& name);
+NodeArg* CreateInitializerFromVector(Graph& graph,
+                                     const InlinedVector<int64_t>& dims,
+                                     const InlinedVector<int64_t>& values,
+                                     const std::string& name);
 
 }  // namespace onnxruntime::optimizer::compute_optimizer
 #endif
