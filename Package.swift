@@ -95,7 +95,7 @@ if ProcessInfo.processInfo.environment["ORT_IOS_POD_LOCAL_PATH"] != nil {
     // and run `shasum -a 256 <path to pod zip>` to manually calculate it).
     // The checksum length and chars should look something like
     //   "c89cd106ff02eb3892243acd7c4f2bd8e68c2c94f2751b5e35f98722e10c042b"
-    //
+    // FAKE TEST UPDATE
     // package.targets.append(
     //    Target.binaryTarget(name: "onnxruntime",
     //                        url: "https://onnxruntimepackages.z14.web.core.windows.net/pod-archive-onnxruntime-c-<major.minor.patch>.zip",
