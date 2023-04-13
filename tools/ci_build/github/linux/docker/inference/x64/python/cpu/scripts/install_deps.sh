@@ -17,13 +17,16 @@ done
 
 # No release binary for ccache aarch64, so we need to build it from source.
 if ! [ -x "$(command -v ccache)" ]; then
-    git clone --recursive --branch v4.7.4 https://github.com/ccache/ccache
-    pushd .
-    cd ccache
-    mkdir build
-    cd build
-    cmake -DCMAKE_INSTALL_PREFIX=/usr/local _DCMAKE_BUILD_TYPE=Releae ..
+    ccache_url="https://github.com/ccache/ccache/archive/refs/tags/v4.7.4.tar.gz"
+    curl -sSL --retry 5 --retry-delay 10 --create-dirs --fail -L -o ccache_src.tar.gz $ccache_url
+    mkdir ccache_main
+    cd ccache_main
+    tar -zxf ../ccache_src.tar.gz --strip=1
+
+    cmake -DCMAKE_INSTALL_PREFIX=/usr/local _DCMAKE_BUILD_TYPE=Release ..
     make
     make install
     which ccache
+    rm -f ccache_src.tar.gz
+    rm -rf ccache_src
 fi
