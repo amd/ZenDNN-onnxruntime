@@ -8,31 +8,73 @@
 #include "core/providers/cuda/cuda_fwd.h"
 #include "core/platform/ort_mutex.h"
 #include "core/providers/cuda/cuda_stream_handle.h"
+#include "core/framework/op_kernel.h"
 
 namespace onnxruntime {
 namespace cuda {
+
+uint32_t CheckSumImpl(cudaStream_t stream,
+                      const void* input_data,
+                      int nbytes);
 
 // -----------------------------------------------------------------------
 // Base class for CUDA kernels
 // -----------------------------------------------------------------------
 class CudaKernel : public OpKernel {
  public:
+  //std::unique_ptr<uint32_t[]> output_crc32_;
+  //uint32_t output_count_capacity_ = 0;
+  //std::string kernel_name_;
+
   explicit CudaKernel(const OpKernelInfo& info)
       : OpKernel(info),
         // Is this OK to have a non-const execution provider?
         provider_(const_cast<CUDAExecutionProvider*>(static_cast<const CUDAExecutionProvider*>(info.GetExecutionProvider()))) {
+    //output_count_capacity_ = info.GetOutputCount();
+    //output_crc32_ = std::make_unique<uint32_t[]>(output_count_capacity_);
+    //memset(output_crc32_.get(), 0, output_count_capacity_ * sizeof(uint32_t));
+    //kernel_name_ = info.node().Name();
   }
 
   Status Compute(OpKernelContext* p_op_kernel_context) const override {
     auto s = ComputeInternal(p_op_kernel_context);
     // use this to precisely locate the node where CUDA failure comes from
-    //  if (cudaSuccess != cudaDeviceSynchronize())
-    //    __debugbreak();
+      if (cudaSuccess != cudaDeviceSynchronize())
+        __debugbreak();
+
     if (s.IsOK()) {
       auto err = cudaGetLastError();
       if (err != cudaSuccess) {
         return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "CUDA error ", cudaGetErrorName(err), ":", cudaGetErrorString(err));
       }
+
+      // XXX: Not thread-safe, experimental testing
+      // The kernel may have variable number of outputs
+      //auto cuda_stream = Stream(p_op_kernel_context);
+      //const auto out_count = p_op_kernel_context->OutputCount();
+      //for (int i = 0; i < out_count; ++i) {
+
+      //  const auto& output = *p_op_kernel_context->Output<Tensor>(i);
+
+      //  if (output.IsDataTypeString()) {
+      //    continue;
+      //  }
+
+      //  const auto size = static_cast<int>(output.SizeInBytes());
+      //  if (size > 0) {
+      //    const auto* data = output.DataRaw();
+      //    // Need to calculate Crc32 on device memory
+      //    const uint32_t crc = CheckSumImpl(cuda_stream, data, size);
+      //    if (output_crc32_[i] != 0) {
+      //      if (output_crc32_[i] != crc) {
+      //        const auto& logger = p_op_kernel_context->Logger();
+      //        LOGS_DEFAULT(ERROR) << "##CUDA Output check:" << kernel_name_ << ": output " << i << " mismatch";
+      //      }
+      //    } else {
+      //      output_crc32_[i] = crc;
+      //    }
+      //  }
+      //}
     }
     return s;
   }
