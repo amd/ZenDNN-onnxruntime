@@ -56,6 +56,10 @@ jobs:
         ${{ if eq(parameters.arch, 'aarch64') }}:
             UpdateDepsTxt: false
 
+    - script: |
+        mkdir -p $(Pipeline.Workspace)/ccache_log
+      displayName: 'Create ccache log directory'
+
     - template: linux-build-step-with-cache.yml
       parameters:
         WithCache: ${{parameters.with_cache}}
