@@ -72,7 +72,13 @@ jobs:
               arguments: -i onnxruntimecpubuilpython${{ parameters.arch }} -x "${{ parameters.device }}"
             ${{ if eq(parameters.with_cache, 'true') }}:
               env:
-                ADDITIONAL_DOCKER_PARAMETER: "--volume $(ORT_CACHE_DIR):/cache -e CCACHE_DIR=/cache -e ORT_BUILD_WITH_CACHE=1"
+                ADDITIONAL_DOCKER_PARAMETER: "--volume $(ORT_CACHE_DIR):/cache -e CCACHE_DIR=/cache -e ORT_BUILD_WITH_CACHE=1 --volume $(Pipeline.Workspace)/ccache_log:/cache_log -e CCACHE_LOGFILE=/cache_log/ccache.log -e CCACHE_DEBUG=1"
+
+    - task: PublishPipelineArtifact@0
+      displayName: 'publish cache log'
+      inputs:
+        artifactName: 'cache-log-${{ parameters.arch }}'
+        targetPath: '$(Pipeline.Workspace)/ccache_log'
 
     - task: PublishBuildArtifacts@1
       displayName: 'Publish Artifact: ONNXRuntime python wheel'
