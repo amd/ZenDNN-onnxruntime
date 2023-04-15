@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-#include "optimizer_api.h"
+#include "transpose_optimizer.h"
 
 #include <algorithm>
 #include <iostream>
@@ -12,43 +12,7 @@
 #include "core/common/make_string.h"
 #include "core/graph/constants.h"
 
-namespace onnx_layout_transformation {
-
-struct OptimizerCtx {
-  int64_t opset;
-  api::GraphRef& graph;
-  bool allow_extended_ops;
-  CostCheckFn cost_check_fn;
-  const std::string provider_type;
-  OptimizerMode mode;
-  std::unordered_set<std::string_view> layout_sensitive_ops;
-};
-
-// Each op handler points to a (potentially shared) function for determining which input indices are eligible for
-// optimization. Handlers are only called if a transpose is on an eligible index, and if the optimization heuristics
-// predict that pushing the transpose will be beneficial. Most of the time this function returns a static value, but
-// for Sum/Concat/QLinearConcat it needs to be dynamic.
-using TransposibleInputsFn = std::vector<size_t> (*)(OptimizerCtx& ctx, api::NodeRef& node);
-
-// Struct containing information passed to op handlers. Decreases binary size and allows perm_inv to be precomputed.
-struct HandlerArgs {
-  OptimizerCtx& ctx;
-  api::NodeRef& transpose;
-  api::NodeRef& node;
-  const std::vector<int64_t>& perm;
-  const std::vector<int64_t>& perm_inv;
-  // Cached result from calling transposible_inputs_fn
-  std::vector<size_t>& transposible_inputs;
-};
-
-using HandlerFunction = bool (*)(HandlerArgs& args);
-
-struct HandlerInfo {
-  TransposibleInputsFn transposible_inputs_fn;
-  HandlerFunction handler_fn;
-  // Does the handler have to transpose outputs? Used for cost estimation.
-  bool transposes_outputs = true;
-};
+namespace onnx_transpose_optimization {
 
 /////// <Helper Utils> ///////
 /* Small utilities for editing nodes and manipulating axes/permutations */
@@ -198,7 +162,7 @@ static std::optional<std::vector<int64_t>> ReadFromAttrOrInput(OptimizerCtx& ctx
 }
 
 // Computes inverse permutation. Unsafe if perm is not a valid permutation.
-static std::vector<int64_t> InvertPerm(const std::vector<int64_t>& perm) {
+std::vector<int64_t> InvertPerm(const std::vector<int64_t>& perm) {
   size_t rank = perm.size();
   std::vector<int64_t> perm_inv(rank);
   for (size_t i = 0; i < rank; ++i) {
@@ -488,8 +452,8 @@ static void Permute1DConstant(api::GraphRef& graph, api::NodeRef& node, api::Ten
 
 // Replaces ith input to node with transposed value. Might create a new Transpose node, find an existing one,
 // or transpose an initializer.
-static void TransposeInput(api::GraphRef& graph, api::NodeRef& node, size_t i,
-                           const std::vector<int64_t>& perm, const std::vector<int64_t>& perm_inv) {
+void TransposeInput(api::GraphRef& graph, api::NodeRef& node, size_t i,
+                    const std::vector<int64_t>& perm, const std::vector<int64_t>& perm_inv) {
   std::string_view input = node.Inputs()[i];
   // Remove this node as a consumer
   node.SetInput(i, "");
@@ -610,25 +574,20 @@ static bool NormalizeInputRanks(OptimizerCtx ctx, api::NodeRef& node, size_t tar
 
 // Transposes specified inputs according to perm.
 // NOTE: if a Transpose is expected to be above an input to this node, use the inverse of its permutation to cancel it.
-static void TransposeInputs(OptimizerCtx& ctx, api::NodeRef& node, const std::vector<int64_t>& perm,
-                            const std::vector<size_t>& input_indices) {
+void TransposeInputs(OptimizerCtx& ctx, api::NodeRef& node, const std::vector<int64_t>& perm,
+                     const std::vector<size_t>& input_indices) {
   auto perm_inv = InvertPerm(perm);
   for (size_t j : input_indices) {
     TransposeInput(ctx.graph, node, j, perm, perm_inv);
   }
 }
 
-inline static void TransposeFirstInput(OptimizerCtx& ctx, api::NodeRef& node, const std::vector<int64_t>& perm) {
-  std::vector<size_t> indices{0};
-  TransposeInputs(ctx, node, perm, indices);
-}
-
 // Inserts a Transpose op on the ith output of a node. Returns the new, transposed output.
 // Updates shape information assuming that the output from the node will have a transposed shape (using perm_inv)
 // but the overall (returned) output will match the initial shape.
-static std::string_view TransposeOutput(api::GraphRef& graph, api::NodeRef& node, size_t i,
-                                        const std::vector<int64_t>& perm,
-                                        const std::vector<int64_t>& perm_inv) {
+std::string_view TransposeOutput(api::GraphRef& graph, api::NodeRef& node, size_t i,
+                                 const std::vector<int64_t>& perm,
+                                 const std::vector<int64_t>& perm_inv) {
   // Make transpose without input initially, then add it to avoid cyclic reference.
 
   // X -> Node -> Y,   Transpose
@@ -650,10 +609,11 @@ static std::string_view TransposeOutput(api::GraphRef& graph, api::NodeRef& node
 
 // Inserts a Transpose op on all node outputs and updates the shapes of the node outputs. Skips if perm is identity.
 // See TransposeOutput for details on shape updates.
-static void TransposeOutputs(OptimizerCtx& ctx, api::NodeRef& node, const std::vector<int64_t>& perm) {
+void TransposeOutputs(OptimizerCtx& ctx, api::NodeRef& node, const std::vector<int64_t>& perm) {
   if (IsIdentityPerm(perm)) {
     return;
   }
+
   auto perm_inv = InvertPerm(perm);
   for (size_t j = 0; j < node.Outputs().size(); ++j) {
     TransposeOutput(ctx.graph, node, j, perm, perm_inv);
@@ -692,7 +652,7 @@ static int EstimateValueRank(const api::GraphRef& graph, std::string_view input)
   return rank;
 }
 
-static const HandlerInfo* GetHandler(api::NodeRef& node, bool allow_extended_ops);
+static const HandlerInfo* GetHandler(api::NodeRef& node, const HandlerMap& extended_handlers);
 
 // Returns true if the provided transpose node is only consumed by nodes we can likely push it through.
 static bool CanLikelyRemoveTranspose(const api::GraphRef& graph, api::NodeRef& transpose) {
@@ -701,7 +661,8 @@ static bool CanLikelyRemoveTranspose(const api::GraphRef& graph, api::NodeRef& t
     return false;
   }
   for (auto& node : consumers->nodes) {
-    if (GetHandler(*node, true) == nullptr) {
+    // TODO: Originally this code enabled extended handlers. To replicate that we need to pass those through
+    if (GetHandler(*node, /*true*/ {}) == nullptr) {
       return false;
     }
   }
@@ -776,7 +737,7 @@ static bool HandleSimpleNodeBase(HandlerArgs& args, bool broadcast_inputs) {
 }
 
 // Transposes all inputs and all outputs
-static bool HandleSimpleNode(HandlerArgs& args) {
+bool HandleSimpleNode(HandlerArgs& args) {
   return HandleSimpleNodeBase(args, /*broadcast_inputs*/ false);
 }
 
@@ -791,17 +752,10 @@ std::vector<size_t> AllInputs(OptimizerCtx& ctx, api::NodeRef& node) {
 }
 
 constexpr HandlerInfo simple_node_handler = {&AllInputs, &HandleSimpleNode};
-
-std::vector<size_t> FirstInput(OptimizerCtx& ctx, api::NodeRef& node) {
-  (void)ctx;
-  (void)node;
-  return {0};
-}
-
 constexpr HandlerInfo node_1_inp_handler = {&FirstInput, &HandleSimpleNode};
 
 // Node with all inputs broadcastable
-static bool HandleSimpleNodeBroadcast(HandlerArgs& args) {
+bool HandleSimpleNodeBroadcast(HandlerArgs& args) {
   return HandleSimpleNodeBase(args, /*broadcast_inputs*/ true);
 }
 
@@ -821,7 +775,7 @@ std::vector<size_t> NonScalarInputs(OptimizerCtx& ctx, api::NodeRef& node) {
 constexpr HandlerInfo broadcast_node_handler = {&NonScalarInputs, &HandleSimpleNodeBroadcast};
 
 // Transposes all inputs and all outputs. Updates axis attribute.
-static bool HandleSimpleNodeWithAxis(HandlerArgs& args, std::optional<int64_t> default_axis = std::nullopt) {
+bool HandleSimpleNodeWithAxis(HandlerArgs& args, std::optional<int64_t> default_axis /*std::nullopt*/) {
   size_t rank = args.perm.size();
   std::optional<int64_t> axis = args.node.GetAttributeInt("axis");
   if (axis == std::nullopt) {
@@ -970,7 +924,7 @@ static void PermuteInput(api::GraphRef& graph, api::NodeRef& node, size_t i, con
   node.SetInput(i, gather_output);
 }
 
-static bool HandleResize([[maybe_unused]] HandlerArgs& args) {
+bool HandleResize([[maybe_unused]] HandlerArgs& args) {
 #if defined(USE_CUDA) || defined(USE_ROCM)
   // The CUDA Resize kernel requires that the input is NCHW, so we can't push a Transpose through a Resize
   // in ORT builds with CUDA enabled.
@@ -1086,7 +1040,7 @@ static bool HandleReduceOpWithArg(HandlerArgs& args) {
   return true;
 }
 
-static bool HandleReduceOps(HandlerArgs& args) {
+bool HandleReduceOps(HandlerArgs& args) {
   if ((args.node.OpType() == "ReduceSum" && args.ctx.opset < 13) ||
       // or all other reduce operators since opset 18
       (args.node.OpType() != "ReduceSum" && args.ctx.opset < 18)) {
@@ -1678,85 +1632,6 @@ static bool HandleReshape(HandlerArgs& args) {
 
 constexpr HandlerInfo reshape_handler = {&FirstInput, &HandleReshape, /*transposes_outputs*/ false};
 
-static bool HandleQLinearConcat(HandlerArgs& args) {
-  return HandleSimpleNodeWithAxis(args);
-}
-
-std::vector<size_t> QLinearConcatInputs(OptimizerCtx& ctx, api::NodeRef& node) {
-  (void)ctx;
-  std::vector<size_t> indices;
-  size_t num_inputs = node.Inputs().size();
-  for (size_t i = 2; i < num_inputs; i += 3) {
-    indices.push_back(i);
-  }
-  return indices;
-}
-
-constexpr HandlerInfo q_linear_concat_handler = {&QLinearConcatInputs, &HandleQLinearConcat};
-
-static bool HandleQLinearBinaryOp(HandlerArgs& args) {
-  return HandleSimpleNodeBase(args, /*broadcast_inputs*/ true);
-}
-
-std::vector<size_t> QLinearBinaryOpInputs(OptimizerCtx& ctx, api::NodeRef& node) {
-  (void)ctx;
-  (void)node;
-  // Inputs are: [A, A_scale, A_zero_point, B, B_scale, B_zero_point, C_scale, C_zero_point],
-  // we want [A, B].
-  return {0, 3};
-}
-
-constexpr HandlerInfo q_linear_binary_op_handler = {&QLinearBinaryOpInputs, &HandleQLinearBinaryOp};
-
-static bool HandleQLinearPoolOp(HandlerArgs& args) {
-  // Swap between channel first/last variants. Only works for applicable values of perm.
-  int64_t channels_last = args.node.GetAttributeIntDefault("channels_last", 0);
-  size_t rank = args.perm.size();
-  if (rank < 2) return false;
-  auto p = ChannelLastToFirstPerm(rank);
-  if ((!channels_last && args.perm == p) || (channels_last && args.perm_inv == p)) {
-    args.node.SetAttributeInt("channels_last", 1 - channels_last);
-    TransposeFirstInput(args.ctx, args.node, args.perm_inv);
-    TransposeOutputs(args.ctx, args.node, args.perm);
-    return true;
-  }
-  return false;
-}
-
-constexpr HandlerInfo q_linear_pool_op_handler = {&FirstInput, &HandleQLinearPoolOp};
-
-static bool HandleMaxPool(HandlerArgs& args) {
-  // For CPU EP replace with NhwcMaxPool if possible. Only int8 and uint8 dtypes are supported by NhwcMaxPool.
-  if (args.node.GetExecutionProviderType() != "CPUExecutionProvider") {
-    return false;
-  }
-
-  auto outputs = args.node.Outputs();
-  if (outputs.size() == 2 && outputs[1] != "") {
-    // Can't optimize if optional "indices" output is provided
-    return false;
-  }
-
-  auto info = args.ctx.graph.GetValueInfo(outputs[0]);
-  api::DataType dtype = info->DType();
-  if (dtype != api::DataType::UINT8 && dtype != api::DataType::INT8) {
-    return false;
-  }
-
-  size_t rank = args.perm.size();
-  if (args.perm != ChannelLastToFirstPerm(rank)) {
-    return false;
-  }
-
-  auto new_node = SwapNodeOpTypeDomainAndSinceVersion(args.ctx.graph, args.node, "NhwcMaxPool", "com.microsoft", 1);
-  new_node->ClearAttribute("storage_order");  // Only relevant for indices output. Prohibited for NhwcMaxPool.
-  TransposeFirstInput(args.ctx, *new_node, args.perm_inv);
-  TransposeOutputs(args.ctx, *new_node, args.perm);
-  return true;
-}
-
-constexpr HandlerInfo max_pool_op_handler = {&FirstInput, &HandleMaxPool};
-
 // TODO: check binary size of this and replace it with constexpr if large
 static const std::unordered_map<std::string_view, const HandlerInfo&> handler_map{
     {"Cast", simple_node_handler},
@@ -1861,22 +1736,11 @@ static const std::unordered_map<std::string_view, const HandlerInfo&> handler_ma
     {"Reshape", reshape_handler},
 };
 
-static const std::unordered_map<std::string_view, const HandlerInfo&> extended_handler_map{
-    {"com.microsoft.QLinearReduceMean", reduce_op_handler},
-    {"com.microsoft.QLinearSigmoid", node_1_inp_handler},
-    {"com.microsoft.QLinearLeakyRelu", node_1_inp_handler},
-    {"com.microsoft.QLinearConcat", q_linear_concat_handler},
-    {"com.microsoft.QLinearAdd", q_linear_binary_op_handler},
-    {"com.microsoft.QLinearMul", q_linear_binary_op_handler},
-    {"com.microsoft.QLinearAveragePool", q_linear_pool_op_handler},
-    {"com.microsoft.QLinearGlobalAveragePool", q_linear_pool_op_handler},
-    {"MaxPool", max_pool_op_handler},
-};
-
-static const HandlerInfo* GetHandler(api::NodeRef& node, bool allow_extended_ops) {
+static const HandlerInfo* GetHandler(api::NodeRef& node, const HandlerMap& extended_handlers) {
   std::string key;
   auto domain = node.Domain();
   auto op_type = node.OpType();
+
   if (domain == onnxruntime::kOnnxDomain || domain == onnxruntime::kOnnxDomainAlias) {
     key = std::string(op_type);
   } else if (domain == onnxruntime::kMSDomain) {
@@ -1885,15 +1749,17 @@ static const HandlerInfo* GetHandler(api::NodeRef& node, bool allow_extended_ops
     return nullptr;
   }
 
-  auto match = handler_map.find(key);
+  // extended map is higher priority
+  auto match = extended_handlers.find(key);
+  if (match != extended_handlers.end()) {
+    return &match->second;
+  }
+
+  match = handler_map.find(key);
   if (match != handler_map.end()) {
     return &match->second;
-  } else if (allow_extended_ops) {
-    match = extended_handler_map.find(key);
-    if (match != extended_handler_map.end()) {
-      return &match->second;
-    }
   }
+
   return nullptr;
 }
 
@@ -1948,7 +1814,7 @@ static bool ShouldPushTranspose(const api::GraphRef& graph, const api::NodeRef& 
 bool ProcessTranspose(OptimizerCtx& ctx, api::NodeRef& transpose, api::NodeRef& node,
                       const std::vector<int64_t>& perm, size_t transpose_input_index,
                       const std::unordered_set<std::string>& outputs_leading_to_transpose) {
-  const HandlerInfo* info = GetHandler(node, ctx.allow_extended_ops);
+  const HandlerInfo* info = GetHandler(node, ctx.extended_handlers);
   if (info == nullptr) {
     return false;
   }
@@ -1981,10 +1847,11 @@ bool ProcessTranspose(OptimizerCtx& ctx, api::NodeRef& transpose, api::NodeRef& 
 }
 
 // Returns nullopt if graph opset is unsupported.
-std::optional<OptimizerCtx> MakeOptimizerContext(api::GraphRef& graph, bool allow_extended_ops,
+std::optional<OptimizerCtx> MakeOptimizerContext(api::GraphRef& graph,
                                                  const std::string& provider_type,
                                                  OptimizerMode mode,
                                                  CostCheckFn cost_check_fn,
+                                                 const HandlerMap& extended_handlers,
                                                  const std::unordered_set<std::string_view>& layout_sensitive_ops,
                                                  std::string& error_msg) {
   auto opset = graph.Opset("");
@@ -2001,14 +1868,7 @@ std::optional<OptimizerCtx> MakeOptimizerContext(api::GraphRef& graph, bool allo
     return std::nullopt;
   }
 
-  if (allow_extended_ops) {
-    auto ms_opset = graph.Opset("com.microsoft");
-    if (ms_opset == std::nullopt || *ms_opset != 1) {
-      allow_extended_ops = false;
-    }
-  }
-
-  OptimizerCtx ctx{*opset, graph, allow_extended_ops, cost_check_fn, provider_type, mode, layout_sensitive_ops};
+  OptimizerCtx ctx{*opset, graph, provider_type, mode, cost_check_fn, extended_handlers, layout_sensitive_ops};
   return ctx;
 }
 
@@ -2032,7 +1892,7 @@ OptimizeResult OptimizeImpl(OptimizerCtx& ctx) {
     auto outputs = node.Outputs();
     for (auto out : outputs) {
       if (outputs_leading_to_transpose.find(std::string(out)) != outputs_leading_to_transpose.end()) {
-        const HandlerInfo* info = GetHandler(node, ctx.allow_extended_ops);
+        const HandlerInfo* info = GetHandler(node, ctx.extended_handlers);
         // Determine if node is supported and produces transposed outputs when pushed.
         if (info != nullptr && info->transposes_outputs) {
           auto input_indices = info->transposible_inputs_fn(ctx, node);
@@ -2168,13 +2028,17 @@ OptimizeResult OptimizeImpl(OptimizerCtx& ctx) {
 const std::unordered_set<std::string_view>& GetLayoutSensitiveOps() {
   // List of all layout sensitive ops defined in ONNX standard.
   static std::unordered_set<std::string_view> layout_sensitive_ops = {
+      // normalization
       "BatchNormalization", "InstanceNormalization",
 
+      // convolutions
       "Conv", "QLinearConv", "ConvTranspose",
 
+      // pooling
       "AveragePool", "LpPool", "MaxPool", "MaxUnpool",
       "GlobalAveragePool", "GlobalLpPool", "GlobalMaxPool",
 
+      // other
       "LRN",
       "GridSample",
       "DepthToSpace", "SpaceToDepth"};
@@ -2182,15 +2046,18 @@ const std::unordered_set<std::string_view>& GetLayoutSensitiveOps() {
   return layout_sensitive_ops;
 }
 
-OptimizeResult Optimize(api::GraphRef& graph, bool allow_extended_ops,
-                        const std::string& provider_type, OptimizerMode mode,
+OptimizeResult Optimize(api::GraphRef& graph,
+                        const std::string& provider_type,
+                        OptimizerMode mode,
                         CostCheckFn cost_check_fn,
+                        const HandlerMap& extended_handlers,
                         const std::unordered_set<std::string_view>& layout_sensitive_ops) {
   OptimizeResult result{};
 
   std::string error_msg;
-  auto ctx = MakeOptimizerContext(graph, allow_extended_ops, provider_type, mode, cost_check_fn, layout_sensitive_ops,
+  auto ctx = MakeOptimizerContext(graph, provider_type, mode, cost_check_fn, extended_handlers, layout_sensitive_ops,
                                   error_msg);
+
   if (ctx == std::nullopt) {
     if (!error_msg.empty()) {
       result.error_msg = error_msg;
@@ -2202,46 +2069,4 @@ OptimizeResult Optimize(api::GraphRef& graph, bool allow_extended_ops,
   return OptimizeImpl(*ctx);
 }
 
-void WrapTransposesAroundNode(api::GraphRef& graph, api::NodeRef& node,
-                              const std::vector<const std::vector<int64_t>*>& input_perms,
-                              const std::vector<const std::vector<int64_t>*>& output_perms) {
-  for (size_t i = 0; i < input_perms.size(); ++i) {
-    const std::vector<int64_t>* input_perm = input_perms[i];
-    if (input_perm != nullptr) {
-      TransposeInput(graph, node, i, *input_perm, InvertPerm(*input_perm));
-    }
-  }
-  for (size_t i = 0; i < output_perms.size(); ++i) {
-    const std::vector<int64_t>* output_perm = output_perms[i];
-    if (output_perm != nullptr) {
-      TransposeOutput(graph, node, i, *output_perm, InvertPerm(*output_perm));
-    }
-  }
-}
-
-static std::unique_ptr<api::NodeRef> SwapNodeImpl(api::GraphRef& graph, api::NodeRef& node,
-                                                  std::string_view op_type, std::string_view domain,
-                                                  std::optional<int> since_version) {
-  auto outputs = node.Outputs();
-  auto new_node = graph.CopyNode(node, op_type, domain, since_version);
-
-  for (size_t j = 0; j < outputs.size(); ++j) {
-    if (outputs[j] != "") {
-      graph.MoveOutput(node, j, *new_node, j);
-    }
-  }
-  graph.RemoveNode(node);
-  return new_node;
-}
-
-std::unique_ptr<api::NodeRef> SwapNodeOpTypeAndDomain(api::GraphRef& graph, api::NodeRef& node,
-                                                      std::string_view op_type, std::string_view domain) {
-  return SwapNodeImpl(graph, node, op_type, domain, std::nullopt);
-}
-
-std::unique_ptr<api::NodeRef> SwapNodeOpTypeDomainAndSinceVersion(api::GraphRef& graph, api::NodeRef& node,
-                                                                  std::string_view op_type, std::string_view domain,
-                                                                  int since_version) {
-  return SwapNodeImpl(graph, node, op_type, domain, since_version);
-}
-}  // namespace onnx_layout_transformation
+}  // namespace onnx_transpose_optimization

@@ -6,13 +6,16 @@
 #include "core/optimizer/initializer.h"
 #include "core/optimizer/nhwc_transformer.h"
 #include "core/optimizer/utils.h"
-#include "core/optimizer/transpose_optimizer/optimizer_utils.h"
+#include "core/optimizer/layout_transformation/layout_transformation.h"
+#include "core/optimizer/transpose_optimization/ort_optimizer_utils.h"
+#include "core/optimizer/transpose_optimization/ort_transpose_optimizer.h"
 
 using namespace ONNX_NAMESPACE;
 using namespace ::onnxruntime::common;
-using namespace onnx_layout_transformation;
+using namespace onnx_transpose_optimization;
 
 namespace onnxruntime {
+using namespace layout_transformation;
 
 Status NhwcTransformer::ApplyImpl(Graph& graph, bool& modified, int graph_level, const logging::Logger& logger) const {
 #if defined(ORT_MINIMAL_BUILD)
@@ -74,8 +77,9 @@ Status NhwcTransformer::ApplyImpl(Graph& graph, bool& modified, int graph_level,
   }
 
   if (modified) {
-    Optimize(*api_graph, /*allow_extended_ops*/ true, kCpuExecutionProvider, OptimizerMode::OPTIMIZE_TRANSPOSE,
-             OrtEPCostCheck);
+    Optimize(*api_graph, kCpuExecutionProvider, OptimizerMode::OPTIMIZE_TRANSPOSE,
+             OrtEPCostCheck,
+             OrtExtendedHandlers());
   }
 
   return Status::OK();
