@@ -8,37 +8,6 @@ using namespace onnx_transpose_optimization;
 
 namespace onnxruntime {
 
-// Special case For CPU EP where we can potentially replace with NhwcMaxPool.
-// Only int8 and uint8 dtypes are supported by NhwcMaxPool.
-static bool HandleMaxPool(HandlerArgs& args) {
-  if (args.node.GetExecutionProviderType() != "CPUExecutionProvider") {
-    return false;
-  }
-
-  auto outputs = args.node.Outputs();
-  if (outputs.size() == 2 && outputs[1] != "") {
-    // Can't optimize if optional "indices" output is provided
-    return false;
-  }
-
-  auto info = args.ctx.graph.GetValueInfo(outputs[0]);
-  api::DataType dtype = info->DType();
-  if (dtype != api::DataType::UINT8 && dtype != api::DataType::INT8) {
-    return false;
-  }
-
-  size_t rank = args.perm.size();
-  if (args.perm != ChannelLastToFirstPerm(rank)) {
-    return false;
-  }
-
-  auto new_node = SwapNodeOpTypeDomainAndSinceVersion(args.ctx.graph, args.node, "NhwcMaxPool", "com.microsoft", 1);
-  new_node->ClearAttribute("storage_order");  // Only relevant for indices output. Prohibited for NhwcMaxPool.
-  TransposeFirstInput(args.ctx, *new_node, args.perm_inv);
-  TransposeOutputs(args.ctx, *new_node, args.perm);
-  return true;
-}
-
 static bool HandleQLinearConcat(HandlerArgs& args) {
   return HandleSimpleNodeWithAxis(args);
 }
@@ -85,7 +54,6 @@ static bool HandleQLinearPoolOp(HandlerArgs& args) {
 constexpr HandlerInfo q_linear_pool_op_handler = {&FirstInput, &HandleQLinearPoolOp};
 
 // ops using base handler implementations
-constexpr HandlerInfo max_pool_op_handler = {&FirstInput, &HandleMaxPool};
 constexpr HandlerInfo node_1_inp_handler = {&FirstInput, &HandleSimpleNode};
 constexpr HandlerInfo reduce_op_handler = {&FirstInput, &HandleReduceOps};
 
@@ -100,8 +68,6 @@ const HandlerMap& OrtExtendedHandlers() {
       {"com.microsoft.QLinearMul", q_linear_binary_op_handler},
       {"com.microsoft.QLinearAveragePool", q_linear_pool_op_handler},
       {"com.microsoft.QLinearGlobalAveragePool", q_linear_pool_op_handler},
-      {"MaxPool", max_pool_op_handler},
-      // TODO: Add Resize. Figure out how/where to do that
   };
 
   return extended_handler_map;

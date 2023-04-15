@@ -9,19 +9,91 @@
 #include "core/optimizer/transpose_optimization/ort_transpose_optimizer.h"
 #include "core/optimizer/transpose_optimization/ort_optimizer_utils.h"
 
-// #include "core/framework/execution_provider.h"
-// #include "core/framework/tensorprotoutils.h"
-// #include "core/graph/graph_utils.h"
-// #include "core/graph/graph_viewer.h"
-// #include "core/optimizer/transpose_optimization/layout_transformation.h"
-// #include "core/optimizer/transpose_optimization/layout_transformation_potentially_added_ops.h"
-// #include "core/optimizer/transpose_optimization/optimizer_utils.h"
-// #include "core/providers/cpu/tensor/transpose.h"
-
 using namespace onnx_transpose_optimization;
 
 namespace onnxruntime {
 namespace layout_transformation {
+
+bool IsNhwcExecutionProvider(std::string_view ep) {
+  static const std::unordered_set<std::string_view> nhwc_eps = {
+      kNnapiExecutionProvider,
+      kQnnExecutionProvider,
+      kXnnpackExecutionProvider,
+  };
+
+  return nhwc_eps.find(ep) != nhwc_eps.end();
+}
+
+// TODO: Figure out how/where this MaxPool handling should be plugged in. We currently don't have a well defined place
+// where we run CPU EP specific things. This could maybe be an L2 optimizer that uses the basic TransposeOptimizer
+// as it has to run after partitioning. currently it probably only gets indirectly triggered by the L3 NhwcTransformer
+// which isn't ideal.
+//
+// Alternatively maybe it should only be used by the NhwcTransformer
+//
+// Special case For CPU EP where we can potentially replace with NhwcMaxPool.
+// Only int8 and uint8 dtypes are supported by NhwcMaxPool.
+static bool HandleMaxPool(HandlerArgs& args) {
+  if (args.node.GetExecutionProviderType() != "CPUExecutionProvider") {
+    return false;
+  }
+
+  auto outputs = args.node.Outputs();
+  if (outputs.size() == 2 && outputs[1] != "") {
+    // Can't optimize if optional "indices" output is provided
+    return false;
+  }
+
+  auto info = args.ctx.graph.GetValueInfo(outputs[0]);
+  api::DataType dtype = info->DType();
+  if (dtype != api::DataType::UINT8 && dtype != api::DataType::INT8) {
+    return false;
+  }
+
+  size_t rank = args.perm.size();
+  if (args.perm != ChannelLastToFirstPerm(rank)) {
+    return false;
+  }
+
+  auto new_node = SwapNodeOpTypeDomainAndSinceVersion(args.ctx.graph, args.node, "NhwcMaxPool", "com.microsoft", 1);
+  new_node->ClearAttribute("storage_order");  // Only relevant for indices output. Prohibited for NhwcMaxPool.
+  TransposeFirstInput(args.ctx, *new_node, args.perm_inv);
+  TransposeOutputs(args.ctx, *new_node, args.perm);
+  return true;
+}
+
+constexpr HandlerInfo max_pool_op_handler = {&FirstInput, &HandleMaxPool};
+
+// make sure the Resize node input is NHWC by inserting transposes on input, scales and sizes if needed
+static bool LayoutSensitiveHandleResize(HandlerArgs& args) {
+  // TODO: Add logic around per-EP requirements.
+  // If the EP wants NHWC we can use the ONNX op but need to make sure the layout is transposed if needed.
+  // We also need to treat the Resize as a layout sensitive op from then on so the logic in
+  // onnx_transpose_optimizer::OptimizeImpl leaves it alone
+
+  bool node_assigned_to_ep = !args.ctx.provider_type.empty() &&
+                             args.node.GetExecutionProviderType() == args.ctx.provider_type;
+
+  if (node_assigned_to_ep && IsNhwcExecutionProvider(args.ctx.provider_type)) {
+    // could validate that the current input is NHWC as we expect to only be using this handler as part of layout
+    // transformation, and the Resize should have been wrapped in Transpose nodes to convert to NHWC.
+    return false;  // leave as-is
+  } else {
+    // Call base handler. TODO: See if this is needed.
+    return HandleResize(args);
+  }
+}
+
+constexpr HandlerInfo layout_sensitive_resize_handler = {&FirstInput, &LayoutSensitiveHandleResize};
+
+const HandlerMap& OrtLayoutSensitiveExtendedHandlers() {
+  static const HandlerMap extended_handler_map{
+      {"MaxPool", max_pool_op_handler},
+      {"Resize", layout_sensitive_resize_handler},
+  };
+
+  return extended_handler_map;
+}
 
 // Layout sensitive NCHW ops. TransformLayoutForEP will wrap these with Transpose nodes to convert the input
 // data to NHWC and output data back to NCHW, and move the op to the internal NHWC domain (kMSInternalNHWCDomain).
@@ -43,25 +115,25 @@ const std::unordered_set<std::string_view>& GetORTLayoutSensitiveOps() {
   return ort_layout_sensitive_ops;
 }
 
-const std::unordered_set<std::string_view>& GetEPLayoutSensitiveOps(const IExecutionProvider& execution_provider) {
-#if defined(USE_CUDA) || defined(USE_ROCM) || defined(USE_QNN)
-  // The CUDA/ROCM Resize kernel is layout sensitive as it only handles NCHW input.
-  // The CPU kernel and ONNX spec are not limited to handling NCHW input so are not layout sensitive, and
-  // onnx_transpose_optimization::HandleResize is used.
-  if (execution_provider == kCudaExecutionProvider ||
-      execution_provider == kRocmExecutionProvider ||
-      execution_provider == kQnnExecutionProvider) {
-    static std::unordered_set<std::string_view> ep_layout_sensitive_ops = []() {
-      std::unordered_set<std::string_view> layout_sensitive_ops{GetORTLayoutSensitiveOps()};
-      layout_sensitive_ops.insert("Resize");
-    }();
+const std::unordered_set<std::string_view> GetEPLayoutSensitiveOps(const IExecutionProvider& execution_provider) {
+  std::unordered_set<std::string_view> layout_sensitive_ops = GetORTLayoutSensitiveOps();
 
-    return ep_layout_sensitive_ops;
-  } else
-#else
-  ORT_UNUSED_PARAMETER(execution_provider);
-#endif
-    return GetORTLayoutSensitiveOps();
+  // EPs where the Resize implementation only handles one layout - either NCHW or NHWC. The ONNX spec for Resize is
+  // not layout specific.
+  //
+  // The CUDA/ROCM Resize kernel only handles NCHW input.
+  //
+  // TODO: This is wrong. We only use this list in TransformLayoutForEP and CUDA/ROCm don't use that as they want NCHW.
+  // What we need is a call to Optimize to make sure the Resize assigned to CUDA/ROCm is in NCHW format at the end of
+  // graph partitioning with a custom Resize handler that ensures that.
+  const auto& ep_type = execution_provider.Type();
+  if (ep_type == kCudaExecutionProvider ||
+      ep_type == kRocmExecutionProvider ||
+      ep_type == kQnnExecutionProvider) {
+    layout_sensitive_ops.insert("Resize");
+  }
+
+  return layout_sensitive_ops;
 }
 
 // Cost check for aggressively pushing the Transpose nodes involved in the layout transformation further out.
@@ -141,6 +213,8 @@ Status TransformLayoutForEP(Graph& graph, bool& modified, const IExecutionProvid
           if (constant != nullptr && constant->Data().size() > 0) {
             input_perms.push_back(&input_perm);
           } else {
+            // TODO: Fix inconsistency. We should Transpose the non-const inputs so that the result of our changes
+            // is consistent - all layout specific inputs are in NHWC format when we're done.
             input_perms.push_back(nullptr);
           }
         }
@@ -172,7 +246,7 @@ Status TransformLayoutForEP(Graph& graph, bool& modified, const IExecutionProvid
                              result.error_msg.value());
     }
 
-    // debug optimization of the new Tranpose nodes using PostLayoutTransformCostCheck
+    // debug optimization of the new Transpose nodes using PostLayoutTransformCostCheck
     if (debug_graph_fn) {
       debug_graph_fn(graph);
     }
