@@ -655,14 +655,14 @@ static int EstimateValueRank(const api::GraphRef& graph, std::string_view input)
 static const HandlerInfo* GetHandler(api::NodeRef& node, const HandlerMap& extended_handlers);
 
 // Returns true if the provided transpose node is only consumed by nodes we can likely push it through.
-static bool CanLikelyRemoveTranspose(const api::GraphRef& graph, api::NodeRef& transpose) {
+static bool CanLikelyRemoveTranspose(const api::GraphRef& graph, api::NodeRef& transpose,
+                                     const HandlerMap& extended_handlers) {
   auto consumers = graph.GetValueConsumers(transpose.Outputs()[0]);
   if (!consumers->comprehensive) {
     return false;
   }
   for (auto& node : consumers->nodes) {
-    // TODO: Originally this code enabled extended handlers. To replicate that we need to pass those through
-    if (GetHandler(*node, /*true*/ {}) == nullptr) {
+    if (GetHandler(*node, extended_handlers) == nullptr) {
       return false;
     }
   }
@@ -672,7 +672,8 @@ static bool CanLikelyRemoveTranspose(const api::GraphRef& graph, api::NodeRef& t
 // Estimates the cost of transposing an input. Currently uses rank heuristic. Negative if transpose is removed.
 // Feel free to improve as needed.
 static int EstimateTransposeValueCost(const api::GraphRef& graph, std::string_view input,
-                                      const std::vector<int64_t>& perm_inv) {
+                                      const std::vector<int64_t>& perm_inv,
+                                      const HandlerMap& extended_handlers) {
   // Case 1: Transposing constants probably costs nothing.
   std::unique_ptr<api::TensorRef> constant = graph.GetConstant(input);
   if (constant != nullptr) {
@@ -684,7 +685,7 @@ static int EstimateTransposeValueCost(const api::GraphRef& graph, std::string_vi
   if (node != nullptr && node->IsOp("Transpose")) {
     std::optional<std::vector<int64_t>> perm2 = GetPermAttrIfValid(*node);
     if (perm2 != std::nullopt) {
-      if (*perm2 == perm_inv && CanLikelyRemoveTranspose(graph, *node)) {
+      if (*perm2 == perm_inv && CanLikelyRemoveTranspose(graph, *node, extended_handlers)) {
         return -EstimateValueRank(graph, input);
       } else {
         return 0;
@@ -699,11 +700,12 @@ static int EstimateTransposeValueCost(const api::GraphRef& graph, std::string_vi
 // Estimates total cost of transposing a node's inputs. Negative if transposing is beneficial.
 static int EstimateTransposeInputsCost(const api::GraphRef& graph, const api::NodeRef& node,
                                        const std::vector<int64_t>& perm_inv,
-                                       const std::vector<size_t>& input_indices) {
+                                       const std::vector<size_t>& input_indices,
+                                       const HandlerMap& extended_handlers) {
   auto inputs = node.Inputs();
   int cost = 0;
   for (size_t j : input_indices) {
-    cost += EstimateTransposeValueCost(graph, inputs[j], perm_inv);
+    cost += EstimateTransposeValueCost(graph, inputs[j], perm_inv, extended_handlers);
   }
   return cost;
 }
@@ -1757,12 +1759,13 @@ static int CalculateCost(const api::GraphRef& graph, const api::NodeRef& node,
                          const std::vector<int64_t>& perm,
                          const std::unordered_set<std::string>& outputs_leading_to_transpose,
                          const HandlerInfo& info,
-                         const std::vector<size_t>& input_indices) {
+                         const std::vector<size_t>& input_indices,
+                         const HandlerMap& extended_handlers) {
   // We require the input cost (number of transposes before the op) and the total cost to strictly decrease.
   // Strict decrease of the input cost ensures the optimization is stable, since the total cost decrease is just an
   // estimate (the transpose after the op may or may not cancel with a subsequent transpose). We don't want
   // repeated runs of the optimizer to have a transpose toggle between two inputs of a binary op.
-  int cost = EstimateTransposeInputsCost(graph, node, perm, input_indices);
+  int cost = EstimateTransposeInputsCost(graph, node, perm, input_indices, extended_handlers);
 
   if (cost < 0 && info.transposes_outputs) {
     // If the output will be transposed and won't ultimately cancel, factor in that cost.
@@ -1791,12 +1794,14 @@ static bool ShouldPushTranspose(const api::GraphRef& graph, const api::NodeRef& 
                                 const std::vector<int64_t>& perm,
                                 const std::unordered_set<std::string>& outputs_leading_to_transpose,
                                 const HandlerInfo& info,
-                                const std::vector<size_t> transposable_input_indices) {
+                                const std::vector<size_t> transposable_input_indices,
+                                const HandlerMap& extended_handlers) {
   if (node.IsOp("Transpose")) {
     return true;
   }
 
-  int cost = CalculateCost(graph, node, perm, outputs_leading_to_transpose, info, transposable_input_indices);
+  int cost = CalculateCost(graph, node, perm, outputs_leading_to_transpose, info, transposable_input_indices,
+                           extended_handlers);
   return cost < 0;
 }
 
@@ -1822,7 +1827,8 @@ bool ProcessTranspose(OptimizerCtx& ctx, api::NodeRef& transpose, api::NodeRef& 
   }
 
   if (cost == CostCheckResult::kFallThrough) {
-    cost = ShouldPushTranspose(ctx.graph, node, perm, outputs_leading_to_transpose, *info, input_indices)
+    cost = ShouldPushTranspose(ctx.graph, node, perm, outputs_leading_to_transpose, *info, input_indices,
+                               ctx.extended_handlers)
                ? CostCheckResult::kPushTranspose
                : CostCheckResult::kStop;
   }
@@ -1914,11 +1920,6 @@ OptimizeResult OptimizeImpl(OptimizerCtx& ctx) {
     // as we do not know what each EP supports, it's safer to not optimize in order to maintain the EP assignments
     // made during partitioning.
     if (ignore_assigned_nodes && !node.GetExecutionProviderType().empty()) {
-      continue;
-    }
-
-    // we can't push a Transpose through any layout sensitive nodes
-    if (ctx.layout_sensitive_ops.count(node.OpType())) {
       continue;
     }
 
