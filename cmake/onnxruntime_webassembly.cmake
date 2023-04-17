@@ -232,7 +232,7 @@ else()
   endif()
 
   if (onnxruntime_ENABLE_WEBASSEMBLY_THREADS)
-    set_property(TARGET onnxruntime_webassembly APPEND_STRING PROPERTY LINK_FLAGS " -s EXPORT_NAME=ortWasmThreaded -s USE_PTHREADS=1")
+    set_property(TARGET onnxruntime_webassembly APPEND_STRING PROPERTY LINK_FLAGS " -s EXPORT_NAME=ortWasmThreaded")
     if (onnxruntime_ENABLE_WEBASSEMBLY_SIMD)
       set_target_properties(onnxruntime_webassembly PROPERTIES OUTPUT_NAME "ort-wasm-simd-threaded")
     else()
