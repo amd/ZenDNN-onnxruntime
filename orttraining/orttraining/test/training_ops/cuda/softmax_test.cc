@@ -158,7 +158,7 @@ static void TestSoftmaxGrad(const std::vector<int64_t>& dY_dims,
   test.AddAttribute<int64_t>("axis", axis);
 
   // create rand inputs
-  RandomValueGenerator random{};
+  RandomValueGenerator random{5566};
   std::vector<T> dY_data = random.Uniform<T>(dY_dims, -1.0f, 1.0f);
   // Add 1e-2 for numerical stability to prevent zero probability.
   std::vector<T> Y_data = random.Uniform<T>(Y_dims, -1.02f, 1.02f);
