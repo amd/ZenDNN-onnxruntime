@@ -30,7 +30,8 @@ class IExecutionProvider;
 
 namespace layout_transformation {
 /// <summary>
-/// Transforms data layout from NCHW to NHWC, using the kMSInternalNHWCDomain domain for updated nodes.
+/// Transforms data layout to the EPs preferred layout and runs the transpose optimizer for nodes assigned to the EP.
+/// When converting from NCHW to NHWC uses the kMSInternalNHWCDomain domain for updated nodes.
 ///
 /// This can be used by a compiling EP such as NNAPI, where the synthetic domain is a signal that the node has been
 /// updated to the EP's required layout, or an EP with statically registered kernels such as XNNPACK where a kernel
@@ -39,6 +40,9 @@ namespace layout_transformation {
 ///
 /// Transforms are applied to layout sensitive nodes assigned to execution_provider provided by the caller,
 /// and any other non-layout sensitive nodes in order to optimize the transposes as much as possible.
+///
+/// We call this for all EPs as transpose optimization for a Transpose -> Resize combination is EP specific so must
+/// run after the node is assigned to an EP.
 /// </summary>
 /// <param name="graph">graph to transform</param>
 /// <param name="modified">indicates whether the graph is modified during transformation</param>

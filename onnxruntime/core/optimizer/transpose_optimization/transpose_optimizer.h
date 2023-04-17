@@ -40,7 +40,6 @@ struct OptimizerCtx {
   int64_t opset;
   api::GraphRef& graph;
   const std::string provider_type;
-  OptimizerMode mode;
 
   CostCheckFn cost_check_fn;
 
@@ -48,7 +47,7 @@ struct OptimizerCtx {
   // If a handler is not found in this map, the default handlers will be used.
   const HandlerMap& extended_handlers;
 
-  // layout sensitive ops to be excluded from optimization when mode is OPTIMIZE_LAYOUT_TRANSFORM
+  // layout sensitive ops to be excluded from optimization
   const std::unordered_set<std::string_view>& layout_sensitive_ops;
 };
 

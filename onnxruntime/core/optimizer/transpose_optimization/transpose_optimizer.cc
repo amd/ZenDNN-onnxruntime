@@ -1839,7 +1839,6 @@ bool ProcessTranspose(OptimizerCtx& ctx, api::NodeRef& transpose, api::NodeRef& 
 // Returns nullopt if graph opset is unsupported.
 std::optional<OptimizerCtx> MakeOptimizerContext(api::GraphRef& graph,
                                                  const std::string& provider_type,
-                                                 OptimizerMode mode,
                                                  CostCheckFn cost_check_fn,
                                                  const HandlerMap& extended_handlers,
                                                  const std::unordered_set<std::string_view>& layout_sensitive_ops,
@@ -1858,7 +1857,7 @@ std::optional<OptimizerCtx> MakeOptimizerContext(api::GraphRef& graph,
     return std::nullopt;
   }
 
-  OptimizerCtx ctx{*opset, graph, provider_type, mode, cost_check_fn, extended_handlers, layout_sensitive_ops};
+  OptimizerCtx ctx{*opset, graph, provider_type, cost_check_fn, extended_handlers, layout_sensitive_ops};
   return ctx;
 }
 
@@ -1918,14 +1917,7 @@ OptimizeResult OptimizeImpl(OptimizerCtx& ctx) {
       continue;
     }
 
-    // TODO: Can this be simplified to simply check if the node is layout sensitive? We don't want to push a
-    // Transpose through any layout sensitive nodes, so the extra conditions might be unnecessary.
-    // orig:
-    // if (ctx.mode == OptimizerMode::OPTIMIZE_LAYOUT_TRANSFORM &&
-    //    ctx.layout_sensitive_ops.count(node.OpType()) &&
-    //    node.GetExecutionProviderType() != ctx.provider_type) {
-    //   If the current op is layout sensitive and it is not assigned to the given provider
-    // new:
+    // we can't push a Transpose through any layout sensitive nodes
     if (ctx.layout_sensitive_ops.count(node.OpType())) {
       continue;
     }
@@ -2042,14 +2034,13 @@ const std::unordered_set<std::string_view>& GetLayoutSensitiveOps() {
 
 OptimizeResult Optimize(api::GraphRef& graph,
                         const std::string& provider_type,
-                        OptimizerMode mode,
                         CostCheckFn cost_check_fn,
                         const HandlerMap& extended_handlers,
                         const std::unordered_set<std::string_view>& layout_sensitive_ops) {
   OptimizeResult result{};
 
   std::string error_msg;
-  auto ctx = MakeOptimizerContext(graph, provider_type, mode, cost_check_fn, extended_handlers, layout_sensitive_ops,
+  auto ctx = MakeOptimizerContext(graph, provider_type, cost_check_fn, extended_handlers, layout_sensitive_ops,
                                   error_msg);
 
   if (ctx == std::nullopt) {

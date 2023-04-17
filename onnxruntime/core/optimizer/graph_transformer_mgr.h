@@ -37,6 +37,5 @@ class GraphTransformerManager {
   unsigned steps_;
 
   InlinedHashMap<TransformerLevel, InlinedVector<std::unique_ptr<GraphTransformer>>> level_to_transformer_map_;
-  InlinedHashMap<std::string, GraphTransformer*> transformers_info_;
 };
 }  // namespace onnxruntime

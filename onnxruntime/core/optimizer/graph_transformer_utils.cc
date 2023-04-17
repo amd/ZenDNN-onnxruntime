@@ -245,7 +245,7 @@ InlinedVector<std::unique_ptr<GraphTransformer>> GenerateTransformers(
       // we want to run the TransposeOptimizer once more so that the EP aware Resize handling takes place.
       // this allows a Transpose node to be pushed through a Resize node if the Resize node is assigned to an EP
       // that does not have a layout sensitive Resize implementation.
-      transformers.emplace_back(std::make_unique<TransposeOptimizer>(std::move(cpu_allocator)));
+      // transformers.emplace_back(std::make_unique<TransposeOptimizer>(std::move(cpu_allocator)));
 
       const bool enable_quant_qdq_cleanup =
           session_options.config_options.GetConfigOrDefault(kOrtSessionOptionsEnableQuantQDQCleanup, "0") == "1";

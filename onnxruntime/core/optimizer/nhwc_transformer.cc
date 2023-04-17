@@ -76,8 +76,7 @@ Status NhwcTransformer::ApplyImpl(Graph& graph, bool& modified, int graph_level,
   }
 
   if (modified) {
-    Optimize(*api_graph, kCpuExecutionProvider, OptimizerMode::OPTIMIZE_TRANSPOSE,
-             OrtEPCostCheck, OrtExtendedHandlers());
+    Optimize(*api_graph, kCpuExecutionProvider, OrtEPCostCheck, OrtExtendedHandlers());
   }
 
   return Status::OK();

@@ -464,11 +464,6 @@ using CostCheckFn =
                                   const std::vector<int64_t>& perm,
                                   const std::unordered_set<std::string>& outputs_leading_to_transpose)>;
 
-enum class OptimizerMode {
-  OPTIMIZE_TRANSPOSE,        // simple transpose optimization
-  OPTIMIZE_LAYOUT_TRANSFORM  // transpose optimization post layout transformation
-};
-
 /// <summary>
 /// Gets a list of layout sensitive ops defined by ONNX standard.
 /// </summary>
@@ -495,20 +490,17 @@ using HandlerMap = std::unordered_map<std::string_view, const HandlerInfo&>;
 /// </summary>
 /// <param name="graph">The graph to optimize (or a portion of a graph, see api::GraphRef docs)</param>
 /// <param name="provider_type">Execution provider if applicable.</param>
-/// <param name="mode">Current mode. Optimizer can be called in the context of transpose optimizations or during
-/// layout transformations.</param>
 /// <param name="cost_check_fn">Optional cost checking function to determine whether it is worth pushing a Transpose
 /// through a node.</param>
 /// <param name="extended_handlers">Map of handlers for non-ONNX operators and/or ONNX operators where special handling
 /// is required (e.g. ONNX Resize is layout agnostic but may be implemented in a layout sensitive way).
 /// <param name="layout_sensitive_ops">List of ops which are treated as layout sensitive by the ONNX standard
-/// as well as any runtime specific ops. These ops should be provided when mode is set to OPTIMIZE_LAYOUT_TRANSFORM.
-/// If these ops are not provided, transpose optimizer may convert the layout for these ops </param>
+/// as well as any runtime specific ops. We will not push a Transpose through node for an operator in this set
+/// even if a handler is registered for the operator.</param>
 /// <returns>OptimizeResult. If error_msg is set the Optimize failed. If not set, graph_modified indicates whether
 /// any changes were required during optimization.</returns>
 OptimizeResult Optimize(api::GraphRef& graph,
                         const std::string& provider_type = "",
-                        OptimizerMode mode = OptimizerMode::OPTIMIZE_TRANSPOSE,
                         CostCheckFn cost_check_fn = nullptr,
                         const HandlerMap& extended_handlers = {},
                         const std::unordered_set<std::string_view>& layout_sensitive_ops = {});

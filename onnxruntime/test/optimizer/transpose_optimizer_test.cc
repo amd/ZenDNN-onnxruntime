@@ -350,10 +350,12 @@ TEST(TransposeOptimizerTests, TestResize) {
     EXPECT_EQ(transpose_cost, 0);
   };
 
+  // Level2 as we require nodes to be assigned to EPs before we change the layout of a Resize as some EP
+  // implementations of Resize are layout sensitive.
   TransformerTester(build_test_case_1,
                     check_optimized_graph_1,
                     TransformerLevel::Default,
-                    TransformerLevel::Level1,
+                    TransformerLevel::Level2,
                     /*opset_version*/ {10, 18});
 }
 
@@ -378,10 +380,12 @@ TEST(TransposeOptimizerTests, TestResizeOpset11) {
     EXPECT_EQ(transpose_cost, 0);
   };
 
+  // Level2 as we require nodes to be assigned to EPs before we change the layout of a Resize as some EP
+  // implementations of Resize are layout sensitive.
   TransformerTester(build_test_case_1,
                     check_optimized_graph_1,
                     TransformerLevel::Default,
-                    TransformerLevel::Level1,
+                    TransformerLevel::Level2,
                     /*opset_version*/ {11, 18});
 }
 
@@ -406,10 +410,12 @@ TEST(TransposeOptimizerTests, TestResizeOpset15) {
     EXPECT_EQ(transpose_cost, 0);
   };
 
+  // Level2 as we require nodes to be assigned to EPs before we change the layout of a Resize as some EP
+  // implementations of Resize are layout sensitive.
   TransformerTester(build_test_case_1,
                     check_optimized_graph_1,
                     TransformerLevel::Default,
-                    TransformerLevel::Level1,
+                    TransformerLevel::Level2,
                     /*opset_version*/ {15, 18});
 }
 
@@ -436,10 +442,12 @@ TEST(TransposeOptimizerTests, TestResizeSizeRoi) {
     EXPECT_EQ(transpose_cost, 0);
   };
 
+  // Level2 as we require nodes to be assigned to EPs before we change the layout of a Resize as some EP
+  // implementations of Resize are layout sensitive.
   TransformerTester(build_test_case_1,
                     check_optimized_graph_1,
                     TransformerLevel::Default,
-                    TransformerLevel::Level1,
+                    TransformerLevel::Level2,
                     /*opset_version*/ {15, 18});
 }
 
@@ -470,10 +478,12 @@ TEST(TransposeOptimizerTests, TestResizeRoiScalesZeroRank0) {
     EXPECT_EQ(transpose_cost, 0);
   };
 
+  // Level2 as we require nodes to be assigned to EPs before we change the layout of a Resize as some EP
+  // implementations of Resize are layout sensitive.
   TransformerTester(build_test_case_1,
                     check_optimized_graph_1,
                     TransformerLevel::Default,
-                    TransformerLevel::Level1,
+                    TransformerLevel::Level2,
                     {12, 18});
 }
 
@@ -499,10 +509,12 @@ TEST(TransposeOptimizerTests, TestResizeNonconst) {
     EXPECT_EQ(transpose_cost, 0);
   };
 
+  // Level2 as we require nodes to be assigned to EPs before we change the layout of a Resize as some EP
+  // implementations of Resize are layout sensitive.
   TransformerTester(build_test_case_1,
                     check_optimized_graph_1,
                     TransformerLevel::Default,
-                    TransformerLevel::Level1,
+                    TransformerLevel::Level2,
                     /*opset_version*/ {11, 18});
 }
 
@@ -528,10 +540,12 @@ TEST(TransposeOptimizerTests, TestResizeNonconstOpset13) {
     EXPECT_EQ(transpose_cost, 0);
   };
 
+  // Level2 as we require nodes to be assigned to EPs before we change the layout of a Resize as some EP
+  // implementations of Resize are layout sensitive.
   TransformerTester(build_test_case_1,
                     check_optimized_graph_1,
                     TransformerLevel::Default,
-                    TransformerLevel::Level1,
+                    TransformerLevel::Level2,
                     /*opset_version*/ {13, 18});
 }
 
@@ -3734,22 +3748,22 @@ TEST(TransposeOptimizerTests, TestDequantizeLinearTransposePropagation) {
   };
 
   auto check_graph = [&](InferenceSessionWrapper& session) {
-      const auto& graph = session.GetGraph();
+    const auto& graph = session.GetGraph();
 
-      const auto op_count = CountOpsInGraph(graph);
-      decltype(op_count) expected_op_count{
-          {"DequantizeLinear", 2},  // EnsureUniqueDQForNodeUnit should duplicate the original DQ
-          {"Transpose", 2},
-      };
-      ASSERT_EQ(op_count, expected_op_count);
+    const auto op_count = CountOpsInGraph(graph);
+    decltype(op_count) expected_op_count{
+        {"DequantizeLinear", 2},  // EnsureUniqueDQForNodeUnit should duplicate the original DQ
+        {"Transpose", 2},
+    };
+    ASSERT_EQ(op_count, expected_op_count);
 
-      // Transposes should be pushed, so check for Transpose -> DQ edges
-      for (const auto& node : graph.Nodes()) {
-        if (node.OpType() == "Transpose") {
-          ASSERT_EQ(node.GetOutputEdgesCount(), static_cast<size_t>(1));
-          ASSERT_EQ(node.OutputEdgesBegin()->GetNode().OpType(), "DequantizeLinear");
-        }
+    // Transposes should be pushed, so check for Transpose -> DQ edges
+    for (const auto& node : graph.Nodes()) {
+      if (node.OpType() == "Transpose") {
+        ASSERT_EQ(node.GetOutputEdgesCount(), static_cast<size_t>(1));
+        ASSERT_EQ(node.OutputEdgesBegin()->GetNode().OpType(), "DequantizeLinear");
       }
+    }
   };
 
   TransformerTester(build_test_case_1,
