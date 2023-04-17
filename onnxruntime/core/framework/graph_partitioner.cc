@@ -178,7 +178,7 @@ static Status GetCapabilityForEP(const GetCapabilityForEPParams& params) {
   }
 
 #if !defined(ORT_MINIMAL_BUILD) || defined(ORT_EXTENDED_MINIMAL_BUILD)
-  if (params.mode != GraphPartitioner::Mode::kAssignOnly) {
+  if (params.mode != GraphPartitioner::Mode::kAssignOnly && params.transform_layout.get()) {
     for (auto& capability : capabilities) {
       TryAssignNodes(graph, *capability->sub_graph, ep_type);
     }
