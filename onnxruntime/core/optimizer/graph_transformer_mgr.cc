@@ -47,15 +47,12 @@ common::Status GraphTransformerManager::ApplyTransformers(Graph& graph, Transfor
 common::Status GraphTransformerManager::Register(std::unique_ptr<GraphTransformer> transformer,
                                                  TransformerLevel level) {
   const auto& name = transformer->Name();
-  auto& transformers_for_level = level_to_transformer_map_[level];
-
-  // allow the transformer to be registered multiple times but only in different levels
-  if (std::find_if(transformers_for_level.begin(), transformers_for_level.end(),
-                   [&name](const auto& entry) { return entry->Name() == name; }) != transformers_for_level.end()) {
-    return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "Transformer is already registered: " + name);
+  if (transformers_info_.find(name) != transformers_info_.end()) {
+    return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "This transformer is already registered " + name);
   }
 
-  transformers_for_level.push_back(std::move(transformer));
+  transformers_info_[name] = transformer.get();
+  level_to_transformer_map_[level].push_back(std::move(transformer));
   return Status::OK();
 }
 }  // namespace onnxruntime

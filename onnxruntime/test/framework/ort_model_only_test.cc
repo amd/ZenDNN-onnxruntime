@@ -21,7 +21,6 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
-#include "test/util/include/default_providers.h"
 
 using namespace ONNX_NAMESPACE;
 
@@ -640,5 +639,6 @@ TEST(OrtModelOnlyTests, LoadOrtFormatModelMLOpsFromBufferNoCopy) {
 }
 
 #endif  // !defined(DISABLE_ML_OPS)
+
 }  // namespace test
 }  // namespace onnxruntime
