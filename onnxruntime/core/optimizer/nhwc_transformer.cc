@@ -31,7 +31,6 @@ Status NhwcTransformer::ApplyImpl(Graph& graph, bool& modified, int graph_level,
   }
 
   auto api_graph = MakeApiGraph(graph, cpu_allocator_, kCpuExecutionProvider);
-
   modified = false;
   for (std::unique_ptr<api::NodeRef>& node : api_graph->Nodes()) {
     // If the node is not supported in the CPU EP, skip it
@@ -78,8 +77,7 @@ Status NhwcTransformer::ApplyImpl(Graph& graph, bool& modified, int graph_level,
 
   if (modified) {
     Optimize(*api_graph, kCpuExecutionProvider, OptimizerMode::OPTIMIZE_TRANSPOSE,
-             OrtEPCostCheck,
-             OrtExtendedHandlers());
+             OrtEPCostCheck, OrtExtendedHandlers());
   }
 
   return Status::OK();

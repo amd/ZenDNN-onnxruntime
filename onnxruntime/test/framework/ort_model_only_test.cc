@@ -21,6 +21,8 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
+#include "test/util/include/default_providers.h"
+
 using namespace ONNX_NAMESPACE;
 
 namespace onnxruntime {
@@ -639,5 +641,20 @@ TEST(OrtModelOnlyTests, LoadOrtFormatModelMLOpsFromBufferNoCopy) {
 
 #endif  // !defined(DISABLE_ML_OPS)
 
+TEST(TempTest, LoadModel) {
+  Status status;
+  auto model_uri = ORT_TSTR("C:/Users/scmckay/Downloads/whisper-tiny_beamsearch.N=1.batch_size=1.batch=1.onnx");
+  auto updated_model_uri = ORT_TSTR("C:/Users/scmckay/Downloads/whisper-tiny_beamsearch.N=1.batch_size=1.batch=1.basic.onnx");
+  auto ort_ext_lib = ORT_TSTR("D:/src/github/ort-extensions/build/Windows/Debug/bin/Debug/ortextensions.dll");
+
+  Ort::Env ort_env;
+
+  Ort::SessionOptions session_options;
+  Ort::ThrowOnError(Ort::GetApi().RegisterCustomOpsLibrary_V2(session_options, ort_ext_lib));
+  session_options.AppendExecutionProvider("XNNPACK");
+  session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_BASIC);
+  session_options.SetOptimizedModelFilePath(updated_model_uri);
+  Ort::Session s(ort_env, model_uri, session_options);
+}
 }  // namespace test
 }  // namespace onnxruntime

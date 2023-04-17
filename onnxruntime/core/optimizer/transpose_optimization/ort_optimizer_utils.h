@@ -43,5 +43,4 @@ onnxruntime::Graph& GraphFromApiGraph(onnx_transpose_optimization::api::GraphRef
 /// <param name="graph">api:NodeRef from graph created from MakeApiGraph</param>
 /// <returns>ORT node</returns>
 onnxruntime::Node& NodeFromApiNode(onnx_transpose_optimization::api::NodeRef& node);
-
 }  // namespace onnxruntime

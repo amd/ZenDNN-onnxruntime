@@ -925,15 +925,6 @@ static void PermuteInput(api::GraphRef& graph, api::NodeRef& node, size_t i, con
 }
 
 bool HandleResize([[maybe_unused]] HandlerArgs& args) {
-#if defined(USE_CUDA) || defined(USE_ROCM)
-  // The CUDA Resize kernel requires that the input is NCHW, so we can't push a Transpose through a Resize
-  // in ORT builds with CUDA enabled.
-  // The ROCm EP is generated from the CUDA EP kernel so the same applies to builds with ROCm enabled.
-  // TODO: Remove this special case once the CUDA Resize kernel is implemented "generically" (i.e.) aligning with the
-  // generic nature of the ONNX spec.
-  // See https://github.com/microsoft/onnxruntime/pull/10824 for a similar fix applied to the CPU Resize kernel.
-  return false;
-#else
   auto inputs = args.node.Inputs();
   int64_t rank_int = gsl::narrow_cast<int64_t>(args.perm.size());
 
@@ -959,7 +950,6 @@ bool HandleResize([[maybe_unused]] HandlerArgs& args) {
   TransposeOutputs(args.ctx, args.node, args.perm);
 
   return true;
-#endif
 }
 
 constexpr HandlerInfo resize_handler = {&FirstInput, &HandleResize};
@@ -1928,11 +1918,15 @@ OptimizeResult OptimizeImpl(OptimizerCtx& ctx) {
       continue;
     }
 
-    if (ctx.mode == OptimizerMode::OPTIMIZE_LAYOUT_TRANSFORM &&
-        ctx.layout_sensitive_ops.count(node.OpType()) &&
-        node.GetExecutionProviderType() != ctx.provider_type) {
-      // If the current op is layout sensitive and it is not assigned to the given provider
-      // then do not process transpose.
+    // TODO: Can this be simplified to simply check if the node is layout sensitive? We don't want to push a
+    // Transpose through any layout sensitive nodes, so the extra conditions might be unnecessary.
+    // orig:
+    // if (ctx.mode == OptimizerMode::OPTIMIZE_LAYOUT_TRANSFORM &&
+    //    ctx.layout_sensitive_ops.count(node.OpType()) &&
+    //    node.GetExecutionProviderType() != ctx.provider_type) {
+    //   If the current op is layout sensitive and it is not assigned to the given provider
+    // new:
+    if (ctx.layout_sensitive_ops.count(node.OpType())) {
       continue;
     }
 

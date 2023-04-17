@@ -24,77 +24,6 @@ bool IsNhwcExecutionProvider(std::string_view ep) {
   return nhwc_eps.find(ep) != nhwc_eps.end();
 }
 
-// TODO: Figure out how/where this MaxPool handling should be plugged in. We currently don't have a well defined place
-// where we run CPU EP specific things. This could maybe be an L2 optimizer that uses the basic TransposeOptimizer
-// as it has to run after partitioning. currently it probably only gets indirectly triggered by the L3 NhwcTransformer
-// which isn't ideal.
-//
-// Alternatively maybe it should only be used by the NhwcTransformer
-//
-// Special case For CPU EP where we can potentially replace with NhwcMaxPool.
-// Only int8 and uint8 dtypes are supported by NhwcMaxPool.
-static bool HandleMaxPool(HandlerArgs& args) {
-  if (args.node.GetExecutionProviderType() != "CPUExecutionProvider") {
-    return false;
-  }
-
-  auto outputs = args.node.Outputs();
-  if (outputs.size() == 2 && outputs[1] != "") {
-    // Can't optimize if optional "indices" output is provided
-    return false;
-  }
-
-  auto info = args.ctx.graph.GetValueInfo(outputs[0]);
-  api::DataType dtype = info->DType();
-  if (dtype != api::DataType::UINT8 && dtype != api::DataType::INT8) {
-    return false;
-  }
-
-  size_t rank = args.perm.size();
-  if (args.perm != ChannelLastToFirstPerm(rank)) {
-    return false;
-  }
-
-  auto new_node = SwapNodeOpTypeDomainAndSinceVersion(args.ctx.graph, args.node, "NhwcMaxPool", "com.microsoft", 1);
-  new_node->ClearAttribute("storage_order");  // Only relevant for indices output. Prohibited for NhwcMaxPool.
-  TransposeFirstInput(args.ctx, *new_node, args.perm_inv);
-  TransposeOutputs(args.ctx, *new_node, args.perm);
-  return true;
-}
-
-constexpr HandlerInfo max_pool_op_handler = {&FirstInput, &HandleMaxPool};
-
-// make sure the Resize node input is NHWC by inserting transposes on input, scales and sizes if needed
-static bool LayoutSensitiveHandleResize(HandlerArgs& args) {
-  // TODO: Add logic around per-EP requirements.
-  // If the EP wants NHWC we can use the ONNX op but need to make sure the layout is transposed if needed.
-  // We also need to treat the Resize as a layout sensitive op from then on so the logic in
-  // onnx_transpose_optimizer::OptimizeImpl leaves it alone
-
-  bool node_assigned_to_ep = !args.ctx.provider_type.empty() &&
-                             args.node.GetExecutionProviderType() == args.ctx.provider_type;
-
-  if (node_assigned_to_ep && IsNhwcExecutionProvider(args.ctx.provider_type)) {
-    // could validate that the current input is NHWC as we expect to only be using this handler as part of layout
-    // transformation, and the Resize should have been wrapped in Transpose nodes to convert to NHWC.
-    return false;  // leave as-is
-  } else {
-    // Call base handler. TODO: See if this is needed.
-    return HandleResize(args);
-  }
-}
-
-constexpr HandlerInfo layout_sensitive_resize_handler = {&FirstInput, &LayoutSensitiveHandleResize};
-
-const HandlerMap& OrtLayoutSensitiveExtendedHandlers() {
-  static const HandlerMap extended_handler_map{
-      {"MaxPool", max_pool_op_handler},
-      {"Resize", layout_sensitive_resize_handler},
-  };
-
-  return extended_handler_map;
-}
-
 // Layout sensitive NCHW ops. TransformLayoutForEP will wrap these with Transpose nodes to convert the input
 // data to NHWC and output data back to NCHW, and move the op to the internal NHWC domain (kMSInternalNHWCDomain).
 // The EP requesting these ops MUST be able to handle the node with the operator in the kMSInternalNHWCDomain.
@@ -118,18 +47,12 @@ const std::unordered_set<std::string_view>& GetORTLayoutSensitiveOps() {
 const std::unordered_set<std::string_view> GetEPLayoutSensitiveOps(const IExecutionProvider& execution_provider) {
   std::unordered_set<std::string_view> layout_sensitive_ops = GetORTLayoutSensitiveOps();
 
+  const auto& ep = execution_provider.Type();
+
   // EPs where the Resize implementation only handles one layout - either NCHW or NHWC. The ONNX spec for Resize is
   // not layout specific.
-  //
-  // The CUDA/ROCM Resize kernel only handles NCHW input.
-  //
-  // TODO: This is wrong. We only use this list in TransformLayoutForEP and CUDA/ROCm don't use that as they want NCHW.
-  // What we need is a call to Optimize to make sure the Resize assigned to CUDA/ROCm is in NCHW format at the end of
-  // graph partitioning with a custom Resize handler that ensures that.
-  const auto& ep_type = execution_provider.Type();
-  if (ep_type == kCudaExecutionProvider ||
-      ep_type == kRocmExecutionProvider ||
-      ep_type == kQnnExecutionProvider) {
+  const auto& layout_sensitive_eps = EPsWithLayoutSensitiveResize();
+  if (layout_sensitive_eps.find(ep) != layout_sensitive_eps.end()) {
     layout_sensitive_ops.insert("Resize");
   }
 
@@ -203,8 +126,9 @@ Status TransformLayoutForEP(Graph& graph, bool& modified, const IExecutionProvid
       // transformer only converts layout for 0th input, weights should be handled by every EP.
       if (node->OpType() == "Resize") {
         // Older versions of resize have a bug where ROI and Scales cannot be made empty inputs. To handle this case,
-        // we need to jump a few extra hoops to make sure its inputs are correctly handled. Current code skips
-        // layout conversion for ROI because it needs special handling as ROI size is 2*rank.
+        // we need to jump a few extra hoops to make sure its inputs are correctly handled.
+        //
+        // Current code skips layout conversion for ROI because it needs special handling as ROI size is 2*rank.
         // Enable passing in ROI for layout conversion when an EP which supports ROI starts using layout transformer.
         // NNAPI which currently uses layout transformer does not support it.
         std::vector<const std::vector<int64_t>*> input_perms{&input_perm, nullptr};
@@ -215,6 +139,9 @@ Status TransformLayoutForEP(Graph& graph, bool& modified, const IExecutionProvid
           } else {
             // TODO: Fix inconsistency. We should Transpose the non-const inputs so that the result of our changes
             // is consistent - all layout specific inputs are in NHWC format when we're done.
+            // This may need to check the opset to see if it's safe so that an empty non-constant input doesn't
+            // have an invalid Transpose added to it.
+            // Caveat: Typically `scales` and `sizes` are constants so this may not happen in a production model.
             input_perms.push_back(nullptr);
           }
         }
@@ -234,12 +161,11 @@ Status TransformLayoutForEP(Graph& graph, bool& modified, const IExecutionProvid
       debug_graph_fn(graph);
     }
 
-    const HandlerMap& extended_handlers = OrtExtendedHandlers();
     OptimizeResult result =
         onnx_transpose_optimization::Optimize(*api_graph, execution_provider.Type(),
                                               OptimizerMode::OPTIMIZE_LAYOUT_TRANSFORM,
                                               PostLayoutTransformCostCheck,
-                                              extended_handlers,
+                                              OrtHandlers(),
                                               layout_sensitive_ops);
     if (result.error_msg) {
       return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "Optimization after layout transformation failed: ",
@@ -278,32 +204,6 @@ void WrapTransposesAroundNode(api::GraphRef& graph, api::NodeRef& node,
       TransposeOutput(graph, node, i, *output_perm, InvertPerm(*output_perm));
     }
   }
-}
-
-static std::unique_ptr<api::NodeRef> SwapNodeImpl(api::GraphRef& graph, api::NodeRef& node,
-                                                  std::string_view op_type, std::string_view domain,
-                                                  std::optional<int> since_version) {
-  auto outputs = node.Outputs();
-  auto new_node = graph.CopyNode(node, op_type, domain, since_version);
-
-  for (size_t j = 0; j < outputs.size(); ++j) {
-    if (outputs[j] != "") {
-      graph.MoveOutput(node, j, *new_node, j);
-    }
-  }
-  graph.RemoveNode(node);
-  return new_node;
-}
-
-std::unique_ptr<api::NodeRef> SwapNodeOpTypeAndDomain(api::GraphRef& graph, api::NodeRef& node,
-                                                      std::string_view op_type, std::string_view domain) {
-  return SwapNodeImpl(graph, node, op_type, domain, std::nullopt);
-}
-
-std::unique_ptr<api::NodeRef> SwapNodeOpTypeDomainAndSinceVersion(api::GraphRef& graph, api::NodeRef& node,
-                                                                  std::string_view op_type, std::string_view domain,
-                                                                  int since_version) {
-  return SwapNodeImpl(graph, node, op_type, domain, since_version);
 }
 }  // namespace layout_transformation
 }  // namespace onnxruntime

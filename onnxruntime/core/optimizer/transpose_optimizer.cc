@@ -8,6 +8,7 @@
 #include "core/optimizer/utils.h"
 #include "core/providers/cpu/tensor/transpose.h"
 #include "core/optimizer/transpose_optimization/ort_optimizer_utils.h"
+#include "core/optimizer/transpose_optimization/ort_transpose_optimizer.h"
 
 using namespace ONNX_NAMESPACE;
 using namespace ::onnxruntime::common;
@@ -19,9 +20,8 @@ Status TransposeOptimizer::ApplyImpl(Graph& graph, bool& modified, int graph_lev
                                      const logging::Logger& logger) const {
   auto api_graph = MakeApiGraph(graph, cpu_allocator_, /*new_node_ep*/ nullptr);
 
-  // default settings. only ONNX operators that are not layout sensitive will have Transpose nodes moved past them
-  // where possible.
-  OptimizeResult result = onnx_transpose_optimization::Optimize(*api_graph);
+  OptimizeResult result = onnx_transpose_optimization::Optimize(*api_graph, "", OptimizerMode::OPTIMIZE_TRANSPOSE,
+                                                                /* default cost check*/ nullptr, OrtHandlers());
 
   if (result.error_msg) {
     // currently onnx_layout_transformation::Optimize only fails if we hit an unsupported opset.

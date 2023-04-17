@@ -3,7 +3,8 @@
 
 #pragma once
 
-// implementation details of the transpose optimizer. This exposes some internals so they can be extended as needed.
+// implementation details of the transpose optimizer API defined in optimizer_api.h.
+// This exposes some internals so they can be extended as needed.
 #include "optimizer_api.h"
 
 namespace onnx_transpose_optimization {
@@ -68,6 +69,7 @@ bool HandleSimpleNodeBroadcast(HandlerArgs& args);
 // Transposes all inputs and all outputs. Updates axis attribute.
 bool HandleSimpleNodeWithAxis(HandlerArgs& args, std::optional<int64_t> default_axis = std::nullopt);
 
+// base handlers that are used by extended handlers. add from transpose_optimizer.cc as needed.
 bool HandleReduceOps(HandlerArgs& args);
 bool HandleResize([[maybe_unused]] HandlerArgs& args);
 
@@ -75,7 +77,6 @@ void TransposeInput(api::GraphRef& graph, api::NodeRef& node, size_t i,
                     const std::vector<int64_t>& perm,
                     const std::vector<int64_t>& perm_inv);
 
-// base handlers that are used by extended handlers. add from transpose_optimizer.cc as needed.
 // Transposes specified inputs according to perm.
 // NOTE: if a Transpose is expected to be above an input to this node, use the inverse of its permutation to cancel it.
 void TransposeInputs(OptimizerCtx& ctx, api::NodeRef& node, const std::vector<int64_t>& perm,

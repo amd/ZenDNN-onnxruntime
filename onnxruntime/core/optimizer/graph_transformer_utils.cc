@@ -179,12 +179,15 @@ InlinedVector<std::unique_ptr<GraphTransformer>> GenerateTransformers(
     const IExecutionProvider& cpu_execution_provider, /*required by constant folding*/
     const InlinedHashSet<std::string>& rules_and_transformers_to_disable) {
   InlinedVector<std::unique_ptr<GraphTransformer>> transformers;
+
   const bool disable_quant_qdq =
       session_options.config_options.GetConfigOrDefault(kOrtSessionOptionsDisableQuantQDQ, "0") == "1";
 #ifndef DISABLE_CONTRIB_OPS
   const InlinedHashSet<std::string_view> cpu_ep = {onnxruntime::kCpuExecutionProvider};
 #endif
   const InlinedHashSet<std::string_view> dml_ep = {onnxruntime::kDmlExecutionProvider};
+  auto cpu_allocator = cpu_execution_provider.GetAllocator(OrtMemTypeDefault);
+
   switch (level) {
     case TransformerLevel::Level1: {
       // RewriteRule optimizations are the simplest (they generally remove unnecessary nodes and are cheap to run)
@@ -235,11 +238,15 @@ InlinedVector<std::unique_ptr<GraphTransformer>> GenerateTransformers(
 
       // run TransposeOptimizer last as it works in a slightly different way by moving Transpose nodes around.
       // shouldn't affect the end result - just easier to debug any issue if it's last.
-      auto cpu_allocator = cpu_execution_provider.GetAllocator(OrtMemTypeDefault);
       transformers.emplace_back(std::make_unique<TransposeOptimizer>(std::move(cpu_allocator)));
     } break;
 
     case TransformerLevel::Level2: {
+      // we want to run the TransposeOptimizer once more so that the EP aware Resize handling takes place.
+      // this allows a Transpose node to be pushed through a Resize node if the Resize node is assigned to an EP
+      // that does not have a layout sensitive Resize implementation.
+      transformers.emplace_back(std::make_unique<TransposeOptimizer>(std::move(cpu_allocator)));
+
       const bool enable_quant_qdq_cleanup =
           session_options.config_options.GetConfigOrDefault(kOrtSessionOptionsEnableQuantQDQCleanup, "0") == "1";
 #if !defined(DISABLE_CONTRIB_OPS)
@@ -266,7 +273,8 @@ InlinedVector<std::unique_ptr<GraphTransformer>> GenerateTransformers(
 
 #ifdef MLAS_TARGET_AMD64_IX86
       const bool avx2_precision_mode =
-          session_options.config_options.GetConfigOrDefault(kOrtSessionOptionsAvx2PrecisionMode, "0") == "1" && MlasPlatformU8S8Overflow();
+          session_options.config_options.GetConfigOrDefault(kOrtSessionOptionsAvx2PrecisionMode, "0") == "1" &&
+          MlasPlatformU8S8Overflow();
 #else
       const bool avx2_precision_mode = false;
 #endif
@@ -350,7 +358,6 @@ InlinedVector<std::unique_ptr<GraphTransformer>> GenerateTransformers(
       if (MlasNchwcGetBlockSize() > 1) {
         transformers.emplace_back(std::make_unique<NchwcTransformer>());
       }
-      auto cpu_allocator = cpu_execution_provider.GetAllocator(OrtMemTypeDefault);
       transformers.emplace_back(std::make_unique<NhwcTransformer>(std::move(cpu_allocator)));
       // NCHWCtransformer should have a higher priority versus this. Because NCHWCtransformer also do the similar things
       // of fusion patterns and target on CPU. However, NCHWCtransformer will reorder the layout to nchwc which is only available for

@@ -834,33 +834,4 @@ onnxruntime::Graph& GraphFromApiGraph(onnx_transpose_optimization::api::GraphRef
 onnxruntime::Node& NodeFromApiNode(onnx_transpose_optimization::api::NodeRef& node) {
   return static_cast<ApiNode&>(node).Node();
 }
-
-CostCheckResult OrtEPCostCheck(const api::GraphRef& graph, const api::NodeRef& node,
-                               const std::vector<int64_t>& /*perm*/,
-                               const std::unordered_set<std::string>& /*outputs_leading_to_transpose*/) {
-  // special case some kernels based on the ORT implementation details
-  if (node.GetExecutionProviderType() == kCpuExecutionProvider) {
-    if (node.IsOp("MaxPool")) {
-      // MaxPool has higher perf in the NHWC variant when supported. HandleMaxPool does the support checks.
-      return CostCheckResult::kPushTranspose;
-    }
-
-    if (node.IsOp("Resize")) {
-      // Resize is included because it has higher perf in the NHWC variant when
-      // the input X is 4D int8 tensor and the mode is linear
-      auto X_value_info = graph.GetValueInfo(node.Inputs()[0]);
-      auto X_shape = X_value_info->Shape();
-      auto X_dtype = X_value_info->DType();
-      auto mode = node.GetAttributeString("mode");
-      if (X_shape && X_shape->size() == 4 &&
-          (X_dtype == api::DataType::UINT8 || X_dtype == api::DataType::INT8) &&
-          mode && *mode == "linear") {
-        return CostCheckResult::kPushTranspose;
-      }
-    }
-  }
-
-  return CostCheckResult::kFallThrough;
-}
-
 }  // namespace onnxruntime

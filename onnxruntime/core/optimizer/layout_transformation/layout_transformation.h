@@ -58,9 +58,9 @@ Status TransformLayoutForEP(onnxruntime::Graph& graph, bool& modified,
 bool IsSupportedOpset(const Graph& graph);
 
 /// <summary>
-/// Gets a list of layout sensitive ops for ORT. This list contains onnx standard defined
-/// layout senstive ops + contrib ops + ops which are not layout sensitive but are treated as
-/// layout sensitive by ORT EPs (exmaple Resize).
+/// Gets a list of layout sensitive ops for ORT. This list contains ONNX standard defined
+/// layout sensitive ops + contrib ops + ops which are not layout sensitive but are treated as
+/// layout sensitive by ORT EPs (example Resize).
 /// </summary>
 /// <returns>unordered set of op_types which are layout sensitive</returns>
 const std::unordered_set<std::string_view>& GetORTLayoutSensitiveOps();
