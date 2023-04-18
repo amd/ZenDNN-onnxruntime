@@ -46,12 +46,14 @@ if (onnxruntime_MINIMAL_BUILD)
       "${ONNXRUNTIME_ROOT}/core/optimizer/layout_transformation/layout_transformation.h"
       "${ONNXRUNTIME_ROOT}/core/optimizer/layout_transformation/layout_transformation.cc"
       "${ONNXRUNTIME_ROOT}/core/optimizer/layout_transformation/layout_transformation_potentially_added_ops.h"
+      # files required for transpose optimization post-layout transformation
       "${ONNXRUNTIME_ROOT}/core/optimizer/transpose_optimization/optimizer_api.h"
       "${ONNXRUNTIME_ROOT}/core/optimizer/transpose_optimization/transpose_optimizer.h"
       "${ONNXRUNTIME_ROOT}/core/optimizer/transpose_optimization/transpose_optimizer.cc"
-      "${ONNXRUNTIME_ROOT}/core/optimizer/transpose_optimization/ort_optimizer_api_impl.h"
       "${ONNXRUNTIME_ROOT}/core/optimizer/transpose_optimization/ort_optimizer_api_impl.cc"
       "${ONNXRUNTIME_ROOT}/core/optimizer/transpose_optimization/ort_optimizer_utils.h"
+      "${ONNXRUNTIME_ROOT}/core/optimizer/transpose_optimization/ort_transpose_optimizer.h"
+      "${ONNXRUNTIME_ROOT}/core/optimizer/transpose_optimization/ort_transpose_optimizer.cc"
       "${ONNXRUNTIME_ROOT}/core/optimizer/utils.cc"
       "${ONNXRUNTIME_ROOT}/core/optimizer/utils.h"
     )

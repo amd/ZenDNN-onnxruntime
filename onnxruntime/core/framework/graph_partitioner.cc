@@ -178,6 +178,11 @@ static Status GetCapabilityForEP(const GetCapabilityForEPParams& params) {
   }
 
 #if !defined(ORT_MINIMAL_BUILD) || defined(ORT_EXTENDED_MINIMAL_BUILD)
+  // Run layout transformation for all EPs. 
+  // For an EP that wants NHWC this will wrap layout sensitive nodes with Transpose nodes first.
+  // In both NCHW and NHWC EPs the EP specific transpose optimization is run last to optimize
+  // transposes for nodes assigned to the EP or unassigned nodes. This allows things like the 
+  // EP aware Resize handling to be run. 
   if (params.mode != GraphPartitioner::Mode::kAssignOnly && params.transform_layout.get()) {
     for (auto& capability : capabilities) {
       TryAssignNodes(graph, *capability->sub_graph, ep_type);

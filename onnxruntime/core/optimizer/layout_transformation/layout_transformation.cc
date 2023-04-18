@@ -14,16 +14,6 @@ using namespace onnx_transpose_optimization;
 namespace onnxruntime {
 namespace layout_transformation {
 
-bool IsNhwcExecutionProvider(std::string_view ep) {
-  static const std::unordered_set<std::string_view> nhwc_eps = {
-      kNnapiExecutionProvider,
-      kQnnExecutionProvider,
-      kXnnpackExecutionProvider,
-  };
-
-  return nhwc_eps.find(ep) != nhwc_eps.end();
-}
-
 // Layout sensitive NCHW ops. TransformLayoutForEP will wrap these with Transpose nodes to convert the input
 // data to NHWC and output data back to NCHW, and move the op to the internal NHWC domain (kMSInternalNHWCDomain).
 // The EP requesting these ops MUST be able to handle the node with the operator in the kMSInternalNHWCDomain.
@@ -154,6 +144,7 @@ Status TransformLayoutForEP(Graph& graph, bool& modified, const IExecutionProvid
           WrapTransposesAroundNode(*api_graph, *node, {&input_perm}, {&output_perm});
         }
 
+        // TODO: Technically Resize doesn't need to change domain as the ONNX Resize spec is not layout sensitive.
         SwapNodeOpTypeAndDomain(*api_graph, *node, node->OpType(), kMSInternalNHWCDomain);
         modified = true;
       }

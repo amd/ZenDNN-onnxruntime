@@ -123,7 +123,6 @@ const HandlerMap& OrtHandlers() {
   return extended_handler_map;
 }
 // ORT contrib ops and special cased ONNX ops where we have EP specific handling
-// TODO:
 const HandlerMap& OrtExtendedHandlers() {
   static const HandlerMap extended_handler_map = []() {
     HandlerMap map = {
