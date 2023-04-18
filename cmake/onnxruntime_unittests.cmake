@@ -855,7 +855,7 @@ add_dependencies(onnx_test_data_proto onnx_proto ${onnxruntime_EXTERNAL_DEPENDEN
 #onnx_proto target should mark this definition as public, instead of private
 target_compile_definitions(onnx_test_data_proto PRIVATE "-DONNX_API=")
 if(WIN32)
-  target_compile_options(onnx_test_data_proto PRIVATE "/wd4100" "/wd4125" "/wd4127" "/wd4267" "/wd4456" "/wd4800" "/wd6011" "/wd6387" "/wd28182")
+  target_compile_options(onnx_test_data_proto PRIVATE "/wd4100" "/wd4125" "/wd4127" "/wd4146" "/wd4267" "/wd4456" "/wd4800" "/wd6011" "/wd6387" "/wd28182")
 else()
   #Once we upgrade protobuf to 3.17.3+, we can remove this
   target_compile_options(onnx_test_data_proto PRIVATE "-Wno-unused-parameter")

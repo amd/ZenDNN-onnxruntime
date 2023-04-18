@@ -109,14 +109,31 @@ if(Patch_FOUND)
 else()
  set(ONNXRUNTIME_PROTOBUF_PATCH_COMMAND "")
 endif()
+
+FetchContent_Declare(
+    utf8_range
+    URL ${DEP_URL_utf8_range}
+    URL_HASH SHA1=${DEP_SHA1_utf8_range}
+    FIND_PACKAGE_ARGS NAMES utf8_range
+)
+
+set(utf8_range_ENABLE_TESTS OFF CACHE BOOL "Build test suite" FORCE)
+set(utf8_range_ENABLE_INSTALL OFF CACHE BOOL "Configure installation" FORCE)
+
+
+#Protobuf depends on absl and utf8_range
 FetchContent_Declare(
   Protobuf
   URL ${DEP_URL_protobuf}
   URL_HASH SHA1=${DEP_SHA1_protobuf}
   PATCH_COMMAND ${ONNXRUNTIME_PROTOBUF_PATCH_COMMAND}
-  FIND_PACKAGE_ARGS 3.21.12 NAMES Protobuf
+  FIND_PACKAGE_ARGS 22.3.0 NAMES protobuf
 )
+
 set(protobuf_BUILD_TESTS OFF CACHE BOOL "Build protobuf tests" FORCE)
+set(protobuf_INSTALL OFF CACHE BOOL "Install protobuf binaries and files" FORCE)
+set(protobuf_USE_EXTERNAL_GTEST ON CACHE BOOL "" FORCE)
+
 if (CMAKE_SYSTEM_NAME STREQUAL "Android")
   set(protobuf_BUILD_PROTOC_BINARIES OFF CACHE BOOL "Build protobuf tests" FORCE)
   set(protobuf_WITH_ZLIB OFF CACHE BOOL "Build with zlib support" FORCE)
@@ -267,7 +284,7 @@ FetchContent_Declare(
 # use fetch content rather than makeavailable because safeint only includes unconditional test targets
 FetchContent_Populate(safeint)
 # The next line will generate an error message "fatal: not a git repository", but it is ok. It is from flatbuffers
-onnxruntime_fetchcontent_makeavailable(Protobuf nlohmann_json mp11 re2 GSL flatbuffers)
+onnxruntime_fetchcontent_makeavailable(utf8_range Protobuf nlohmann_json mp11 re2 GSL flatbuffers)
 if(NOT flatbuffers_FOUND)
   if(NOT TARGET flatbuffers::flatbuffers)
     add_library(flatbuffers::flatbuffers ALIAS flatbuffers)

@@ -13,10 +13,20 @@
 #if defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
+#elif defined(_MSC_VER)
+#pragma warning(push)
+// include\google/protobuf/port.h(96,68): warning C4100: 'context': unreferenced formal parameter
+#pragma warning(disable : 4100)
+#pragma warning(disable : 4146)
+#pragma warning(disable : 4127)
+#pragma warning(disable : 4267)
+#pragma warning(disable : 4244)
 #endif
 #include "tensorboard/compat/proto/event.pb.h"
 #if defined(__GNUC__)
 #pragma GCC diagnostic pop
+#elif defined(_MSC_VER)
+#pragma warning(pop)
 #endif
 
 namespace onnxruntime {
