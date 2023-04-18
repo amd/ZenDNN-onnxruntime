@@ -1902,8 +1902,24 @@ OptimizeResult OptimizeImpl(OptimizerCtx& ctx) {
 
   bool changed = false;
   bool have_dq = false;
-  // if nodes are assigned we only process those that match the EP in the context
-  bool ignore_assigned_nodes = ctx.provider_type.empty();
+
+  const auto can_modify_node = [&ctx](const api::NodeRef& node) {
+    bool can_modify = true;
+    const auto& node_ep = node.GetExecutionProviderType();
+    if (ctx.provider_type.empty()) {
+      // general call to Optimize. only touch unassigned nodes.
+      if (!node_ep.empty()) {
+        can_modify = false;
+      }
+    } else {
+      // EP specific call to optimize. only touch unassigned nodes, or nodes assigned to that EP.
+      if (!node_ep.empty() && node_ep != ctx.provider_type) {
+        can_modify = false;
+      }
+    }
+
+    return can_modify;
+  };
 
   // Optimize graph. Nodes will be modified during iteration, but nodes are never deleted before we reach them.
   // New transpose nodes are inserted, but always as an input to an existing node.
@@ -1913,13 +1929,7 @@ OptimizeResult OptimizeImpl(OptimizerCtx& ctx) {
       have_dq = true;
     }
 
-    // it's not clear how we should handle assignment of new Transpose nodes created during optimization, so ignore.
-    // e.g. we may need to transpose the input of a node we move a Transpose past. if that node is assigned to
-    // an EP that doesn't support Transpose, the new node should use the CPU EP. but if that node is assigned to
-    // an EP that does support the Transpose we should assign the new node to that EP.
-    // as we do not know what each EP supports, it's safer to not optimize in order to maintain the EP assignments
-    // made during partitioning.
-    if (ignore_assigned_nodes && !node.GetExecutionProviderType().empty()) {
+    if (!can_modify_node(node)) {
       continue;
     }
 
@@ -1958,8 +1968,7 @@ OptimizeResult OptimizeImpl(OptimizerCtx& ctx) {
   for (size_t i = 1; i < graph_nodes.size(); i++) {
     const auto& node = *graph_nodes[i];
 
-    // TODO: if we want to handle this we need to propagate the assigned EP to the new Transpose node.
-    if (ignore_assigned_nodes && !node.GetExecutionProviderType().empty()) {
+    if (!can_modify_node(node)) {
       continue;
     }
 
