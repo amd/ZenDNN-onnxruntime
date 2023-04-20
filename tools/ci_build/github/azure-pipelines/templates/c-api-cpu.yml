@@ -445,6 +445,11 @@ stages:
         msbuildArguments: '-t:CreatePackage -p:OnnxRuntimeBuildDirectory="$(Build.BinariesDirectory)" -p:OrtPackageId=$(OrtPackageId) -p:IsReleaseBuild=${{ parameters.IsReleaseBuild }}'
         workingDirectory: '$(Build.SourcesDirectory)\csharp'
 
+    - script: |
+        type NativeNuget.nuspec
+      workingDirectory: '$(Build.BinariesDirectory)\RelWithDebInfo\RelWithDebInfo'
+      displayName: 'Display nuspec file'
+
     - task: CopyFiles@2
       displayName: 'Copy native nuget package to: $(Build.ArtifactStagingDirectory)'
       inputs:
@@ -918,5 +923,3 @@ stages:
     - task: mspremier.PostBuildCleanup.PostBuildCleanup-task.PostBuildCleanup@3
       displayName: 'Clean Agent Directories'
       condition: always()
-
-
