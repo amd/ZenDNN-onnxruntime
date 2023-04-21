@@ -54,14 +54,15 @@ dir test\Microsoft.ML.OnnxRuntime.EndToEndTests\packages\
 
 IF "%PACKAGENAME%"=="Microsoft.ML.OnnxRuntime.Gpu" (
   set TESTONGPU=ON
-  %dn% test -p:DefineConstants=USE_TENSORRT test\Microsoft.ML.OnnxRuntime.EndToEndTests\Microsoft.ML.OnnxRuntime.EndToEndTests.csproj --no-restore --filter "TensorRT&DisplayName!=TestCUDAProviderOptions"
+  %dn% test -p:DefineConstants=USE_TENSORRT test\Microsoft.ML.OnnxRuntime.EndToEndTests\Microsoft.ML.OnnxRuntime.EndToEndTests.csproj --no-restore --filter TensorRT
+) ELSE (
 
   IF NOT errorlevel 0 (
     @echo "Failed to build or execute the end-to-end test"
     EXIT 1
   )
 
-  %dn% test -p:DefineConstants=USE_CUDA test\Microsoft.ML.OnnxRuntime.EndToEndTests\Microsoft.ML.OnnxRuntime.EndToEndTests.csproj --no-restore
+  %dn% test -p:DefineConstants=USE_CUDA test\Microsoft.ML.OnnxRuntime.EndToEndTests\Microsoft.ML.OnnxRuntime.EndToEndTests.csproj --no-restore --filter "DisplayName!=TestCUDAProviderOptions"
 ) ELSE (
   %dn% test test\Microsoft.ML.OnnxRuntime.EndToEndTests\Microsoft.ML.OnnxRuntime.EndToEndTests.csproj --no-restore
 )
