@@ -61,7 +61,7 @@ IF "%PACKAGENAME%"=="Microsoft.ML.OnnxRuntime.Gpu" (
     EXIT 1
   )
 
-  %dn% test -p:DefineConstants=USE_CUDA test\Microsoft.ML.OnnxRuntime.EndToEndTests\Microsoft.ML.OnnxRuntime.EndToEndTests.csproj --no-restore --verbosity detailed --filter FullyQualifiedName!~TestCUDAProviderOptions
+  %dn% test -p:DefineConstants=USE_CUDA test\Microsoft.ML.OnnxRuntime.EndToEndTests\Microsoft.ML.OnnxRuntime.EndToEndTests.csproj --no-restore --verbosity detailed --filter DisplayName!=TestCUDAProviderOptions
 ) ELSE (
   %dn% test test\Microsoft.ML.OnnxRuntime.EndToEndTests\Microsoft.ML.OnnxRuntime.EndToEndTests.csproj --no-restore --verbosity detailed
 )
