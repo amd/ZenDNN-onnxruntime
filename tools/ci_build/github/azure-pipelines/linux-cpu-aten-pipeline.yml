@@ -17,8 +17,7 @@ jobs:
   pool:
     name: onnxruntime-Linux-CPU-2019
     demands:
-    - ImageOverride -equals onnxruntimelinuxcpubuild
-    - ImageVersionOverride -equals latest
+    - ImageVersionOverride -equals 1.0.298535
   steps:
   - task: mspremier.PostBuildCleanup.PostBuildCleanup-task.PostBuildCleanup@3
     displayName: 'Clean Agent Directories'
