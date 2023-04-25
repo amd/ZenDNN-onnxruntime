@@ -422,8 +422,56 @@ namespace Microsoft.ML.OnnxRuntime
         /// <param name="libraryHandle">out parameter, library handle</param>
         public void RegisterCustomOpLibraryV2(string libraryPath, out IntPtr libraryHandle)
         {
+            // NOTE: This is extremely confusing as the 'V2' is specific to the C# API and was a fix for the original
+            // C# RegisterCustomOpLibrary not returning the libraryHandle.
+            //
+            // We have since added RegisterCustomOpsLibrary_V2 in the ORT C API. That takes just the library path
+            // and ORT manages the lifetime of the library.
+            // 
+            // To resolve, we could un-obsolete the original RegisterCustomOpLibrary above, and have it call
+            // OrtRegisterCustomOpsLibrary_V2 as the API matches what is required for that.
+            // Not sure if that is better or worse than adding a RegisterCustomOpLibraryV3 which calls
+            // OrtRegisterCustomOpsLibrary_V2.
             var utf8Path = NativeOnnxValueHelper.StringToZeroTerminatedUtf8(libraryPath);
             NativeApiStatus.VerifySuccess(NativeMethods.OrtRegisterCustomOpsLibrary(handle, utf8Path, out libraryHandle));
+        }
+
+        /// <summary>
+        /// Register custom ops by calling functionName. The function must be available in the global symbols so
+        /// ONNX Runtime can find it using dlsym. This may require your app to 'DllImport' the native library
+        /// containing the function.
+        /// 
+        /// If your project references Microsoft.ML.OnnxRuntime.Extensions for pre/post processing custom ops
+        /// you can use the special function name of 'OrtExtensions.RegisterCustomOps' and the DllImport will be
+        /// handled for you.
+        /// 
+        /// TODO: Add link to doco on the function signature etc.
+        /// </summary>
+        /// <param name="functionName">Function name to lookup.</param>
+        public void RegisterCustomOpsUsingFunction(string functionName)
+        {
+            // special case the ORT Extensions library being used. we have a DllImport for it internally to
+            // simplify usage.
+            if (functionName == "OrtExtensions.RegisterCustomOps")
+            {
+                try
+                {
+                    var ortApiBase = NativeMethods.OrtGetApiBase();
+                    NativeApiStatus.VerifySuccess(NativeMethods.RegisterCustomOps(this.handle, ref ortApiBase));
+                }
+                catch (DllNotFoundException ex) 
+                {
+                    throw new OnnxRuntimeException(
+                        ErrorCode.NoSuchFile,
+                        "The ONNX Runtime extensions library was not found. The Microsoft.ML.OnnxRuntime.Extensions " +
+                        "NuGet package must be referenced by the project to use 'OrtExtensions.RegisterCustomOps.");
+                }
+            }
+            else
+            {
+                var utf8FuncName = NativeOnnxValueHelper.StringToZeroTerminatedUtf8(functionName);
+                NativeApiStatus.VerifySuccess(NativeMethods.OrtRegisterCustomOpsUsingFunction(this.handle, utf8FuncName));
+            }
         }
 
         /// <summary>

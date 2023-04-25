@@ -1001,11 +1001,11 @@ namespace Microsoft.ML.OnnxRuntime
         {
             // adjust the library name based on platform.
 #if __ANDROID__
-        internal const string ExtensionsDllName = "libortextensions.so";
+            internal const string ExtensionsDllName = "libortextensions.so";
 #elif __IOS__
-        internal const string ExtensionsDllName = "__Internal";
+            internal const string ExtensionsDllName = "__Internal";
 #else
-        internal const string ExtensionsDllName = "ortextensions";
+            internal const string ExtensionsDllName = "ortextensions";
 #endif
         }
 

@@ -75,9 +75,9 @@
 
   <ItemGroup>
     <!-- include common files for visibility, however they're compiled directly by the target specific test projects -->
-    <None Include="InferenceTest.cs"/>
-    <None Include="OrtEnvTests.cs"/>
-    <None Include="OnnxData.cs"/>
+    <None Include="InferenceTest.cs" />
+    <None Include="OrtEnvTests.cs" />
+    <None Include="OnnxData.cs" />
     <None Include="OrtIoBindingAllocationTest.cs" Condition=" '$(EnableDefaultCompileItems)' == 'true' " />
     <None Include="Tensors\TensorTests.cs" Condition=" '$(EnableDefaultCompileItems)' == 'true' " />
     <None Include="Tensors\ArrayTensorExtensionTests.cs" Condition=" '$(EnableDefaultCompileItems)' == 'true' " />
@@ -96,6 +96,7 @@
 
   <ItemGroup>
     <PackageReference Include="Google.Protobuf" Version="3.16.0" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.Extensions" Version="1.15.0-dev-20230421-3-dbgaar" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.2" />
     <PackageReference Include="xunit" Version="2.4.1" />
   </ItemGroup>

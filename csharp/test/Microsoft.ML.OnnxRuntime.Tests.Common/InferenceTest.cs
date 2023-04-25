@@ -15,6 +15,29 @@ using Xunit.Abstractions;
 // of Onnxruntime package
 namespace Microsoft.ML.OnnxRuntime.Tests
 {
+    static class Native 
+    {
+#if __ANDROID__
+        // define the library name required for android
+        internal const string CustomOpsLibrary = "libortextensions.so";
+#elif __IOS__
+        // define the library name required for iOS
+        internal const string CustomOpsLibrary = "__Internal";
+#else
+        internal const string CustomOpsLibrary = "ortextensions";
+#endif
+        // we need to explicitly reference the symbol to (hopefully) make it available to ORT
+        [DllImport(CustomOpsLibrary, CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Winapi)]
+        public static extern IntPtr /* OrtStatus* */ RegisterCustomOps(IntPtr /* OrtSessionOptions* */ sessionOptions,
+                                                                       IntPtr  /* OrtApiBase* */ ortApiBase);
+
+        // TEMPORARY - testing if we need a callable function to do registration. Marshal.PreLink works on Windows
+        // at least so hopefully this won't be necessary
+        // 
+        //[DllImport(CustomOpsLibrary, CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Winapi)]
+        //public static extern void Initialize(Int32 dummy);
+    }
+
     // This is to make sure it does not run in parallel with OrtEnvTests
     // or any other test class within the same collection
     [Collection("Ort Inference Tests")]
@@ -91,6 +114,15 @@ namespace Microsoft.ML.OnnxRuntime.Tests
 
                 var ex = Assert.Throws<OnnxRuntimeException>(() => { opt.AddSessionConfigEntry("", "invalid key"); });
                 Assert.Contains("[ErrorCode:InvalidArgument] Config key is empty", ex.Message);
+
+                // Native.Initialize(0);
+
+                // testing client code having the DllImport in case that's required on Android/iOS to make symbols available
+                Marshal.Prelink(typeof(Native).GetMethod("RegisterCustomOps"));
+                opt.RegisterCustomOpsUsingFunction("RegisterCustomOps");
+
+                // Test using the special-casing in ORT
+                opt.RegisterCustomOpsUsingFunction("OrtExtensions.RegisterCustomOps");
 
 #if USE_CUDA
                 opt.AppendExecutionProvider_CUDA(0);
