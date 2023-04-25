@@ -88,6 +88,15 @@ OverrideSchemaInferenceFunction<OperatorHelper::ShapeInferenceHelper_##shapeInfe
         OVERRIDE_SCHEMA(    8,  true,  MaxPool);
         OVERRIDE_SCHEMA_EX( 9,  true,  OneHot, OneHot, 1);
         OVERRIDE_SCHEMA_EX( 10, false, Resize, Resize10, 1);
+        OVERRIDE_SCHEMA_EX( 18, true,  ReduceL1, ReduceL118, 1);
+        // OVERRIDE_SCHEMA_EX( 18, true,  ReduceL2, ReduceL218);
+        // OVERRIDE_SCHEMA_EX( 18, true,  ReduceLogSum, ReduceLogSum18);
+        // OVERRIDE_SCHEMA_EX( 18, true,  ReduceLogSumExp, ReduceLogSumExp18);
+        // OVERRIDE_SCHEMA_EX( 18, true,  ReduceMax, ReduceMax18);
+        // OVERRIDE_SCHEMA_EX( 18, true,  ReduceMean, ReduceMean18);
+        // OVERRIDE_SCHEMA_EX( 18, true,  ReduceMin, ReduceMin18);
+        // OVERRIDE_SCHEMA_EX( 18, true,  ReduceProd, ReduceProd18);
+        // OVERRIDE_SCHEMA_EX( 18, true,  ReduceSumSquare, ReduceSumSquare18);
 
     }
 #pragma pop_macro("OVERRIDE_SCHEMA_EX")

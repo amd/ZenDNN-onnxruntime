@@ -1260,30 +1260,42 @@ namespace OperatorHelper
     void ReduceHelperBase::Initialize(
         IKernelInformationAdapter const& kernelInformation,
         IShapeInformationAdapter const& shapeInformation,
-        bool usingMultipleAxes
+        bool usingMultipleAxes,
+        uint32_t opsetVersion
         )
     {
         auto& attributes = kernelInformation.GetAttributes();
         m_keepDims = attributes.GetOptionalAttribute<int32_t>(AttrName::KeepDims, 1);
         m_selectLastIndex = attributes.GetOptionalAttribute<int32_t>(AttrName::SelectLastIndex, 0);
         m_noopWithEmptyAxes = attributes.GetOptionalAttribute<int32_t>(AttrName::NoopWithEmptyAxes, 0);
-
-        if (usingMultipleAxes) // Read full axis list. e.g. ReduceSum.
+        if(usingMultipleAxes)
         {
-            if (kernelInformation.IsInputValid(1)) // Axes are from a dynamic input parameter.
-            {
-                ReadCpuLocalTensorIntoInt32(kernelInformation.GetConstantInputTensor(1), /*out*/ m_axes);
-            }
-            else // Axes were a constant attribute parameter.
-            {
-                m_axes = attributes.GetOptionalAttributeVectorInt32(AttrName::Axes);
-            }
+            m_axes = attributes.GetOptionalAttributeVectorInt32(AttrName::Axes);
         }
         else // Only read a single axis. e.g. ArgMin/ArgMax.
         {
             int axis = attributes.GetOptionalAttribute<int32_t>(AttrName::Axis, 0);
             m_axes.push_back(axis);
         }
+        // if(opsetVersion >= 18)
+        // {
+        //     if(kernelInformation.IsInputValid(1))
+        //     {
+        //         ReadCpuLocalTensorIntoInt32(kernelInformation.GetConstantInputTensor(1), /*out*/ m_axes);
+        //     }
+        // }
+        // else
+        // {
+        //     if(usingMultipleAxes)
+        //     {
+        //         m_axes = attributes.GetOptionalAttributeVectorInt32(AttrName::Axes);
+        //     }
+        //     else // Only read a single axis. e.g. ArgMin/ArgMax.
+        //     {
+        //         int axis = attributes.GetOptionalAttribute<int32_t>(AttrName::Axis, 0);
+        //         m_axes.push_back(axis);
+        //     }
+        // }
 
         std::vector<uint32_t> inputShape = shapeInformation.GetInputTensorShape(0);
         HandleNegativeAxes(/*inout*/ m_axes, gsl::narrow_cast<uint32_t>(inputShape.size()));

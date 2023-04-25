@@ -399,7 +399,11 @@ namespace OperatorHelper
         static const int sc_sinceVer_ReduceMin = 18;
         static const int sc_sinceVer_ReduceProd = 18;
         static const int sc_sinceVer_ReduceSumSquare = 18;
+<<<<<<< Updated upstream
     }
+=======
+    } // namespace OnnxOperatorSet17
+>>>>>>> Stashed changes
 
     namespace MsftOperatorSet1
     {

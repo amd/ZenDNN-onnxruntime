@@ -11,13 +11,15 @@ class DmlOperatorReduce : public DmlOperator, public ReduceHelperBase
 public:
     DmlOperatorReduce(
         const MLOperatorKernelCreationContext& kernelInfo,
-        DML_REDUCE_FUNCTION function
+        DML_REDUCE_FUNCTION function,
+        uint32_t opsetVersion
         )
     :   DmlOperator(kernelInfo),
         ReduceHelperBase(
             kernelInfo,
             kernelInfo.GetTensorShapeDescription(),
-            (function != DML_REDUCE_FUNCTION_ARGMAX && function != DML_REDUCE_FUNCTION_ARGMIN)
+            (function != DML_REDUCE_FUNCTION_ARGMAX && function != DML_REDUCE_FUNCTION_ARGMIN),
+            opsetVersion
         )
     {
         ML_CHECK_VALID_ARGUMENT(kernelInfo.GetInputCount() >= 1);
@@ -46,7 +48,7 @@ public:
             //     input dims: {3, 2, 2}
             //     axes: 1
             //     keepDims: 0
-            // 
+            //
             // The ONNX output expects output dims of {3, 2},
             // while DML expect the output tensor desc of {3, 1, 2}.
 
@@ -122,22 +124,33 @@ class DmlOperatorReduceTemplate : public DmlOperatorReduce
 {
 public:
     DmlOperatorReduceTemplate(const MLOperatorKernelCreationContext& kernelInfo)
-    :   DmlOperatorReduce(kernelInfo, Function)
+    :   DmlOperatorReduce(kernelInfo, Function, OpsetVersion)
     {
     }
 };
 
-DML_OP_DEFINE_CREATION_FUNCTION(ReduceSum,       DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_SUM>);
-DML_OP_DEFINE_CREATION_FUNCTION(ReduceMean,      DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_AVERAGE>);
-DML_OP_DEFINE_CREATION_FUNCTION(ReduceProd,      DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_MULTIPLY>);
-DML_OP_DEFINE_CREATION_FUNCTION(ReduceLogSum,    DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_LOG_SUM>);
-DML_OP_DEFINE_CREATION_FUNCTION(ReduceLogSumExp, DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_LOG_SUM_EXP>);
-DML_OP_DEFINE_CREATION_FUNCTION(ReduceSumSquare, DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_SUM_SQUARE>);
-DML_OP_DEFINE_CREATION_FUNCTION(ReduceL1,        DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_L1>);
-DML_OP_DEFINE_CREATION_FUNCTION(ReduceL2,        DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_L2>);
-DML_OP_DEFINE_CREATION_FUNCTION(ReduceMax,       DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_MAX>);
-DML_OP_DEFINE_CREATION_FUNCTION(ReduceMin,       DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_MIN>);
-DML_OP_DEFINE_CREATION_FUNCTION(ArgMax,          DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_ARGMAX>);
-DML_OP_DEFINE_CREATION_FUNCTION(ArgMin,          DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_ARGMIN>);
+DML_OP_DEFINE_CREATION_FUNCTION(ReduceSum13,       VersionedKernel<DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_SUM>, 13>);
+DML_OP_DEFINE_CREATION_FUNCTION(ReduceMean13,      VersionedKernel<DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_AVERAGE>, 13>);
+DML_OP_DEFINE_CREATION_FUNCTION(ReduceProd13,      VersionedKernel<DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_MULTIPLY>, 13>);
+DML_OP_DEFINE_CREATION_FUNCTION(ReduceLogSum13,    VersionedKernel<DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_LOG_SUM>, 13>);
+DML_OP_DEFINE_CREATION_FUNCTION(ReduceLogSumExp13, VersionedKernel<DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_LOG_SUM_EXP>, 13>);
+DML_OP_DEFINE_CREATION_FUNCTION(ReduceSumSquare13, VersionedKernel<DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_SUM_SQUARE>, 13>);
+DML_OP_DEFINE_CREATION_FUNCTION(ReduceL113,        VersionedKernel<DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_L1>, 13>);
+DML_OP_DEFINE_CREATION_FUNCTION(ReduceL213,        VersionedKernel<DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_L2>, 13>);
+DML_OP_DEFINE_CREATION_FUNCTION(ReduceMax13,       VersionedKernel<DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_MAX>, 13>);
+DML_OP_DEFINE_CREATION_FUNCTION(ReduceMin13,       VersionedKernel<DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_MIN>, 13>);
+DML_OP_DEFINE_CREATION_FUNCTION(ArgMax13,          VersionedKernel<DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_ARGMAX>, 13>);
+DML_OP_DEFINE_CREATION_FUNCTION(ArgMin13,          VersionedKernel<DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_ARGMIN>, 13>);
+
+DML_OP_DEFINE_CREATION_FUNCTION(ReduceMean18,      VersionedKernel<DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_AVERAGE>, 18>);
+DML_OP_DEFINE_CREATION_FUNCTION(ReduceProd18,      VersionedKernel<DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_MULTIPLY>, 18>);
+DML_OP_DEFINE_CREATION_FUNCTION(ReduceLogSum18,    VersionedKernel<DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_LOG_SUM>, 18>);
+DML_OP_DEFINE_CREATION_FUNCTION(ReduceLogSumExp18, VersionedKernel<DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_LOG_SUM_EXP>, 18>);
+DML_OP_DEFINE_CREATION_FUNCTION(ReduceSumSquare18, VersionedKernel<DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_SUM_SQUARE>, 18>);
+DML_OP_DEFINE_CREATION_FUNCTION(ReduceL118,        VersionedKernel<DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_L1>, 18>);
+DML_OP_DEFINE_CREATION_FUNCTION(ReduceL218,        VersionedKernel<DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_L2>, 18>);
+DML_OP_DEFINE_CREATION_FUNCTION(ReduceMax18,       VersionedKernel<DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_MAX>, 18>);
+DML_OP_DEFINE_CREATION_FUNCTION(ReduceMin18,       VersionedKernel<DmlOperatorReduceTemplate<DML_REDUCE_FUNCTION_MIN>, 18>);
+
 
 } // namespace Dml

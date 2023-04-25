@@ -39,5 +39,9 @@
     "cpplint.filters": [
         "-build/include_subdir",
         "-runtime/references"
-    ]
+    ],
+    "vscode-nmake-tools.workspaceBuildDirectories": [
+        "."
+    ],
+    "vscode-nmake-tools.installOsRepoRustHelperExtension": false
 }

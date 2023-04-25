@@ -670,19 +670,21 @@ public:
 
 class ReduceHelperBase
 {
+    // Extra version for opsetVersion
     void Initialize(
         const IKernelInformationAdapter& kernelInformation,
         const IShapeInformationAdapter& shapeInformation,
-        bool usingMultipleAxes
+        bool usingMultipleAxes,
+        uint32_t opsetVersion
     );
 
 public:
     // Info_t is used to obtain attributes which will be used for calculating the output shape later.
     // Shape_t is used to obtain input shape which will be used for adjusting attribute value.
     template <typename Info_t, typename Shape_t>
-    ReduceHelperBase(const Info_t& info, const Shape_t& shape, bool usingMultipleAxes)
+    ReduceHelperBase(const Info_t& info, const Shape_t& shape, bool usingMultipleAxes, uint32_t opsetVersion)
     {
-        Initialize(KernelInformationAdapter(info), ShapeInformationAdapter(shape), usingMultipleAxes);
+        Initialize(KernelInformationAdapter(info), ShapeInformationAdapter(shape), usingMultipleAxes, opsetVersion);
     }
 
     std::vector<EdgeShapes> GetOutputShapes(const MLShapeInferenceContext& shapeInfo) const;
@@ -707,7 +709,7 @@ public:
     // Info_t is used to obtain attributes which will be used for calculating the output shape later.
     // Shape_t is used to obtain input shape which will be used for adjusting attribute value.
     template <typename Info_t, typename Shape_t>
-    ArgMinArgMaxHelper(const Info_t& info, const Shape_t& shape) : ReduceHelperBase(info, shape, false) {}
+    ArgMinArgMaxHelper(const Info_t& info, const Shape_t& shape) : ReduceHelperBase(info, shape, false, 13) {}
 };
 
 class ReduceHelper : public ReduceHelperBase
@@ -716,7 +718,8 @@ public:
     // Info_t is used to obtain attributes which will be used for calculating the output shape later.
     // Shape_t is used to obtain input shape which will be used for adjusting attribute value.
     template <typename Info_t, typename Shape_t>
-    ReduceHelper(const Info_t& info, const Shape_t& shape) : ReduceHelperBase(info, shape, true) {}
+    ReduceHelper(const Info_t& info, const Shape_t& shape, uint32_t opsetVersion)
+        : ReduceHelperBase(info, shape, true, opsetVersion) {}
 };
 
 class EinSumHelper
@@ -1569,16 +1572,26 @@ using ShapeInferenceHelper_BitShift= GetBroadcastedOutputShapeHelper;
 using ShapeInferenceHelper_Round = GetBroadcastedOutputShapeHelper;
 using ShapeInferenceHelper_QuickGelu = GetOutputShapeAsInputShapeHelper;
 
-using ShapeInferenceHelper_ReduceSum = ReduceHelper;
-using ShapeInferenceHelper_ReduceMean = ReduceHelper;
-using ShapeInferenceHelper_ReduceProd = ReduceHelper;
-using ShapeInferenceHelper_ReduceLogSum = ReduceHelper;
-using ShapeInferenceHelper_ReduceLogSumExp = ReduceHelper;
-using ShapeInferenceHelper_ReduceSumSquare = ReduceHelper;
-using ShapeInferenceHelper_ReduceL1 = ReduceHelper;
-using ShapeInferenceHelper_ReduceL2 = ReduceHelper;
-using ShapeInferenceHelper_ReduceMax = ReduceHelper;
-using ShapeInferenceHelper_ReduceMin = ReduceHelper;
+using ShapeInferenceHelper_ReduceSum = VersionedOpsetHelper<ReduceHelper, 13>;
+using ShapeInferenceHelper_ReduceMean = VersionedOpsetHelper<ReduceHelper, 13>;
+using ShapeInferenceHelper_ReduceProd = VersionedOpsetHelper<ReduceHelper, 13>;
+using ShapeInferenceHelper_ReduceLogSum = VersionedOpsetHelper<ReduceHelper, 13>;
+using ShapeInferenceHelper_ReduceLogSumExp = VersionedOpsetHelper<ReduceHelper, 13>;
+using ShapeInferenceHelper_ReduceSumSquare = VersionedOpsetHelper<ReduceHelper, 13>;
+using ShapeInferenceHelper_ReduceL1 = VersionedOpsetHelper<ReduceHelper, 13>;
+using ShapeInferenceHelper_ReduceL2 = VersionedOpsetHelper<ReduceHelper, 13>;
+using ShapeInferenceHelper_ReduceMax = VersionedOpsetHelper<ReduceHelper, 13>;
+using ShapeInferenceHelper_ReduceMin = VersionedOpsetHelper<ReduceHelper, 13>;
+
+using ShapeInferenceHelper_ReduceMean18 = VersionedOpsetHelper<ReduceHelper, 18>;
+using ShapeInferenceHelper_ReduceProd18 = VersionedOpsetHelper<ReduceHelper, 18>;
+using ShapeInferenceHelper_ReduceLogSum18 = VersionedOpsetHelper<ReduceHelper, 18>;
+using ShapeInferenceHelper_ReduceLogSumExp18 = VersionedOpsetHelper<ReduceHelper, 18>;
+using ShapeInferenceHelper_ReduceSumSquare18 = VersionedOpsetHelper<ReduceHelper, 18>;
+using ShapeInferenceHelper_ReduceL118 = VersionedOpsetHelper<ReduceHelper, 18>;
+using ShapeInferenceHelper_ReduceL218 = VersionedOpsetHelper<ReduceHelper, 18>;
+using ShapeInferenceHelper_ReduceMax18 = VersionedOpsetHelper<ReduceHelper, 18>;
+using ShapeInferenceHelper_ReduceMin18 = VersionedOpsetHelper<ReduceHelper, 18>;
 using ShapeInferenceHelper_Einsum12 = VersionedOpsetHelper<EinSumHelper, 12>;
 using ShapeInferenceHelper_ArgMax = ArgMinArgMaxHelper;
 using ShapeInferenceHelper_ArgMin = ArgMinArgMaxHelper;
