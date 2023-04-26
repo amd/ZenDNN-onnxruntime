@@ -20,6 +20,7 @@
     <!-- end -->
     <RootNamespace>Microsoft.ML.OnnxRuntime.Tests</RootNamespace>
     <AssemblyName>Microsoft.ML.OnnxRuntime.Tests.Common</AssemblyName>
+    <UserSecretsId>b2a06682-5f12-4b33-989e-9e0a8035fba9</UserSecretsId>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(IsLinuxBuild)'=='true'">
@@ -96,7 +97,7 @@
 
   <ItemGroup>
     <PackageReference Include="Google.Protobuf" Version="3.16.0" />
-    <PackageReference Include="Microsoft.ML.OnnxRuntime.Extensions" Version="1.15.0-dev-20230421-3-dbgaar" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.Extensions" Version="1.15.0-dev-20230421-5-DbgAarAPI21" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.2" />
     <PackageReference Include="xunit" Version="2.4.1" />
   </ItemGroup>

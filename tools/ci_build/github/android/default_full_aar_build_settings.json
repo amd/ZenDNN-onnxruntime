@@ -1,8 +1,5 @@
 {
     "build_abis": [
-        "armeabi-v7a",
-        "arm64-v8a",
-        "x86",
         "x86_64"
     ],
     "android_min_sdk_version": 21,
@@ -15,6 +12,7 @@
         "--build_shared_lib",
         "--use_nnapi",
         "--use_xnnpack",
-        "--skip_tests"
+        "--skip_tests",
+        "--cmake_extra_defines onnxruntime_BUILDUNIT_TESTS=OFF"
     ]
 }

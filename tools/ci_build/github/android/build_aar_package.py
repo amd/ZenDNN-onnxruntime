@@ -110,6 +110,7 @@ def _build_aar(args):
         "scripts",
         "install_protobuf.sh",
     )
+    print(protobuf_installation_script)
     subprocess.run(
         [
             protobuf_installation_script,

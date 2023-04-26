@@ -31,8 +31,10 @@ namespace Microsoft.ML.OnnxRuntime.Tests
         public static extern IntPtr /* OrtStatus* */ RegisterCustomOps(IntPtr /* OrtSessionOptions* */ sessionOptions,
                                                                        IntPtr  /* OrtApiBase* */ ortApiBase);
 
-        // TEMPORARY - testing if we need a callable function to do registration. Marshal.PreLink works on Windows
-        // at least so hopefully this won't be necessary
+        // TEMPORARY - testing if we need a callable function to do registration on iOS.
+        // Marshal.PreLink works on Windows and Android so hopefully this won't be necessary. 
+        // Alternatively the implementation of RegisterCustomOps could be updated to ignore input with nullptr for
+        // session options and OrtApiBase so we can call it but have it do nothing. Currently it segfaults.
         // 
         //[DllImport(CustomOpsLibrary, CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Winapi)]
         //public static extern void Initialize(Int32 dummy);
@@ -115,14 +117,14 @@ namespace Microsoft.ML.OnnxRuntime.Tests
                 var ex = Assert.Throws<OnnxRuntimeException>(() => { opt.AddSessionConfigEntry("", "invalid key"); });
                 Assert.Contains("[ErrorCode:InvalidArgument] Config key is empty", ex.Message);
 
-                // Native.Initialize(0);
-
-                // testing client code having the DllImport in case that's required on Android/iOS to make symbols available
-                Marshal.Prelink(typeof(Native).GetMethod("RegisterCustomOps"));
-                opt.RegisterCustomOpsUsingFunction("RegisterCustomOps");
+                // Testing client code having the DllImport in case that's required on Android/iOS.
+                // Having the DllImport is not enough. Need to use the symbol. Marshal.Prelink works on Windows
+                // and Android. TBD for iOS but hopefully we won't need this if the ORT C# package handles it. 
+                // Marshal.Prelink(typeof(Native).GetMethod("RegisterCustomOps"));
+                // opt.RegisterCustomOpsUsingFunction("RegisterCustomOps");
 
                 // Test using the special-casing in ORT
-                opt.RegisterCustomOpsUsingFunction("OrtExtensions.RegisterCustomOps");
+                opt.RegisterOrtExtensions();
 
 #if USE_CUDA
                 opt.AppendExecutionProvider_CUDA(0);
