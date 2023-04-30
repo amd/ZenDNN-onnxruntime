@@ -956,8 +956,9 @@ namespace Microsoft.ML.OnnxRuntime.Tests
             {
                 try
                 {
-                    Marshal.Prelink(typeof(CustomOpLibrary).GetMethod("RegisterCustomOpsAltName"));
-                    option.RegisterCustomOpsUsingFunction("RegisterCustomOpsAltName");
+                    // Marshal.Prelink(typeof(CustomOpLibrary).GetMethod("RegisterCustomOpsAltName"));
+                    // option.RegisterCustomOpsUsingFunction("RegisterCustomOpsAltName");
+                    option.RegisterCustomOpsUsingFunction(CustomOpLibrary.RegisterCustomOpsAltName);
                 }
                 catch (Exception ex)
                 {

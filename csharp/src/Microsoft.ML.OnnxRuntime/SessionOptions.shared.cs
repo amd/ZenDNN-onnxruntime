@@ -440,32 +440,35 @@ namespace Microsoft.ML.OnnxRuntime
         }
 
         /// <summary>
-        /// Register custom ops by calling the C function with functionName. 
-        /// The C function has the signature
+        /// Delegate for C function to register custom ops.
+        /// The C function must have the signature
         ///   OrtStatus* RegisterCustomOps(OrtSessionOptions* options, const OrtApiBase* api);
+        /// </summary>
+        /// <param name="sessionOptions">Native SessionOptions pointer.</param>
+        /// <param name="ortApiBase">Native OrtApiBase pointer.</param>
+        /// <returns>Native OrtStatus pointer.</returns>
+        public delegate IntPtr CustomOpRegistration(IntPtr sessionOptions, ref OrtApiBase ortApiBase);
+
+        /// <summary>
+        /// Register custom ops by calling the C function delegate provided. 
         /// 
-        /// The function must be available in the global symbols so ONNX Runtime can find it using GetProcAddress or
-        /// dlsym. This will require your app to 'DllImport' the native library containing the function and use 
-        /// Marshal.Prelink to ensure the function is loaded.
-        ///
         /// Example usage:
         ///   static class NativeCustomOps {
         ///     [DllImport("YourLibraryName", CharSet = CharSet.Ansi, CallingConvention = CallingConvention.Winapi)]
         ///     public static extern IntPtr /* OrtStatus* */ 
         ///         YourRegisterCustomOpsFunctionName(IntPtr /* OrtSessionOptions* */ sessionOptions,
-        ///                                           IntPtr /* OrtApiBase*        */ ortApiBase);
+        ///                                           ref OrtApiBase /* OrtApiBase* */ ortApiBase);
         ///   }
         ///   ...
         ///   var sessionOptions = new SessionOptions();
-        ///   Marshal.Prelink(typeof(NativeCustomOps).GetMethod("YourRegisterCustomOpsFunctionName"));
-        ///   sessionOptions.RegisterCustomOpsUsingFunction("YourRegisterCustomOpsFunctionName");
+        ///   sessionOptions.RegisterCustomOpsUsingFunction(NativeCustomOps.YourRegisterCustomOpsFunctionName);
         /// 
         /// </summary>
-        /// <param name="functionName">Function name to call to register custom operators.</param>
-        public void RegisterCustomOpsUsingFunction(string functionName)
+        /// <param name="customOpRegistrationFn">Native function to call to register custom operators.</param>
+        // public void RegisterCustomOpsUsingFunction(Func<IntPtr, IntPtr, OrtApiBase> customOpRegistrationFn)
+        public void RegisterCustomOpsUsingFunction(CustomOpRegistration customOpRegistrationFn)
         {
-            var utf8FuncName = NativeOnnxValueHelper.StringToZeroTerminatedUtf8(functionName);
-            NativeApiStatus.VerifySuccess(NativeMethods.OrtRegisterCustomOpsUsingFunction(this.handle, utf8FuncName));
+            NativeApiStatus.VerifySuccess(customOpRegistrationFn(handle, ref NativeMethods.OrtGetApiBase()));
         }
 
         /// <summary>
