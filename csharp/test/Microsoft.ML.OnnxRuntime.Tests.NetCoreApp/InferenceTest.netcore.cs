@@ -935,9 +935,10 @@ namespace Microsoft.ML.OnnxRuntime.Tests
             }
         }
 
-        // test registration by the alternative function name in the custom ops library.
-        // We use DllImport and Marshal.Prelink to make sure the library is loaded and
-        // the symbol is available.
+        // Test registration by the alternative function name in the custom ops library.
+        // DllImport will load the library on all platforms but the symbols won't be global on all platforms.
+        // Due to that we pass in the function so we can call it with the native SessionOptions handle
+        // and the OrtApiBase instance which are both internals.
         internal static class CustomOpLibrary
         {
             internal const string ExtensionsDllName = "custom_op_library";
@@ -956,8 +957,6 @@ namespace Microsoft.ML.OnnxRuntime.Tests
             {
                 try
                 {
-                    // Marshal.Prelink(typeof(CustomOpLibrary).GetMethod("RegisterCustomOpsAltName"));
-                    // option.RegisterCustomOpsUsingFunction("RegisterCustomOpsAltName");
                     option.RegisterCustomOpsUsingFunction(CustomOpLibrary.RegisterCustomOpsAltName);
                 }
                 catch (Exception ex)
