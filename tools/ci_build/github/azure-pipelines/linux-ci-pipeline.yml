@@ -107,11 +107,12 @@ stages:
           workingDirectory: $(Build.SourcesDirectory)/csharp
 
       - task: DotNetCoreCLI@2
-        displayName: 'dotnet test C# NetCoreApp'
+        displayName: 'dotnet test C#'
         inputs:
           command: 'test'
-          project: 'test/Microsoft.ML.OnnxRuntime.Tests.NetCoreApp/Microsoft.ML.OnnxRuntime.Tests.NetCoreApp.csproj'
-          arguments: '--no-build -l "console;verbosity=normal"'
+          project: 'OnnxRuntime.DesktopOnly.CSharp.sln'
+          # extra logging so all tests are listed in output to validate what's actually run
+          arguments: '-f net6.0 --no-build -l "console;verbosity=normal"'
           workingDirectory: $(Build.SourcesDirectory)/csharp
 
       - task: DotNetCoreCLI@2
