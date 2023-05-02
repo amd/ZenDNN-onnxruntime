@@ -107,7 +107,7 @@ stages:
         inputs:
           script: |
              set -e -x
-             set -i "s/>\/build/>$(Build.SourcesDirectory)/g " $(Build.SourcesDirectory)/csharp/Directory.Build.props
+             sed -i "s/>\/build/>$(Build.SourcesDirectory)/g " $(Build.SourcesDirectory)/csharp/Directory.Build.props
              cat $(Build.SourcesDirectory)/csharp/Directory.Build.props
 
       - task: DotNetCoreCLI@2
