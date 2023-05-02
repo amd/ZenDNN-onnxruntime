@@ -98,13 +98,6 @@ stages:
           command: 'restore'
           projects: '$(Build.SourcesDirectory)/csharp/OnnxRuntime.DesktopOnly.CSharp.sln'
 
-      - task: DotNetCoreCLI@2
-        displayName: 'dotnet build C# sln'
-        inputs:
-          command: 'build'
-          projects: '$(Build.SourcesDirectory)/csharp/OnnxRuntime.DesktopOnly.CSharp.sln'
-          # workingDirectory: $(Build.SourcesDirectory)/csharp
-
       - task: CmdLine@2
         displayName: 'Dump build dir'
         inputs:
@@ -112,6 +105,13 @@ stages:
              set -e -x
              cat $(Build.SourcesDirectory)/csharp/Directory.Build.props
              ls -lR $(Build.BinariesDirectory)
+
+      - task: DotNetCoreCLI@2
+        displayName: 'dotnet build C# sln'
+        inputs:
+          command: 'build'
+          projects: '$(Build.SourcesDirectory)/csharp/OnnxRuntime.DesktopOnly.CSharp.sln'
+          # workingDirectory: $(Build.SourcesDirectory)/csharp
 
       - task: DotNetCoreCLI@2
         displayName: 'dotnet test C#'
