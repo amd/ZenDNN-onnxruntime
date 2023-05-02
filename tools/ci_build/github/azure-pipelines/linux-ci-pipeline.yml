@@ -96,7 +96,7 @@ stages:
         displayName: "Restore C# packages"
         inputs:
           command: 'restore'
-          project: '$(Build.SourcesDirectory)/csharp/OnnxRuntime.DesktopOnly.CSharp.sln'
+          projects: '$(Build.SourcesDirectory)/csharp/OnnxRuntime.DesktopOnly.CSharp.sln'
 
       - task: DotNetCoreCLI@2
         displayName: 'dotnet build C# sln'
