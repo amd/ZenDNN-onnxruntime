@@ -101,12 +101,13 @@ stages:
       # the props file was generated with docker container paths. convert to the 'real' path by replacing the
       # the container path of '/build'. The '>' prefix is to match the closing angle bracket of the tag.
       # e.g. <OnnxRuntimeBuildDirectory>/build/... so we only match the start of a path
+      # (Get-Content $(Build.SourcesDirectory)/csharp/Directory.Build.props) -replace '>/build', '>$(Build.SourcesDirectory)' | Set-Content $(Build.SourcesDirectory)/csharp/Directory.Build.props
       - task: CmdLine@2
         displayName: 'Update props from docker path to local'
         inputs:
           script: |
              set -e -x
-             (Get-Content $(Build.SourcesDirectory)/csharp/Directory.Build.props) -replace '>/build', '>$(Build.SourcesDirectory)' | Set-Content $(Build.SourcesDirectory)/csharp/Directory.Build.props
+             set -i "s/>\/build/>$(Build.SourcesDirectory)/g " $(Build.SourcesDirectory)/csharp/Directory.Build.props
              cat $(Build.SourcesDirectory)/csharp/Directory.Build.props
 
       - task: DotNetCoreCLI@2
