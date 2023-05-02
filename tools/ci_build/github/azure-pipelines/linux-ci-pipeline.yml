@@ -78,6 +78,7 @@ stages:
                         --build_shared_lib \
                         --parallel \
                         --build_wheel \
+                        --build_csharp \
                         --enable_onnx_tests \
                         --enable_transformers_tool_test \
                         --use_cache \
@@ -85,6 +86,41 @@ stages:
                       ccache -sv; \
                       ccache -z"
                 workingDirectory: $(Build.SourcesDirectory)
+
+      - task: UseDotNet@2
+        displayName: "Setup dotnet"
+        inputs:
+          version: '6.0.408'
+
+      - task: DotNetCoreCLI@2
+        displayName: "Restore C# packages"
+        inputs:
+          command: 'restore'
+          project: 'OnnxRuntime.DesktopOnly.CSharp.sln'
+          workingDirectory: $(Build.SourcesDirectory)/csharp
+
+      - task: DotNetCoreCLI@2
+        displayName: 'dotnet build C# sln'
+        inputs:
+          command: 'build'
+          project: 'OnnxRuntime.DesktopOnly.CSharp.sln'
+          workingDirectory: $(Build.SourcesDirectory)/csharp
+
+      - task: DotNetCoreCLI@2
+        displayName: 'dotnet test C# NetCoreApp'
+        inputs:
+          command: 'test'
+          project: 'test/Microsoft.ML.OnnxRuntime.Tests.NetCoreApp/Microsoft.ML.OnnxRuntime.Tests.NetCoreApp.csproj'
+          arguments: '--no-build -l "console;verbosity=normal"'
+          workingDirectory: $(Build.SourcesDirectory)/csharp
+
+      - task: DotNetCoreCLI@2
+        displayName: 'dotnet test C# Common'
+        inputs:
+          command: 'test'
+          project: 'test/Microsoft.ML.OnnxRuntime.Tests.Common/Microsoft.ML.OnnxRuntime.Tests.Common.csproj'
+          arguments: '--no-build -l "console;verbosity=normal"'
+          workingDirectory: $(Build.SourcesDirectory)/csharp
 
       - task: CmdLine@2
         displayName: 'Install python deps and run java tests'
