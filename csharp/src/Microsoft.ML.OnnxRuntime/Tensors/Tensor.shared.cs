@@ -660,16 +660,21 @@ namespace Microsoft.ML.OnnxRuntime.Tensors
         }
 
         /// <summary>
-        /// Initialize an n-dimensional tensor with the specified dimensions and layout.  ReverseStride=true gives a stride of 1-element width to the first dimension (0).  ReverseStride=false gives a stride of 1-element width to the last dimension (n-1).
+        /// Initialize an n-dimensional tensor with the specified dimensions and layout.  
+        /// ReverseStride=true gives a stride of 1-element width to the first dimension (0).  
+        /// ReverseStride=false gives a stride of 1-element width to the last dimension (n-1).
         /// </summary>
-        /// <param name="dimensions">An span of integers that represent the size of each dimension of the Tensor to create.</param>
-        /// <param name="reverseStride">False (default) to indicate that the first dimension is most major (farthest apart) and the last dimension is most minor (closest together): akin to row-major in a rank-2 tensor.  True to indicate that the last dimension is most major (farthest apart) and the first dimension is most minor (closest together): akin to column-major in a rank-2 tensor.</param>
+        /// <param name="dimensions">
+        /// An span of integers that represent the size of each dimension of the Tensor to create.</param>
+        /// <param name="reverseStride">
+        /// False (default) to indicate that the first dimension is most major (farthest apart) and the last dimension 
+        /// is most minor (closest together): akin to row-major in a rank-2 tensor.  
+        /// True to indicate that the last dimension is most major (farthest apart) and the first dimension is most 
+        /// minor (closest together): akin to column-major in a rank-2 tensor.</param>
         protected Tensor(ReadOnlySpan<int> dimensions, bool reverseStride) : base(typeof(T))
         {
-            if (dimensions == null)
-            {
-                throw new ArgumentNullException(nameof(dimensions));
-            }
+            // dimensions cannot be null as the ReadOnlySpan ctor ensures that
+            // https://github.com/dotnet/corefx/blob/8d212b41126baff94fc025e4438d6f4e8cbff7e9/src/System.Memory/src/System/ReadOnlySpan.cs#L32
 
             this.dimensions = new int[dimensions.Length];
             long size = 1;

@@ -96,8 +96,7 @@ stages:
         displayName: "Restore C# packages"
         inputs:
           command: 'restore'
-          project: 'OnnxRuntime.DesktopOnly.CSharp.sln'
-          workingDirectory: $(Build.SourcesDirectory)/csharp
+          project: '$(Build.SourcesDirectory)/csharp/OnnxRuntime.DesktopOnly.CSharp.sln'
 
       - task: DotNetCoreCLI@2
         displayName: 'dotnet build C# sln'
@@ -113,14 +112,6 @@ stages:
           project: 'OnnxRuntime.DesktopOnly.CSharp.sln'
           # extra logging so all tests are listed in output to validate what's actually run
           arguments: '-f net6.0 --no-build -l "console;verbosity=normal"'
-          workingDirectory: $(Build.SourcesDirectory)/csharp
-
-      - task: DotNetCoreCLI@2
-        displayName: 'dotnet test C# Common'
-        inputs:
-          command: 'test'
-          project: 'test/Microsoft.ML.OnnxRuntime.Tests.Common/Microsoft.ML.OnnxRuntime.Tests.Common.csproj'
-          arguments: '--no-build -l "console;verbosity=normal"'
           workingDirectory: $(Build.SourcesDirectory)/csharp
 
       - task: CmdLine@2
