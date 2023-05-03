@@ -100,15 +100,23 @@ stages:
 
       # the props file was generated with docker container paths. convert to the 'real' path by replacing the
       # the container path of '/build'. The '>' prefix is to match the closing angle bracket of the tag.
-      # e.g. <OnnxRuntimeBuildDirectory>/build/... so we only match the start of a path
+      # e.g. <OnnxRuntimeBuildDirectory>/build/... so we only match the start of a path.
+      # We use powershell so we don't need extra escaping of the '/' chars in the path.
       # (Get-Content $(Build.SourcesDirectory)/csharp/Directory.Build.props) -replace '>/build', '>$(Build.SourcesDirectory)' | Set-Content $(Build.SourcesDirectory)/csharp/Directory.Build.props
-      - task: CmdLine@2
+      - task: PowerShell@2
         displayName: 'Update props from docker path to local'
         inputs:
           script: |
-             set -e -x
-             sed -i "s/>\/build/>$(Build.SourcesDirectory)/g " $(Build.SourcesDirectory)/csharp/Directory.Build.props
+             (Get-Content $(Build.SourcesDirectory)/csharp/Directory.Build.props) -replace '>/build', '>$(Build.SourcesDirectory)' | Set-Content $(Build.SourcesDirectory)/csharp/Directory.Build.props
              cat $(Build.SourcesDirectory)/csharp/Directory.Build.props
+
+      # - task: CmdLine@2
+      #   displayName: 'Update props from docker path to local'
+      #   inputs:
+      #     script: |
+      #        set -e -x
+      #        sed -i "s/>\/build/>$(Build.SourcesDirectory)/g " $(Build.SourcesDirectory)/csharp/Directory.Build.props
+      #        cat $(Build.SourcesDirectory)/csharp/Directory.Build.props
 
       - task: DotNetCoreCLI@2
         displayName: 'dotnet build C# sln'
