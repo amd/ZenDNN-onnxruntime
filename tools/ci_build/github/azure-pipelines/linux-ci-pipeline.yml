@@ -102,29 +102,19 @@ stages:
       # the container path of '/build'. The '>' prefix is to match the closing angle bracket of the tag.
       # e.g. <OnnxRuntimeBuildDirectory>/build/... so we only match the start of a path.
       # We use powershell so we don't need extra escaping of the '/' chars in the path.
-      # (Get-Content $(Build.SourcesDirectory)/csharp/Directory.Build.props) -replace '>/build', '>$(Build.BinariesDirectory)' | Set-Content $(Build.SourcesDirectory)/csharp/Directory.Build.props
       - task: CmdLine@2
-        displayName: 'Update props from docker path to local'
+        displayName: 'Update props from docker path to local and create models link'
         inputs:
           script: |
              pwsh -Command '(Get-Content $(Build.SourcesDirectory)/csharp/Directory.Build.props) -replace ">/build", ">$(Build.BinariesDirectory)" | Set-Content $(Build.SourcesDirectory)/csharp/Directory.Build.props'
              cat $(Build.SourcesDirectory)/csharp/Directory.Build.props
-             ls -lR $(Build.BinariesDirectory)
-
-      # - task: CmdLine@2
-      #   displayName: 'Update props from docker path to local'
-      #   inputs:
-      #     script: |
-      #        set -e -x
-      #        sed -i "s/>\/build/>$(Build.SourcesDirectory)/g " $(Build.SourcesDirectory)/csharp/Directory.Build.props
-      #        cat $(Build.SourcesDirectory)/csharp/Directory.Build.props
+             ln -s /data/models $(Build.BinariesDirectory)/models
 
       - task: DotNetCoreCLI@2
         displayName: 'dotnet build C# sln'
         inputs:
           command: 'build'
           projects: '$(Build.SourcesDirectory)/csharp/OnnxRuntime.DesktopOnly.CSharp.sln'
-          # workingDirectory: $(Build.SourcesDirectory)/csharp
 
       - task: DotNetCoreCLI@2
         displayName: 'dotnet test C#'
@@ -133,7 +123,7 @@ stages:
           projects: '$(Build.SourcesDirectory)/csharp/OnnxRuntime.DesktopOnly.CSharp.sln'
           # extra logging so all tests are listed in output to validate what's actually run
           arguments: '-f net6.0 --no-build -l "console;verbosity=normal"'
-          # workingDirectory: $(Build.SourcesDirectory)/csharp
+          workingDirectory: $(Build.SourcesDirectory)/csharp
 
       - task: CmdLine@2
         displayName: 'Install python deps and run java tests'
