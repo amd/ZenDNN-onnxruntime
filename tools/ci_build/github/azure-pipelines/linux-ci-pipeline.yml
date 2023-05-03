@@ -103,11 +103,11 @@ stages:
       # e.g. <OnnxRuntimeBuildDirectory>/build/... so we only match the start of a path.
       # We use powershell so we don't need extra escaping of the '/' chars in the path.
       # (Get-Content $(Build.SourcesDirectory)/csharp/Directory.Build.props) -replace '>/build', '>$(Build.SourcesDirectory)' | Set-Content $(Build.SourcesDirectory)/csharp/Directory.Build.props
-      - task: PowerShell@2
+      - task: CmdLine@2
         displayName: 'Update props from docker path to local'
         inputs:
           script: |
-             (Get-Content $(Build.SourcesDirectory)/csharp/Directory.Build.props) -replace '>/build', '>$(Build.SourcesDirectory)' | Set-Content $(Build.SourcesDirectory)/csharp/Directory.Build.props
+             pwsh -Command '(Get-Content $(Build.SourcesDirectory)/csharp/Directory.Build.props) -replace ">/build", ">$(Build.SourcesDirectory)" | Set-Content $(Build.SourcesDirectory)/csharp/Directory.Build.props'
              cat $(Build.SourcesDirectory)/csharp/Directory.Build.props
 
       # - task: CmdLine@2
