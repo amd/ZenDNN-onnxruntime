@@ -15,6 +15,7 @@ from . import _are_deterministic_algorithms_enabled, _io, _use_deterministic_alg
 from ._execution_agent import InferenceAgent
 from ._fallback import ORTModuleFallbackException, _FallbackManager, _FallbackPolicy
 from ._graph_execution_manager import GraphExecutionManager, _RunStateInfo
+from ._utils import save_tuning_results
 from .options import DebugOptions, _SkipCheck
 
 
@@ -170,6 +171,9 @@ class InferenceManager(GraphExecutionManager):
                 self._device,
                 *prepared_input_list,
             )
+
+            if create_execution_session:
+                save_tuning_results(self._execution_agent._inference_session, False)
 
             return _io.unflatten_user_output(self._module_output_schema, user_outputs)
         except ORTModuleFallbackException as e:
