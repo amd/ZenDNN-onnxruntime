@@ -475,7 +475,7 @@ TEST_P(ModelTest, Run) {
     // Multi GPU TensorRT EP CI uses Nvidia Tesla M60 which doesn't support fp16.
     broken_tests_keyword_set.insert({"FLOAT16"});
     broken_tests_keyword_set.insert({"ExpandOpTest"});
-    broken_tests_keyword_set.insert({"TestConfigureTensorRTProviderOptions"})
+    broken_tests_keyword_set.insert({"TestConfigureTensorRTProviderOptions"});
 #endif
 
   }
