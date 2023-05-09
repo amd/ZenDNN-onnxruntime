@@ -135,7 +135,6 @@ Status SnpeLib::InitializeSnpe(zdl::DlContainer::IDlContainer* container,
               .setRuntimeProcessor(snpe_settings.GetRuntimeTarget().Get())
               .setExecutionPriorityHint(snpe_settings.GetExecutionPriority())
               .setUseUserSuppliedBuffers(use_user_buffer)
-              .setInitCacheMode(true)
               .setInitCacheMode(snpe_settings.GetInitCacheMode());
 #ifdef __ANDROID__
   // use sustained performance mode on android variants.
