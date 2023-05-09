@@ -3460,6 +3460,7 @@ struct OrtApi {
    *   "ITENSOR" -- default, ITensor which is float only.
    *   "TF8" -- quantized model required, "FLOAT" -- for both quantized or non-quantized model
    *   If SNPE is not available (due to a non Snpe enabled build or its dependencies not being installed), this function will fail.
+   *   "enable_init_cache": enable SNPE init caching feature, set to 1 to enabled it. Disabled by default.
    *
    * XNNPACK supported keys:
    *   "intra_op_num_threads": number of thread-pool size to use for XNNPACK execution provider.
