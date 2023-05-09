@@ -24,10 +24,11 @@ enum class BufferType : int {
 class SnpeRuntimeOptions {
  public:
   SnpeRuntimeOptions()
-      : runtime_target_()
-      , execution_priority_(zdl::DlSystem::ExecutionPriorityHint_t::NORMAL)
-      , runtime_options_()
-      , buffer_type_(BufferType::ITENSOR) {
+      : runtime_target_(),
+        execution_priority_(zdl::DlSystem::ExecutionPriorityHint_t::NORMAL),
+        runtime_options_(),
+        buffer_type_(BufferType::ITENSOR),
+        enable_init_cache(false) {
   }
 
   explicit SnpeRuntimeOptions(const std::unordered_map<std::string, std::string>& options)
@@ -50,6 +51,10 @@ class SnpeRuntimeOptions {
     return buffer_type_;
   }
 
+  bool GetInitCacheMode() const {
+    return enable_init_cache;
+  }
+
  private:
   void ParseOptions();
 
@@ -58,6 +63,7 @@ class SnpeRuntimeOptions {
   zdl::DlSystem::ExecutionPriorityHint_t execution_priority_;
   std::unordered_map<std::string, std::string> runtime_options_;
   BufferType buffer_type_;
+  bool enable_init_cache;
 };
 
 }  // namespace snpe
