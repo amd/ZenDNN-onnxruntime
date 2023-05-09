@@ -54,7 +54,7 @@ void SnpeRuntimeOptions::ParseOptions() {
 
   if (const auto enable_init_cache_pos = runtime_options_.find(ENABLE_INIT_CACHE); enable_init_cache_pos != runtime_options_.end()) {
     if (enable_init_cache_pos->second == "1") {
-      enable_init_cache = true;
+      enable_init_cache_ = true;
     }
   }
 }

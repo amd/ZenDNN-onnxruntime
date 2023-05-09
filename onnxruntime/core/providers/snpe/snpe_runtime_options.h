@@ -28,7 +28,7 @@ class SnpeRuntimeOptions {
         execution_priority_(zdl::DlSystem::ExecutionPriorityHint_t::NORMAL),
         runtime_options_(),
         buffer_type_(BufferType::ITENSOR),
-        enable_init_cache(false) {
+        enable_init_cache_(false) {
   }
 
   explicit SnpeRuntimeOptions(const std::unordered_map<std::string, std::string>& options)
@@ -52,7 +52,7 @@ class SnpeRuntimeOptions {
   }
 
   bool GetInitCacheMode() const {
-    return enable_init_cache;
+    return enable_init_cache_;
   }
 
  private:
@@ -63,7 +63,7 @@ class SnpeRuntimeOptions {
   zdl::DlSystem::ExecutionPriorityHint_t execution_priority_;
   std::unordered_map<std::string, std::string> runtime_options_;
   BufferType buffer_type_;
-  bool enable_init_cache;
+  bool enable_init_cache_;
 };
 
 }  // namespace snpe
