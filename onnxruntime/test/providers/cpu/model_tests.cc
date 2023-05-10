@@ -471,13 +471,10 @@ TEST_P(ModelTest, Run) {
     // sce op is not supported
     broken_tests_keyword_set.insert({"sce"});
 
-#ifdef USE_CUDA_ARCHITECTURE_52
     // Multi GPU TensorRT EP CI uses Nvidia Tesla M60 which doesn't support fp16.
     broken_tests_keyword_set.insert({"FLOAT16"});
     broken_tests_keyword_set.insert({"ExpandOpTest"});
     broken_tests_keyword_set.insert({"TestConfigureTensorRTProviderOptions"});
-#endif
-
   }
 
   if (provider_name == "dml") {
