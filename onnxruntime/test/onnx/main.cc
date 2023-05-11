@@ -443,7 +443,7 @@ select from 'TF8', 'TF16', 'UINT8', 'FLOAT', 'ITENSOR'. \n)");
             ORT_THROW("Set to 1 to enable_init_cache.");
           }
         } else {
-          ORT_THROW("Wrong key type entered. Choose from options: ['runtime', 'priority', 'buffer_type'] \n");
+          ORT_THROW("Wrong key type entered. Choose from options: ['runtime', 'priority', 'buffer_type', 'enable_init_cache'] \n");
         }
 
         snpe_options[key] = value;
