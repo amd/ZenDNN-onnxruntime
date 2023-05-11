@@ -161,6 +161,10 @@ void RunWithOneSessionSingleThreadInference(std::string model_name, std::string 
       0,
       2,
       -1,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
       nullptr};
 
   params.trt_engine_cache_enable = 1;
@@ -240,6 +244,10 @@ void RunWithOneSessionMultiThreadsInference(std::string model_name, std::string 
       0,
       2,
       -1,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
       nullptr};
 
   params.trt_engine_cache_enable = 1;
@@ -333,6 +341,80 @@ TEST(TensorrtExecutionProviderTest, TRTModelIdGeneratorUsingModelHashing) {
   ASSERT_EQ(model_hash, model_hash3) << "model 1&3 are same models and they have same hash, no matter where they are loaded";
 }
 
+TEST(TensorrtExecutionProviderTest, TRTPluginsCustomOpTest) {
+  std::string model_name = "testdata/trt_plugin_custom_op_test.onnx";
+  SessionOptions so;
+  so.session_logid = "TensorrtExecutionProviderTRTPluginsTest";
+  RunOptions run_options;
+  run_options.run_tag = so.session_logid;
+  InferenceSession session_object{so, GetEnvironment()};
+  onnxruntime::AllocatorManager allocator_manager;
+  auto cuda_provider = DefaultCudaExecutionProvider();
+  cuda_provider->RegisterAllocator(allocator_manager);
+  auto cpu_allocator = cuda_provider->GetAllocator(OrtMemTypeCPU);
+  std::vector<int64_t> dims_op_x = {12, 256, 256};
+  std::vector<float> values_op_x(1.0f, 786432);  // 786432=12*256*256
+  OrtValue ml_value_x;
+  CreateMLValue<float>(cpu_allocator, dims_op_x, values_op_x, &ml_value_x);
+  OrtValue ml_value_y;
+  CreateMLValue<float>(cpu_allocator, dims_op_x, values_op_x, &ml_value_y);
+  OrtValue ml_value_z;
+  CreateMLValue<float>(cpu_allocator, dims_op_x, values_op_x, &ml_value_z);
+  NameMLValMap feeds;
+  feeds.insert(std::make_pair("input1", ml_value_x));
+  feeds.insert(std::make_pair("input2", ml_value_y));
+  feeds.insert(std::make_pair("input3", ml_value_z));
+
+  // prepare outputs
+  std::vector<std::string> output_names;
+  output_names.push_back("output");
+  std::vector<OrtValue> fetches;
+
+  OrtTensorRTProviderOptionsV2 params{
+      0,
+      0,
+      nullptr,
+      1000,
+      1,
+      1 << 30,
+      0,
+      0,
+      nullptr,
+      0,
+      0,
+      0,
+      0,
+      0,
+      nullptr,
+      0,
+      nullptr,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      2,
+      -1,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr};
+
+  std::unique_ptr<IExecutionProvider> execution_provider = TensorrtExecutionProviderWithOptions(&params);
+  EXPECT_TRUE(session_object.RegisterExecutionProvider(std::move(execution_provider)).IsOK());
+  std::cout << model_name << std::endl;
+  auto status = session_object.Load(model_name);
+  ASSERT_TRUE(status.IsOK());
+  status = session_object.Initialize();
+  ASSERT_TRUE(status.IsOK());
+  status = session_object.Run(run_options, feeds, output_names, &fetches);
+  ASSERT_TRUE(status.IsOK());
+}
+
 TEST_P(TensorrtExecutionProviderCacheTest, Run) {
   // GetParam() returns the parameter of following format:
   // ##cache type##_##input shape type##
@@ -411,6 +493,10 @@ TEST_P(TensorrtExecutionProviderCacheTest, Run) {
       0,
       2,
       -1,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
       nullptr};
 
   if (cache_type.compare("engine") == 0) {
@@ -435,9 +521,9 @@ TEST_P(TensorrtExecutionProviderCacheTest, Run) {
     // TRT engine will be created and cached
     // TRT profile will be created and cached only for dynamic input shape
     // Data in profile,
-    // X: 1, 3, 3, 2, 2, 2
-    // Y: 1, 3, 3, 2, 2, 2
-    // Z: 1, 3, 3, 2, 2, 2
+    // X: 1, 3, 3, 3, 2, 2, 2, 2
+    // Y: 1, 3, 3, 3, 2, 2, 2, 2
+    // Z: 1, 3, 3, 3, 2, 2, 2, 2
     status = session_object.Run(run_options, feeds, output_names, &fetches);
     ASSERT_TRUE(status.IsOK());
     VerifyOutputs(fetches, expected_dims_mul_m, expected_values_mul_m);
@@ -454,18 +540,20 @@ TEST_P(TensorrtExecutionProviderCacheTest, Run) {
       profile_files = GetCachesByType("./", ".profile");
       ASSERT_EQ(profile_files.size(), 1);
       std::ifstream profile_file(profile_files[0], std::ios::binary | std::ios::in);
-      auto shape_ranges = DeserializeProfile(profile_file);
+      auto shape_ranges = DeserializeProfileV2(profile_file);
 
-      // check min/max shape ranges of dynamic shape dimensions
+      // check min/max/opt shape ranges of dynamic shape dimensions
       for (auto it = shape_ranges.cbegin(); it != shape_ranges.cend(); ++it) {
         auto ranges = it->second;
         for (auto it2 = ranges.cbegin(); it2 != ranges.cend(); ++it2) {
           if (it2->first == 1) {
-            ASSERT_EQ(it2->second.first, 3);
-            ASSERT_EQ(it2->second.second, 3);
+            ASSERT_EQ(it2->second[0][0], 3);
+            ASSERT_EQ(it2->second[0][1], 3);
+            ASSERT_EQ(it2->second[0][2], 3);
           } else if (it2->first == 2) {
-            ASSERT_EQ(it2->second.first, 2);
-            ASSERT_EQ(it2->second.second, 2);
+            ASSERT_EQ(it2->second[0][0], 2);
+            ASSERT_EQ(it2->second[0][1], 2);
+            ASSERT_EQ(it2->second[0][2], 2);
           }
         }
       }
@@ -474,9 +562,9 @@ TEST_P(TensorrtExecutionProviderCacheTest, Run) {
     // another inference run with input shape {1, 1, 6}
     // TRT engine and profile will be updated
     // Data in profile,
-    // X: 1, 1, 3, 2, 2, 6
-    // Y: 1, 1, 3, 2, 2, 6
-    // Z: 1, 1, 3, 2, 2, 6
+    // X: 1, 1, 3, 3, 2, 2, 6, 6
+    // Y: 1, 1, 3, 3, 2, 2, 6, 6
+    // Z: 1, 1, 3, 3, 2, 2, 6, 6
     dims_mul_x = {1, 1, 6};
     CreateMLValue<float>(cpu_allocator, dims_mul_x, values_mul_x, &ml_value_x);
     CreateMLValue<float>(cpu_allocator, dims_mul_x, values_mul_x, &ml_value_y);
@@ -504,35 +592,91 @@ TEST_P(TensorrtExecutionProviderCacheTest, Run) {
       profile_files = GetCachesByType("./", ".profile");
       ASSERT_EQ(profile_files.size(), 1);
       std::ifstream profile_file2(profile_files[0], std::ios::binary | std::ios::in);
-      auto shape_ranges2 = DeserializeProfile(profile_file2);
+      auto shape_ranges2 = DeserializeProfileV2(profile_file2);
 
-      // check min/max shape ranges of dynamic shape dimensions
+      // check min/max/opt shape ranges of dynamic shape dimensions
       for (auto it = shape_ranges2.cbegin(); it != shape_ranges2.cend(); ++it) {
         auto ranges = it->second;
         for (auto it2 = ranges.cbegin(); it2 != ranges.cend(); ++it2) {
           if (it2->first == 1) {
-            ASSERT_EQ(it2->second.first, 1);
-            ASSERT_EQ(it2->second.second, 3);
+            ASSERT_EQ(it2->second[0][0], 1);
+            ASSERT_EQ(it2->second[0][1], 3);
+            ASSERT_EQ(it2->second[0][2], 3);
           } else if (it2->first == 2) {
-            ASSERT_EQ(it2->second.first, 2);
-            ASSERT_EQ(it2->second.second, 6);
+            ASSERT_EQ(it2->second[0][0], 2);
+            ASSERT_EQ(it2->second[0][1], 6);
+            ASSERT_EQ(it2->second[0][2], 6);
           }
         }
       }
     }
+
+    // Test explicit min/max/opt profile shapes
+    // create another session object with TRT EP provider options:
+    // trt_profile_min_shapes=X:1x1x1,Y:1x1x1,Z:1x1x1
+    // trt_profile_max_shapes=X:1x6x6,Y:1x6x6,Z:1x6x6
+    // trt_profile_opt_shapes=X:1x2x3,Y:1x2x3,Z:1x2x3
+    //
+    // TRT engine and profile will be updated
+    // Data in profile,
+    // X: 1, 1, 6, 2, 2, 1, 6, 3
+    // Y: 1, 1, 6, 2, 2, 1, 6, 3
+    // Y: 1, 1, 6, 2, 2, 1, 6, 3
+    InferenceSession session_object2{so, GetEnvironment()};
+    params.trt_profile_min_shapes = "X:1x1x1,Y:1x1x1,Z:1x1x1";
+    params.trt_profile_max_shapes = "X:1x6x6,Y:1x6x6,Z:1x6x6";
+    params.trt_profile_opt_shapes = "X:1x2x3,Y:1x2x3,Z:1x2x3";
+    std::unique_ptr<IExecutionProvider> execution_provider2 = TensorrtExecutionProviderWithOptions(&params);
+    EXPECT_TRUE(session_object2.RegisterExecutionProvider(std::move(execution_provider2)).IsOK());
+    status = session_object2.Load(model_name);
+    ASSERT_TRUE(status.IsOK());
+    status = session_object2.Initialize();
+    ASSERT_TRUE(status.IsOK());
+
+    status = session_object2.Run(run_options, feeds, output_names, &fetches);
+
+    if (input_type.compare("static") == 0) {
+      // Can't run inference since input shape changes but the engine is built with static input
+      ASSERT_FALSE(status.IsOK());
+    } else {
+      ASSERT_TRUE(status.IsOK());
+      VerifyOutputs(fetches, expected_dims_mul_m, expected_values_mul_m);
+
+      profile_files = GetCachesByType("./", ".profile");
+      ASSERT_EQ(profile_files.size(), 1);
+      std::ifstream profile_file2(profile_files[0], std::ios::binary | std::ios::in);
+      auto shape_ranges2 = DeserializeProfileV2(profile_file2);
+
+      // check min/max/opt shape ranges of dynamic shape dimensions
+      for (auto it = shape_ranges2.cbegin(); it != shape_ranges2.cend(); ++it) {
+        auto ranges = it->second;
+        for (auto it2 = ranges.cbegin(); it2 != ranges.cend(); ++it2) {
+          if (it2->first == 1) {
+            ASSERT_EQ(it2->second[0][0], 1);
+            ASSERT_EQ(it2->second[0][1], 6);
+            ASSERT_EQ(it2->second[0][2], 2);
+          } else if (it2->first == 2) {
+            ASSERT_EQ(it2->second[0][0], 1);
+            ASSERT_EQ(it2->second[0][1], 6);
+            ASSERT_EQ(it2->second[0][2], 3);
+          }
+        }
+      }
+    }
+
   } else if (cache_type.compare("timing") == 0) {
-    // add test code here
-
-    /* Following code block tests the functionality of engine and optimization profile of ORT TRT, including:
+    /* Following code block tests the functionality of timing cache, including:
      * - timing cache cache serialization/de-serialization
-     * - benefir of usign a timing cache no matter if dynamic / static input
+     * - TODO: benefir of usign a timing cache no matter if dynamic / static input
      */
-    uint64_t compilation_without_cache_ms, compilation_with_cache_ms;
 
+    // Temporarily disable comparing the engine build time until we find the model that can benefit from timing cache to get engine build time reduced.
+    // uint64_t compilation_without_cache_ms, compilation_with_cache_ms;
+
+    // First session is created with TRT EP with timing cache enabled
     params.trt_timing_cache_enable = 1;
-    //  std::chrono
     {
-      auto start = chrono::steady_clock::now();
+      // auto start = chrono::steady_clock::now();
       std::unique_ptr<IExecutionProvider> execution_provider = TensorrtExecutionProviderWithOptions(&params);
       EXPECT_TRUE(session_object.RegisterExecutionProvider(std::move(execution_provider)).IsOK());
       auto status = session_object.Load(model_name);
@@ -540,46 +684,39 @@ TEST_P(TensorrtExecutionProviderCacheTest, Run) {
       status = session_object.Initialize();
       ASSERT_TRUE(status.IsOK());
 
-      // run inference
-      // TRT timing cache should be created under the situation of non-dynamic/dynamic shape input
       status = session_object.Run(run_options, feeds, output_names, &fetches);
-      auto end = chrono::steady_clock::now();
+      // auto end = chrono::steady_clock::now();
       ASSERT_TRUE(status.IsOK());
       VerifyOutputs(fetches, expected_dims_mul_m, expected_values_mul_m);
       ASSERT_TRUE(IsCacheExistedByType("./", ".timing"));
-      compilation_without_cache_ms = chrono::duration_cast<chrono::microseconds>(end - start).count();
+      // compilation_with_cache_ms = chrono::duration_cast<chrono::microseconds>(end - start).count();
     }
 
-    // get new session and reinitialize model
-    // second same inference should resuse the cache and therefore have a faster build
-    if (input_type.compare("static") == 0) {
+    // Second session is created with TRT EP without timing cache enabled
+    params.trt_timing_cache_enable = 0;
+    {
+      InferenceSession session_object_new{so, GetEnvironment()};
       {
-        InferenceSession session_object_new{so, GetEnvironment()};
-        {
-          auto start = chrono::steady_clock::now();
-          std::unique_ptr<IExecutionProvider> execution_provider = TensorrtExecutionProviderWithOptions(&params);
-          EXPECT_TRUE(session_object_new.RegisterExecutionProvider(std::move(execution_provider)).IsOK());
-          auto status = session_object_new.Load(model_name);
-          ASSERT_TRUE(status.IsOK());
-          status = session_object_new.Initialize();
-          ASSERT_TRUE(status.IsOK());
+        // auto start = chrono::steady_clock::now();
+        std::unique_ptr<IExecutionProvider> execution_provider = TensorrtExecutionProviderWithOptions(&params);
+        EXPECT_TRUE(session_object_new.RegisterExecutionProvider(std::move(execution_provider)).IsOK());
+        auto status = session_object_new.Load(model_name);
+        ASSERT_TRUE(status.IsOK());
+        status = session_object_new.Initialize();
+        ASSERT_TRUE(status.IsOK());
 
-          // run inference
-          // TRT timing cache should be created under the situation of non-dynamic/dynamic shape input
-          status = session_object_new.Run(run_options, feeds, output_names, &fetches);
-          // TODO narrow down actual compilation section
-          auto end = chrono::steady_clock::now();
+        status = session_object_new.Run(run_options, feeds, output_names, &fetches);
+        // TODO narrow down actual compilation section
+        // auto end = chrono::steady_clock::now();
 
-          ASSERT_TRUE(status.IsOK());
-          VerifyOutputs(fetches, expected_dims_mul_m, expected_values_mul_m);
-          ASSERT_TRUE(IsCacheExistedByType("./", ".timing"));
-          compilation_with_cache_ms = chrono::duration_cast<chrono::microseconds>(end - start).count();
-        }
+        ASSERT_TRUE(status.IsOK());
+        VerifyOutputs(fetches, expected_dims_mul_m, expected_values_mul_m);
+        // compilation_without_cache_ms = chrono::duration_cast<chrono::microseconds>(end - start).count();
       }
-      ASSERT_TRUE(compilation_with_cache_ms <= compilation_without_cache_ms);
-    } else {
-      // TODO test dynamic shapes
     }
+
+    // Temporarily disable comparing the engine build time until we find the model that can benefit from timing cache to get engine build time reduced.
+    // ASSERT_TRUE(compilation_with_cache_ms <= compilation_without_cache_ms);
   }
 
   // clean up caches

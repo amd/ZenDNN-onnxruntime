@@ -29,6 +29,7 @@ class BeamSearchT5 : public BeamSearchBase<T> {
                BeamSearchParameters& params,
                const GenerationDeviceHelper::AddToFeedsFunc& add_to_feeds_func,
                const GenerationDeviceHelper::ReorderPastStateFunc& reorder_past_state_func,
+               const GenerationDeviceHelper::InitCacheIndirFunc& init_cache_indir_func,
                const GenerationDeviceHelper::TopkFunc& topk_func,
                const GenerationDeviceHelper::ProcessLogitsFunc<T>& process_logits_func,
                const GenerationDeviceHelper::InitBeamStateFunc<T>& init_beam_state_func,
@@ -50,6 +51,7 @@ class BeamSearchT5 : public BeamSearchBase<T> {
         add_to_feeds_func_(add_to_feeds_func),
         init_beam_state_func_(init_beam_state_func),
         reorder_past_state_func_(reorder_past_state_func),
+        init_cache_indir_func_(init_cache_indir_func),
         create_encoder_inputs_func_(create_encoder_inputs_func),
         update_decoder_feeds_func_(update_decoder_feeds_func),
         expand_buffer_int32_func_(expand_buffer_int32_func),
@@ -80,6 +82,7 @@ class BeamSearchT5 : public BeamSearchBase<T> {
   GenerationDeviceHelper::AddToFeedsFunc add_to_feeds_func_;
   GenerationDeviceHelper::InitBeamStateFunc<T> init_beam_state_func_;
   GenerationDeviceHelper::ReorderPastStateFunc reorder_past_state_func_;
+  GenerationDeviceHelper::InitCacheIndirFunc init_cache_indir_func_;
   GenerationDeviceHelper::CreateEncoderInputsFunc create_encoder_inputs_func_;
   GenerationDeviceHelper::UpdateDecoderFeedsFunc<T> update_decoder_feeds_func_;
   GenerationDeviceHelper::ExpandBufferFunc<int32_t> expand_buffer_int32_func_;
@@ -128,12 +131,9 @@ Status BeamSearchT5<T>::Execute(const FeedsFetchesManager& encoder_feeds_fetches
 
   const OrtValue* encoder_attn_mask_value = this->context_.GetInputOrtValue(9);
 
-  BeamSearchCpuState cpu_state;
-  cpu_state.Init(this->cpu_allocator_,
-                 static_cast<size_t>(parameters->BatchBeamSize()),
-                 parameters->max_length,
-                 parameters->sequence_length,
-                 this->IsCuda());
+  BeamSearchCpuState cpu_state{*parameters,
+                               this->cpu_allocator_,
+                               this->IsCuda()};
 
   IAllocatorUniquePtr<char> buffer;
   OrtValue decoder_input_ids;  // Tensor in CPU, and it will be used to initialize sequence in cpu_state
@@ -181,39 +181,20 @@ Status BeamSearchT5<T>::Execute(const FeedsFetchesManager& encoder_feeds_fetches
   // ------------------------------------
 
   // Copy decoder_input_ids (in CPU) to sequence. It contains decoder_start_token_id for each beam.
-  cpu_state.SetSequence(decoder_input_ids.Get<Tensor>().DataAsSpan<int32_t>(),
-                        static_cast<size_t>(parameters->BatchBeamSize()),
-                        parameters->num_beams,
-                        parameters->max_length,
-                        parameters->sequence_length);
+  cpu_state.SetUnexpandedSequence(decoder_input_ids.Get<Tensor>().DataAsSpan<int32_t>());
 
   onnxruntime::OrtStlAllocator<HypothesisScore> hypothesis_score_allocator(this->cpu_allocator_);
   onnxruntime::OrtStlAllocator<BeamHypotheses> beam_hyps_allocator(this->cpu_allocator_);
-  this->beam_scorer_ = std::make_unique<BeamSearchScorer>(static_cast<size_t>(parameters->batch_size),
-                                                          static_cast<size_t>(parameters->num_beams),
-                                                          static_cast<size_t>(parameters->max_length),
-                                                          parameters->length_penalty,
-                                                          parameters->early_stopping,
-                                                          static_cast<size_t>(parameters->num_return_sequences),
-                                                          parameters->pad_token_id,
-                                                          parameters->eos_token_id,
+  this->beam_scorer_ = std::make_unique<BeamSearchScorer>(*parameters,
                                                           hypothesis_score_allocator,
-                                                          beam_hyps_allocator);
-  this->beam_scorer_->Initialize(this->cpu_allocator_, parameters->sequence_length);
+                                                          beam_hyps_allocator,
+                                                          this->cpu_allocator_);
 
-  BeamSearchState<T> beam_state;
   constexpr bool use_position = false;
-  beam_state.Init(this->temp_space_allocator_,
-                  parameters->batch_size,
-                  parameters->num_beams,
-                  parameters->vocab_size,
-                  parameters->sequence_length,
-                  parameters->max_length,
-                  parameters->num_heads,
-                  parameters->head_size,
-                  decoder_subgraph_.has_decoder_masked_attention_,
-                  parameters->output_scores,
-                  use_position);
+  BeamSearchState<T> beam_state{*parameters,
+                                this->temp_space_allocator_,
+                                decoder_subgraph_.has_decoder_masked_attention_,
+                                use_position};
 
   init_beam_state_func_(&beam_state,
                         cpu_state.sequence_lengths,
@@ -284,6 +265,8 @@ Status BeamSearchT5<T>::Execute(const FeedsFetchesManager& encoder_feeds_fetches
                                                      beam_state.staging_for_past_state_reorder,
                                                      this->ort_stream_));
       }
+      size_t cache_indir_input_offset = static_cast<size_t>(decoder_subgraph_.GetFirstPastInputIndex()) + 4 * static_cast<size_t>(decoder_subgraph_.num_layers) + 2;
+      ORT_RETURN_IF_ERROR(init_cache_indir_func_(*decoder_feeds[cache_indir_input_offset].GetMutable<Tensor>(), this->ort_stream_));
     }
   }
 
@@ -302,7 +285,7 @@ Status BeamSearchT5<T>::Execute(const FeedsFetchesManager& encoder_feeds_fetches
     dumper->Print("", decoder_feeds[offset]);
     dumper->Print("beam_width", offset + 1, true);
     dumper->Print("", decoder_feeds[offset + 1]);
-    dumper->Print("past_sequence_length", offset + 2, true);
+    dumper->Print("cache_redir", offset + 2, true);
     dumper->Print("", decoder_feeds[offset + 2]);
 #endif
 
@@ -381,14 +364,13 @@ Status BeamSearchT5<T>::Execute(const FeedsFetchesManager& encoder_feeds_fetches
     }
   }
 
-  gsl::span<const float> final_beam_scores(beam_state.beam_scores.data(), beam_state.beam_scores.size());
+  gsl::span<const float> final_beam_scores = beam_state.beam_scores;
   if (this->IsCuda()) {
     ORT_RETURN_IF_ERROR(this->device_copy_func_(cpu_state.final_beam_scores,
                                                 final_beam_scores,
                                                 nullptr,
                                                 DeviceCopyDirection::deviceToHost));
-    final_beam_scores = gsl::make_span<const float>(cpu_state.final_beam_scores.data(),
-                                                    cpu_state.final_beam_scores.size());
+    final_beam_scores = cpu_state.final_beam_scores;
   }
 
   this->beam_scorer_->Finalize(&(cpu_state.sequences),
@@ -399,7 +381,7 @@ Status BeamSearchT5<T>::Execute(const FeedsFetchesManager& encoder_feeds_fetches
   // Output per token scores
   if (output_scores != nullptr) {
     gsl::span<float> target = output_scores->MutableDataAsSpan<float>();
-    gsl::span<const float> source = gsl::span<const float>(beam_state.scores.data(), beam_state.scores.size());
+    gsl::span<const float> source = beam_state.scores;
     assert(target.size() == source.size());
     ORT_RETURN_IF_ERROR(this->device_copy_func_(target, source, nullptr, DeviceCopyDirection::deviceToDevice));
   }
