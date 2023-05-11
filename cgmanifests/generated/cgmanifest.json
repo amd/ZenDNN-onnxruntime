@@ -82,16 +82,6 @@
       "component": {
         "type": "git",
         "git": {
-          "commitHash": "d10b27fe37736d2944630ecd7557cefa95cf87c9",
-          "repositoryUrl": "https://gitlab.com/libeigen/eigen.git"
-        },
-        "comments": "git submodule at cmake/external/eigen"
-      }
-    },
-    {
-      "component": {
-        "type": "git",
-        "git": {
           "commitHash": "b113f24842c6e97fe3e352084db09a6e278593ae",
           "repositoryUrl": "https://github.com/emscripten-core/emsdk.git"
         },
@@ -132,7 +122,7 @@
       "component": {
         "type": "git",
         "git": {
-          "commitHash": "8c0b94e793a66495e0b1f34a5eb26bd7dc672db0",
+          "commitHash": "b971ac5250ea8de900eae9f95e06548d14cd95fe",
           "repositoryUrl": "https://github.com/abseil/abseil-cpp.git"
         },
         "comments": "abseil_cpp"
@@ -212,7 +202,7 @@
       "component": {
         "type": "git",
         "git": {
-          "commitHash": "436617053d0f39a1019a371c3a9aa599b3cb2cea",
+          "commitHash": "ac5489682760393fe21bd2a8e038b528442412a7",
           "repositoryUrl": "https://github.com/google/nsync.git"
         },
         "comments": "google_nsync"
@@ -222,7 +212,7 @@
       "component": {
         "type": "git",
         "git": {
-          "commitHash": "519beb0e52c842729b4b53731d27c0e0c32ab4a2",
+          "commitHash": "b796f7d44681514f58a683a3a71ff17c94edb0c1",
           "repositoryUrl": "https://github.com/google/googletest.git"
         },
         "comments": "googletest"
@@ -262,7 +252,7 @@
       "component": {
         "type": "git",
         "git": {
-          "commitHash": "5f4caba4e7a9017816e47becdd918fcc872039ba",
+          "commitHash": "d0849dca2c466bdce38a32a7e4265b193b8fb0f9",
           "repositoryUrl": "https://github.com/microsoft/wil.git"
         },
         "comments": "microsoft_wil"
@@ -302,7 +292,7 @@
       "component": {
         "type": "git",
         "git": {
-          "commitHash": "f0dc78d7e6e331b8c6bb2d5283e06aa26883ca7c",
+          "commitHash": "6e511679de8ab0feefc1cdac1505b2fac5548e42",
           "repositoryUrl": "https://github.com/protocolbuffers/protobuf.git"
         },
         "comments": "protobuf"
@@ -342,7 +332,7 @@
       "component": {
         "type": "git",
         "git": {
-          "commitHash": "5916273f79a21551890fd3d56fc5375a78d1598d",
+          "commitHash": "6481e8bef08f606ddd627e4d3be89f64d62e1b8a",
           "repositoryUrl": "https://github.com/pytorch/cpuinfo.git"
         },
         "comments": "pytorch_cpuinfo"
@@ -352,7 +342,7 @@
       "component": {
         "type": "git",
         "git": {
-          "commitHash": "5723bb8950318135ed9cf4fc76bed988a087f536",
+          "commitHash": "3a8436ac436124a57a4e22d5c8713a2d42b381d7",
           "repositoryUrl": "https://github.com/google/re2.git"
         },
         "comments": "re2"
@@ -362,7 +352,7 @@
       "component": {
         "type": "git",
         "git": {
-          "commitHash": "ff15c6ada150a5018c5ef2172401cb4529eac9c0",
+          "commitHash": "4cafc9196c4da9c817992b20f5253ef967685bf8",
           "repositoryUrl": "https://github.com/dcleblanc/SafeInt.git"
         },
         "comments": "safeint"
@@ -386,6 +376,16 @@
           "repositoryUrl": "https://github.com/NVIDIA/cutlass.git"
         },
         "comments": "cutlass"
+      }
+    },
+    {
+      "component": {
+        "type": "git",
+        "git": {
+          "commitHash": "72c943dea2b9240cd09efde15191e144bc7c7d38",
+          "repositoryUrl": "https://github.com/protocolbuffers/utf8_range.git"
+        },
+        "comments": "utf8_range"
       }
     },
     {
