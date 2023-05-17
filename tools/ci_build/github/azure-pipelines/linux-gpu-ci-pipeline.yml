@@ -137,7 +137,7 @@ jobs:
         mkdir -p $HOME/.onnx
         docker run --gpus all --rm \
           --volume  $(Build.SourcesDirectory):/onnxruntime_src \
-          --volume $(Build.BinariesDirectory)/Release:/build/Release \
+          --volume $(Build.BinariesDirectory)/Release:/build/Release:ro \
           --volume /data/models:/build/models:ro \
           --volume $HOME/.onnx:/home/onnxruntimedev/.onnx \
           --volume /data/onnx:/data/onnx \
@@ -155,6 +155,6 @@ jobs:
             /tmp/python3 /onnxruntime_src/tools/ci_build/build.py \
               --build_dir /build --config Release --test --skip_submodule_sync --build_shared_lib --parallel --build_wheel --enable_onnx_tests \
               --use_cuda --cuda_version=${{variables.common_cuda_version}} --cuda_home=/usr/local/cuda --cudnn_home=/usr/local/cuda \
-              --enable_pybind --build_java"
+              --enable_pybind --build_java --ctest_path '' "
 
   - template: templates/clean-agent-build-directory-step.yml
