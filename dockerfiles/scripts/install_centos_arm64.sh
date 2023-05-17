@@ -1,9 +1,5 @@
 yum-config-manager --enable extras
 yum -y install centos-release-scl-rh
-# EPEL support (for yasm)
-if ! rpm -q --quiet epel-release ; then
-  yum -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
-fi
 yum install -y devtoolset-10-binutils devtoolset-10-gcc devtoolset-10-gcc-c++ devtoolset-10-gcc aria2 python3-pip python3-wheel git python3-devel
 ARCH=`uname -m`
 if [ "$ARCH" = "aarch64" ]; then
