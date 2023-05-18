@@ -32,6 +32,10 @@ Status Model::Predict(const InlinedHashMap<std::string, OnnxTensorData>& inputs,
     auto num_elements = SafeInt<size_t>(Product(tensor.tensor_info.shape));
     emscripten::val view = emscripten::val::undefined();
     switch (tensor.tensor_info.data_type) {
+      case ONNX_NAMESPACE::TensorProto_DataType_BOOL:
+        view = emscripten::val{emscripten::typed_memory_view(num_elements,
+                                                             static_cast<const uint8_t*>(tensor.buffer))};
+        break;
       case ONNX_NAMESPACE::TensorProto_DataType_FLOAT16:
         view = emscripten::val{emscripten::typed_memory_view(num_elements,
                                                              static_cast<const uint16_t*>(tensor.buffer))};
@@ -72,6 +76,10 @@ Status Model::Predict(const InlinedHashMap<std::string, OnnxTensorData>& inputs,
     auto num_elements = SafeInt<size_t>(Product(tensor.tensor_info.shape));
     emscripten::val view = emscripten::val::undefined();
     switch (tensor.tensor_info.data_type) {
+      case ONNX_NAMESPACE::TensorProto_DataType_BOOL:
+        view = emscripten::val{emscripten::typed_memory_view(num_elements,
+                                                             static_cast<const uint8_t*>(tensor.buffer))};
+        break;
       case ONNX_NAMESPACE::TensorProto_DataType_FLOAT16:
         view = emscripten::val{emscripten::typed_memory_view(num_elements,
                                                              static_cast<const uint16_t*>(tensor.buffer))};
@@ -133,6 +141,9 @@ void Model::AllocateInputOutputBuffers() {
     const int32_t num_elements = SafeInt<int32_t>(Product(input_shape));
     const auto data_type = input_info.data_type;
     switch (data_type) {
+      case ONNX_NAMESPACE::TensorProto_DataType_BOOL:
+        wnn_inputs_.set(input, emscripten::val::global("Uint8Array").new_(num_elements));
+        break;
       case ONNX_NAMESPACE::TensorProto_DataType_FLOAT16:
         wnn_inputs_.set(input, emscripten::val::global("Uint16Array").new_(num_elements));
         break;
@@ -152,6 +163,9 @@ void Model::AllocateInputOutputBuffers() {
     const int32_t num_elements = SafeInt<int32_t>(Product(output_shape));
     const auto data_type = output_info.data_type;
     switch (data_type) {
+      case ONNX_NAMESPACE::TensorProto_DataType_BOOL:
+        wnn_outputs_.set(output, emscripten::val::global("Uint8Array").new_(num_elements));
+        break;
       case ONNX_NAMESPACE::TensorProto_DataType_FLOAT16:
         wnn_outputs_.set(output, emscripten::val::global("Uint16Array").new_(num_elements));
         break;

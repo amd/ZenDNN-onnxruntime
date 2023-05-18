@@ -96,6 +96,10 @@ static OpBuilderRegistrations CreateOpBuilderRegistrations() {
     CreateResizeOpBuilder("Resize", op_registrations);
   }
 
+  {  // Slice
+    CreateSliceOpBuilder("Slice", op_registrations);
+  }
+
   {  // Softmax
     CreateSoftmaxOpBuilder("Softmax", op_registrations);
   }
