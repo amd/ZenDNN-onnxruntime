@@ -46,7 +46,6 @@ Status ArgMaxMinOpBuilder::AddToModelBuilderImpl(ModelBuilder& model_builder,
   options.set("axis", static_cast<int32_t>(axis));
   options.set("keepDimensions", keep_dims == 1);
   options.set("selectLastIndex", select_last_index == 1);
-emscripten::val console = emscripten::val::global("console");console.call<void>("log", options);
   emscripten::val output = emscripten::val::object();
 
   const auto& op_type = node.OpType();
