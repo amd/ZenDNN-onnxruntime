@@ -111,7 +111,8 @@ static const InlinedHashMap<std::string, std::string> op_map = {
     {"Reshape", "reshape"},
     {"Resize", "resample2d"},
     {"Split", "split"},
-    {"Transpose", "transpose"}};
+    {"Transpose", "transpose"},
+    {"Equal", "equal"}};
 
 inline bool CheckSingleOp(const std::string& op_type, const emscripten::val& wnn_builder_) {
   return op_map.find(op_type) != op_map.end() && wnn_builder_[op_map.find(op_type)->second].as<bool>();
