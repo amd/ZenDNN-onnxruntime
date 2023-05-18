@@ -311,6 +311,7 @@ common::Status WebNNExecutionProvider::Compile(const std::vector<FusedNodeAndGra
 
           void* output_buffer;
           switch (output_type) {
+            case ONNX_NAMESPACE::TensorProto_DataType_BOOL:
             case ONNX_NAMESPACE::TensorProto_DataType_FLOAT16:
             case ONNX_NAMESPACE::TensorProto_DataType_FLOAT:
             case ONNX_NAMESPACE::TensorProto_DataType_INT64:

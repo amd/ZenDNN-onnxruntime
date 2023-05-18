@@ -112,6 +112,11 @@ Status ModelBuilder::RegisterInitializers() {
       auto num_elements = SafeInt<size_t>(Product(tensor.dims()));
       emscripten::val view = emscripten::val::undefined();
       switch (data_type) {
+        case ONNX_NAMESPACE::TensorProto_DataType_BOOL:
+          desc.set("type", emscripten::val("uint8"));
+          view = emscripten::val{emscripten::typed_memory_view(num_elements,
+                                                               reinterpret_cast<uint8_t*>(unpacked_tensor.data()))};
+          break;
         case ONNX_NAMESPACE::TensorProto_DataType_FLOAT16:
           desc.set("type", emscripten::val("float16"));
           view = emscripten::val{emscripten::typed_memory_view(num_elements,
@@ -206,6 +211,9 @@ Status ModelBuilder::RegisterModelInputOutput(const NodeArg& node_arg, bool is_i
 
     data_type = type_proto->tensor_type().elem_type();
     switch (data_type) {
+      case ONNX_NAMESPACE::TensorProto_DataType_BOOL:
+        desc.set("type", emscripten::val("uint8"));
+        break;
       case ONNX_NAMESPACE::TensorProto_DataType_FLOAT16:
         desc.set("type", emscripten::val("float16"));
         break;
@@ -272,6 +280,11 @@ Status ModelBuilder::AddOperandFromPersistMemoryBuffer(
   emscripten::val view = emscripten::val::undefined();
   emscripten::val desc = emscripten::val::object();
   switch (data_type) {
+    case ONNX_NAMESPACE::TensorProto_DataType_BOOL:
+      view = emscripten::val{emscripten::typed_memory_view(size / sizeof(uint8_t),
+                                                           reinterpret_cast<const uint8_t*>(dest))};
+      desc.set("type", emscripten::val("uint8"));
+      break;
     case ONNX_NAMESPACE::TensorProto_DataType_FLOAT16:
       view = emscripten::val{emscripten::typed_memory_view(size / sizeof(uint16_t),
                                                            reinterpret_cast<const uint16_t*>(dest))};
