@@ -73,6 +73,10 @@ bool ExpandOpBuilder::IsOpSupportedImpl(const InitializedTensorSet& initializers
 
   std::vector<int64_t> new_shape;
   const auto& shape_tensor = *initializers.at(shape_name);
+  if (shape_tensor.data_type() != ONNXTensorElementDataType::ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64) {
+    LOGS(logger, VERBOSE) << "The type of tensor's element data must be INT64.";
+    return false;
+  }
   if (!ReadIntArrayFrom1DTensor(shape_tensor, new_shape, logger)) {
     LOGS(logger, VERBOSE) << "Cannot get shape.";
     return false;

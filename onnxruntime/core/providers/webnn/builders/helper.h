@@ -55,17 +55,26 @@ bool ReadIntArrayFrom1DTensor(const onnx::TensorProto& tensor, std::vector<T>& a
     return false;
   }
   int64_t rank = dims[0];
-  if (tensor.data_type() != ONNXTensorElementDataType::ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64) {
-    LOGS(logger, VERBOSE) << "The type of tensor's element data must be INT64.";
-    return false;
-  }
-  const int64_t* array_data = reinterpret_cast<const int64_t*>(unpacked_tensor.data());
-  if constexpr (std::is_same<T, int64_t>::value) {
-    array.assign(array_data, array_data + rank);
-  } else if constexpr (std::is_same<T, int32_t>::value) {
-    std::transform(array_data, array_data + rank,
-                   std::back_inserter(array),
-                   [](int64_t dim) -> int32_t { return SafeInt<int32_t>(dim); });
+  switch (tensor.data_type()) {
+    case ONNXTensorElementDataType::ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64: {
+      const int64_t* array_data = reinterpret_cast<const int64_t*>(unpacked_tensor.data());
+      if constexpr (std::is_same<T, int64_t>::value) {
+        array.assign(array_data, array_data + rank);
+      } else {
+        std::transform(array_data, array_data + rank,
+                       std::back_inserter(array),
+                       [](int64_t dim) -> T { return SafeInt<T>(dim); });
+      };
+      break;
+    }
+
+    case ONNXTensorElementDataType::ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32: {
+      const int32_t* array_data = reinterpret_cast<const int32_t*>(unpacked_tensor.data());
+      array.assign(array_data, array_data + rank);
+      break;
+    }
+    default:
+      return false;
   }
   return true;
 }
@@ -92,6 +101,7 @@ static const InlinedHashMap<std::string, std::string> op_map = {
     {"Relu", "relu"},
     {"LeakyRelu", "leakyRelu"},
     {"Sigmoid", "sigmoid"},
+    {"Slice", "slice"},
     {"Softmax", "softmax"},
     {"Cast", "cast"},
     {"Clip", "clamp"},

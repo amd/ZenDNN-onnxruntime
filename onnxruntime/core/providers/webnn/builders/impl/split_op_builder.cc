@@ -118,6 +118,10 @@ bool SplitOpBuilder::IsOpSupportedImpl(const InitializedTensorSet& initializers,
     // Values should be >= 0. Sum of the values must be equal to the dim value at 'axis' specified.
     std::vector<int64_t> split;
     const auto& split_tensor = *initializers.at(input_defs[1]->Name());
+    if (split_tensor.data_type() != ONNXTensorElementDataType::ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64) {
+      LOGS(logger, VERBOSE) << "The type of tensor's element data must be INT64.";
+      return false;
+    }
     if (!ReadIntArrayFrom1DTensor(split_tensor, split, logger)) {
       LOGS(logger, VERBOSE) << "Cannot get split.";
       return false;
