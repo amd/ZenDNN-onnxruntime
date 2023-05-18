@@ -23,6 +23,10 @@ static OpBuilderRegistrations CreateOpBuilderRegistrations() {
     CreateUnaryOpBuilder("Sqrt", op_registrations);
   }
 
+  {  // Logical
+    CreateLogicalOpBuilder("Equal", op_registrations);
+  }
+
   {  // Binary
     CreateBinaryOpBuilder("Add", op_registrations);
     CreateBinaryOpBuilder("Sub", op_registrations);
