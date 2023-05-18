@@ -79,7 +79,7 @@ bool CastOpBuilder::IsOpSupportedImpl(const InitializedTensorSet& initializers, 
   const auto to_type = helper.Get("to", ONNX_NAMESPACE::TensorProto_DataType_UNDEFINED);
   if (!IsSupportedDataType(to_type)) {
     LOGS(logger, VERBOSE) << "Invalid cast to type " << to_type
-                          << " . Current WebNN only support cast to float32, float16 or int64.";
+                          << " . Current WebNN only support cast to bool, float32, float16 or int64.";
     return false;
   }
 
