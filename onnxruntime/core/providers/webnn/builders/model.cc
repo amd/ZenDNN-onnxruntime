@@ -44,11 +44,18 @@ Status Model::Predict(const InlinedHashMap<std::string, OnnxTensorData>& inputs,
         view = emscripten::val{emscripten::typed_memory_view(num_elements,
                                                              static_cast<const float*>(tensor.buffer))};
         break;
-      case ONNX_NAMESPACE::TensorProto_DataType_INT64: {
+      case ONNX_NAMESPACE::TensorProto_DataType_INT32:
+        view = emscripten::val{emscripten::typed_memory_view(num_elements,
+                                                             static_cast<const int32_t*>(tensor.buffer))};
+        break;
+      case ONNX_NAMESPACE::TensorProto_DataType_INT64:
         view = emscripten::val{emscripten::typed_memory_view(num_elements,
                                                              static_cast<const int64_t*>(tensor.buffer))};
         break;
-      }
+      case ONNX_NAMESPACE::TensorProto_DataType_UINT32:
+        view = emscripten::val{emscripten::typed_memory_view(num_elements,
+                                                             static_cast<const uint32_t*>(tensor.buffer))};
+        break;
       default:
         return ORT_MAKE_STATUS(ONNXRUNTIME, INVALID_ARGUMENT,
                                "The input of graph has unsupported type, name: ",
@@ -88,11 +95,18 @@ Status Model::Predict(const InlinedHashMap<std::string, OnnxTensorData>& inputs,
         view = emscripten::val{emscripten::typed_memory_view(num_elements,
                                                              static_cast<const float*>(tensor.buffer))};
         break;
-      case ONNX_NAMESPACE::TensorProto_DataType_INT64: {
+      case ONNX_NAMESPACE::TensorProto_DataType_INT32:
+        view = emscripten::val{emscripten::typed_memory_view(num_elements,
+                                                             static_cast<const int32_t*>(tensor.buffer))};
+        break;
+      case ONNX_NAMESPACE::TensorProto_DataType_INT64:
         view = emscripten::val{emscripten::typed_memory_view(num_elements,
                                                              static_cast<const int64_t*>(tensor.buffer))};
         break;
-      }
+      case ONNX_NAMESPACE::TensorProto_DataType_UINT32:
+        view = emscripten::val{emscripten::typed_memory_view(num_elements,
+                                                             static_cast<const uint32_t*>(tensor.buffer))};
+        break;
       default:
         return ORT_MAKE_STATUS(ONNXRUNTIME, INVALID_ARGUMENT,
                                "The output of graph has unsupported type, name: ",
@@ -150,8 +164,14 @@ void Model::AllocateInputOutputBuffers() {
       case ONNX_NAMESPACE::TensorProto_DataType_FLOAT:
         wnn_inputs_.set(input, emscripten::val::global("Float32Array").new_(num_elements));
         break;
+      case ONNX_NAMESPACE::TensorProto_DataType_INT32:
+        wnn_inputs_.set(input, emscripten::val::global("Int32Array").new_(num_elements));
+        break;
       case ONNX_NAMESPACE::TensorProto_DataType_INT64:
         wnn_inputs_.set(input, emscripten::val::global("BigInt64Array").new_(num_elements));
+        break;
+      case ONNX_NAMESPACE::TensorProto_DataType_UINT32:
+        wnn_inputs_.set(input, emscripten::val::global("UInt32Array").new_(num_elements));
         break;
       default:
         break;
@@ -172,8 +192,14 @@ void Model::AllocateInputOutputBuffers() {
       case ONNX_NAMESPACE::TensorProto_DataType_FLOAT:
         wnn_outputs_.set(output, emscripten::val::global("Float32Array").new_(num_elements));
         break;
+      case ONNX_NAMESPACE::TensorProto_DataType_INT32:
+        wnn_outputs_.set(output, emscripten::val::global("Int32Array").new_(num_elements));
+        break;
       case ONNX_NAMESPACE::TensorProto_DataType_INT64:
         wnn_outputs_.set(output, emscripten::val::global("BigInt64Array").new_(num_elements));
+        break;
+      case ONNX_NAMESPACE::TensorProto_DataType_UINT32:
+        wnn_outputs_.set(output, emscripten::val::global("UInt32Array").new_(num_elements));
         break;
       default:
         break;

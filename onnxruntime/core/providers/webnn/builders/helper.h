@@ -127,11 +127,13 @@ inline bool CheckSingleOp(const std::string& op_type, const emscripten::val& wnn
   return op_map.find(op_type) != op_map.end() && wnn_builder_[op_map.find(op_type)->second].as<bool>();
 }
 
-constexpr std::array<ONNX_NAMESPACE::TensorProto_DataType, 4> supported_data_types = {
+constexpr std::array<ONNX_NAMESPACE::TensorProto_DataType, 6> supported_data_types = {
     ONNX_NAMESPACE::TensorProto_DataType_BOOL,
     ONNX_NAMESPACE::TensorProto_DataType_FLOAT16,
     ONNX_NAMESPACE::TensorProto_DataType_FLOAT,
+    ONNX_NAMESPACE::TensorProto_DataType_INT32,
     ONNX_NAMESPACE::TensorProto_DataType_INT64,
+    ONNX_NAMESPACE::TensorProto_DataType_UINT32,
 };
 
 bool IsSupportedDataType(int32_t data_type);
