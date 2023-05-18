@@ -26,10 +26,11 @@ Status LogicalOpBuilder::AddToModelBuilderImpl(ModelBuilder& model_builder, cons
                                                const logging::Logger& /* logger */) const {
   const auto& op_type(node.OpType());
 
-  emscripten::val input = model_builder.GetOperand(node.InputDefs()[0]->Name());
+  emscripten::val input0 = model_builder.GetOperand(node.InputDefs()[0]->Name());
+  emscripten::val input1 = model_builder.GetOperand(node.InputDefs()[1]->Name());
   emscripten::val output = emscripten::val::object();
   if (op_type == "Equal") {
-    output = model_builder.GetBuilder().call<emscripten::val>("equal", input);
+    output = model_builder.GetBuilder().call<emscripten::val>("equal", input0, input1);
   } else {
     return ORT_MAKE_STATUS(ONNXRUNTIME, INVALID_ARGUMENT,
                            "LogicalOpBuilder::AddToModelBuilderImpl, unknown op: ", op_type);
