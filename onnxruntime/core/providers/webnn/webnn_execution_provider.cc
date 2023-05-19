@@ -137,6 +137,10 @@ WebNNExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph_view
       const auto* node = graph_viewer.GetNode(index);
 
       for (const auto* input : node->InputDefs()) {
+        if (!input->Exists()) {
+          // skip the placeholder inputs.
+          continue;
+        }
         // if the node input was not produced by this subgraph, add it to the subgraph inputs.
         if (node_outputs.count(input) == 0) {
           if (subgraph_inputs.count(input) == 0) {

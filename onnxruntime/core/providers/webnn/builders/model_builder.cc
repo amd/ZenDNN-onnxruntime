@@ -91,7 +91,8 @@ Status ModelBuilder::RegisterInitializers() {
   for (const auto& pair : GetInitializerTensors()) {
     const auto& tensor = *pair.second;
     const auto& name = tensor.name();
-    if (Contains(skipped_initializers_, name))
+    // Optional tensors can be indicated by an empty name, just ignore it.
+    if (name.empty() || Contains(skipped_initializers_, name))
       continue;
 
     const auto& shape = tensor.dims();
