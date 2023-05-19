@@ -118,6 +118,7 @@ static const InlinedHashMap<std::string, std::string> op_map = {
     {"GlobalAveragePool", "averagePool2d"},
     {"GlobalMaxPool", "maxPool2d"},
     {"AveragePool", "averagePool2d"},
+    {"LayerNormalization", "meanVarianceNormalization"},
     {"MaxPool", "maxPool2d"},
     {"ReduceMax", "reduceMax"},
     {"ReduceMean", "reduceMean"},

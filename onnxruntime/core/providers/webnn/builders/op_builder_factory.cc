@@ -81,6 +81,10 @@ static OpBuilderRegistrations CreateOpBuilderRegistrations() {
     CreateLogicalOpBuilder("Equal", op_registrations);
   }
 
+  {  // LayerNormalization
+    CreateNormalizationOpBuilder("LayerNormalization", op_registrations);
+  }
+
   {  // Pool
     CreatePoolOpBuilder("GlobalAveragePool", op_registrations);
     CreatePoolOpBuilder("GlobalMaxPool", op_registrations);
