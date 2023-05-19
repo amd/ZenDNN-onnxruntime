@@ -94,6 +94,7 @@ static const InlinedHashMap<std::string, std::string> op_map = {
     {"Div", "div"},
     {"Pow", "pow"},
     {"Cos", "cos"},
+    {"Equal", "equal"},
     {"Erf", "erf"},
     {"Not", "logicalNot"},
     {"Floor", "floor"},

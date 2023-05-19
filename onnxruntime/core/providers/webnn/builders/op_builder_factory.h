@@ -39,6 +39,7 @@ void CreateSoftmaxOpBuilder(const std::string& op_type, OpBuilderRegistrations& 
 void CreateSplitOpBuilder(const std::string& op_type, OpBuilderRegistrations& op_registrations);
 void CreateTransposeOpBuilder(const std::string& op_type, OpBuilderRegistrations& op_registrations);
 void CreateUnaryOpBuilder(const std::string& op_type, OpBuilderRegistrations& op_registrations);
+void CreateLogicalOpBuilder(const std::string& op_type, OpBuilderRegistrations& op_registrations);
 
 }  // namespace webnn
 }  // namespace onnxruntime
