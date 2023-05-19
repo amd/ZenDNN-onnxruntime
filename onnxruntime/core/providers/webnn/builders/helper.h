@@ -97,6 +97,7 @@ static const InlinedHashMap<std::string, std::string> op_map = {
     {"Erf", "erf"},
     {"Not", "logicalNot"},
     {"Floor", "floor"},
+    {"Flatten", "flattenTo2d"},
     {"Sin", "sin"},
     {"Sqrt", "sqrt"},
     {"Relu", "relu"},
