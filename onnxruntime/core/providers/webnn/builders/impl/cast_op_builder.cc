@@ -49,8 +49,14 @@ Status CastOpBuilder::AddToModelBuilderImpl(ModelBuilder& model_builder,
     case ONNX_NAMESPACE::TensorProto_DataType_FLOAT:
       operand_type = "float32";
       break;
+    case ONNX_NAMESPACE::TensorProto_DataType_INT32:
+      operand_type = "int32";
+      break;
     case ONNX_NAMESPACE::TensorProto_DataType_INT64:
       operand_type = "int64";
+      break;
+    case ONNX_NAMESPACE::TensorProto_DataType_UINT32:
+      operand_type = "uint32";
       break;
     default:
       return ORT_MAKE_STATUS(ONNXRUNTIME, INVALID_ARGUMENT,
@@ -79,7 +85,7 @@ bool CastOpBuilder::IsOpSupportedImpl(const InitializedTensorSet& initializers, 
   const auto to_type = helper.Get("to", ONNX_NAMESPACE::TensorProto_DataType_UNDEFINED);
   if (!IsSupportedDataType(to_type)) {
     LOGS(logger, VERBOSE) << "Invalid cast to type " << to_type
-                          << " . Current WebNN only support cast to bool, float32, float16 or int64.";
+                          << " . Current WebNN only support cast to bool, float32, float16, int32, int64 or uint32.";
     return false;
   }
 

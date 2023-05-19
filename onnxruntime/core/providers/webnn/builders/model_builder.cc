@@ -127,10 +127,20 @@ Status ModelBuilder::RegisterInitializers() {
           view = emscripten::val{emscripten::typed_memory_view(num_elements,
                                                                reinterpret_cast<float*>(unpacked_tensor.data()))};
           break;
+        case ONNX_NAMESPACE::TensorProto_DataType_INT32:
+          desc.set("type", emscripten::val("int32"));
+          view = emscripten::val{emscripten::typed_memory_view(num_elements,
+                                                               reinterpret_cast<int32_t*>(unpacked_tensor.data()))};
+          break;
         case ONNX_NAMESPACE::TensorProto_DataType_INT64:
           desc.set("type", emscripten::val("int64"));
           view = emscripten::val{emscripten::typed_memory_view(num_elements,
                                                                reinterpret_cast<int64_t*>(unpacked_tensor.data()))};
+          break;
+        case ONNX_NAMESPACE::TensorProto_DataType_UINT32:
+          desc.set("type", emscripten::val("uint32"));
+          view = emscripten::val{emscripten::typed_memory_view(num_elements,
+                                                               reinterpret_cast<uint32_t*>(unpacked_tensor.data()))};
           break;
         default:
           break;
@@ -220,8 +230,14 @@ Status ModelBuilder::RegisterModelInputOutput(const NodeArg& node_arg, bool is_i
       case ONNX_NAMESPACE::TensorProto_DataType_FLOAT:
         desc.set("type", emscripten::val("float32"));
         break;
+      case ONNX_NAMESPACE::TensorProto_DataType_INT32:
+        desc.set("type", emscripten::val("int32"));
+        break;
       case ONNX_NAMESPACE::TensorProto_DataType_INT64:
         desc.set("type", emscripten::val("int64"));
+        break;
+      case ONNX_NAMESPACE::TensorProto_DataType_UINT32:
+        desc.set("type", emscripten::val("uint32"));
         break;
       default: {
         // TODO: support other type.
@@ -295,10 +311,20 @@ Status ModelBuilder::AddOperandFromPersistMemoryBuffer(
                                                            reinterpret_cast<const float*>(dest))};
       desc.set("type", emscripten::val("float32"));
       break;
+    case ONNX_NAMESPACE::TensorProto_DataType_INT32:
+      view = emscripten::val{emscripten::typed_memory_view(size / sizeof(int32_t),
+                                                           reinterpret_cast<const int32_t*>(dest))};
+      desc.set("type", emscripten::val("int32"));
+      break;
     case ONNX_NAMESPACE::TensorProto_DataType_INT64:
       view = emscripten::val{emscripten::typed_memory_view(size / sizeof(int64_t),
                                                            reinterpret_cast<const int64_t*>(dest))};
       desc.set("type", emscripten::val("int64"));
+      break;
+    case ONNX_NAMESPACE::TensorProto_DataType_UINT32:
+      view = emscripten::val{emscripten::typed_memory_view(size / sizeof(uint32_t),
+                                                           reinterpret_cast<const uint32_t*>(dest))};
+      desc.set("type", emscripten::val("uint32"));
       break;
     default:
       break;
