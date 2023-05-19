@@ -19,6 +19,7 @@ static OpBuilderRegistrations CreateOpBuilderRegistrations() {
     CreateUnaryOpBuilder("Cos", op_registrations);
     CreateUnaryOpBuilder("Erf", op_registrations);
     CreateUnaryOpBuilder("Floor", op_registrations);
+    CreateUnaryOpBuilder("Not", op_registrations);
     CreateUnaryOpBuilder("Sin", op_registrations);
     CreateUnaryOpBuilder("Sqrt", op_registrations);
   }

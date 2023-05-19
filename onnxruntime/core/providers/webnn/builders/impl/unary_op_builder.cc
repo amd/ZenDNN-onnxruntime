@@ -34,6 +34,8 @@ Status UnaryOpBuilder::AddToModelBuilderImpl(ModelBuilder& model_builder, const 
     output = model_builder.GetBuilder().call<emscripten::val>("erf", input);
   } else if (op_type == "Floor") {
     output = model_builder.GetBuilder().call<emscripten::val>("floor", input);
+  } else if (op_type == "Not") {
+    output = model_builder.GetBuilder().call<emscripten::val>("logicalNot", input);
   } else if (op_type == "Sin") {
     output = model_builder.GetBuilder().call<emscripten::val>("sin", input);
   } else if (op_type == "Sqrt") {
@@ -56,6 +58,7 @@ void CreateUnaryOpBuilder(const std::string& op_type, OpBuilderRegistrations& op
           "Cos",
           "Erf",
           "Floor",
+          "Not",
           "Sin",
           "Sqrt",
       };
