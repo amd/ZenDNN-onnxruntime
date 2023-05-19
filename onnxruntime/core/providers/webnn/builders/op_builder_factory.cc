@@ -117,6 +117,10 @@ static OpBuilderRegistrations CreateOpBuilderRegistrations() {
     CreateTransposeOpBuilder("Transpose", op_registrations);
   }
 
+  {  // Unsqueeze
+    CreateUnsqueezeOpBuilder("Unsqueeze", op_registrations);
+  }
+
   return op_registrations;
 }
 
