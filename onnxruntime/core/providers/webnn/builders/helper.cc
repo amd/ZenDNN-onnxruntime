@@ -40,6 +40,10 @@ bool IsNodeSupported(const Node& node, const GraphViewer& graph_viewer, const lo
 bool IsInputSupported(const NodeArg& input, const std::string& parent_name, const logging::Logger& logger) {
   const auto& input_name = input.Name();
   const auto* shape_proto = input.Shape();
+  // Optional tensors can be indicated by an empty name, just ignore it.
+  if (input_name.empty()) {
+    return true;
+  }
   // We do not support input with no shape.
   if (!shape_proto) {
     LOGS(logger, VERBOSE) << "Input [" << input_name << "] of [" << parent_name
@@ -101,6 +105,28 @@ std::vector<std::vector<NodeIndex>> GetSupportedNodes(const GraphViewer& graph_v
   }
 
   return supported_node_groups;
+}
+
+bool IsSupportedDataType(int32_t data_type) {
+  return std::find(supported_data_types.begin(), supported_data_types.end(), data_type) != supported_data_types.end();
+}
+
+bool IsValidMultidirectionalBroadcast(std::vector<int64_t>& shape_a,
+                                      std::vector<int64_t>& shape_b,
+                                      const logging::Logger& logger) {
+  int64_t size_a = shape_a.size();
+  int64_t size_b = shape_b.size();
+  int64_t smaller_size = std::min(size_a, size_b);
+  for (int64_t i = 0; i < smaller_size; i++) {
+    // right alignment
+    int64_t axis_a = size_a - i - 1;
+    int64_t axis_b = size_b - i - 1;
+    // Broadcastable tensors must either have each dimension the same size or equal to one.
+    if (shape_a[axis_a] != shape_b[axis_b] && shape_a[axis_a] != 1 && shape_b[axis_b] != 1) {
+      return false;
+    }
+  }
+  return true;
 }
 
 }  // namespace webnn
