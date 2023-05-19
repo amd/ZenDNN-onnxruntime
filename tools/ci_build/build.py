@@ -687,6 +687,7 @@ def parse_arguments():
     parser.add_argument("--use_cache", action="store_true", help="Use compiler cache in CI")
 
     parser.add_argument("--use_triton_kernel", action="store_true", help="Use triton compiled kernels")
+    parser.add_argument("--use_lock_free_queue", action="store_true", help="Use lock-free task queue for threadpool.")
 
     if not is_windows():
         parser.add_argument(
@@ -1324,6 +1325,9 @@ def generate_build_tree(
 
     if args.use_azure:
         add_default_definition(cmake_extra_defines, "onnxruntime_USE_AZURE", "ON")
+
+    if args.use_lock_free_queue:
+        add_default_definition(cmake_extra_defines, "onnxruntime_USE_LOCK_FREE_QUEUE", "ON")
 
     cmake_args += [f"-D{define}" for define in cmake_extra_defines]
 
@@ -2048,7 +2052,7 @@ def build_nuget_package(
     ort_build_dir = '/p:OnnxRuntimeBuildDirectory="' + native_dir + '"'
 
     # dotnet restore
-    cmd_args = ["dotnet", "restore", sln, "--configfile", "Nuget.CSharp.config"]
+    cmd_args = ["dotnet", "restore", sln, "--configfile", "NuGet.CSharp.config"]
     run_subprocess(cmd_args, cwd=csharp_build_dir)
 
     # build csharp bindings and create nuget package for each config
