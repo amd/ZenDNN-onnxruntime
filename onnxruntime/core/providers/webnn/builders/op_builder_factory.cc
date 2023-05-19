@@ -23,10 +23,6 @@ static OpBuilderRegistrations CreateOpBuilderRegistrations() {
     CreateUnaryOpBuilder("Sqrt", op_registrations);
   }
 
-  {  // Logical
-    CreateLogicalOpBuilder("Equal", op_registrations);
-  }
-
   {  // Binary
     CreateBinaryOpBuilder("Add", op_registrations);
     CreateBinaryOpBuilder("Sub", op_registrations);
@@ -74,6 +70,10 @@ static OpBuilderRegistrations CreateOpBuilderRegistrations() {
   {  // Gemm/MatMul
     CreateGemmOpBuilder("Gemm", op_registrations);
     CreateGemmOpBuilder("MatMul", op_registrations);
+  }
+
+  {  // Logical
+    CreateLogicalOpBuilder("Equal", op_registrations);
   }
 
   {  // Pool
