@@ -130,7 +130,8 @@ WebNNExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph_view
     InlinedHashSet<const NodeArg*> subgraph_inputs;
     InlinedHashSet<const NodeArg*> subgraph_outputs;
     std::vector<const NodeArg*> ordered_subgraph_inputs;
-    std::vector<const NodeArg*> ordered_subgraph_outputs;
+    // Output should be unique. It may be produced as graph output and subgraph output.
+    InlinedHashSet<const NodeArg*> ordered_subgraph_outputs;
 
     for (const auto& index : group) {
       sub_graph->nodes.push_back(index);
@@ -155,7 +156,7 @@ WebNNExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph_view
         node_outputs.insert(output_def);
         // if output is overall graph output we need to produce it.
         if (graph_outputs.count(output_def) != 0) {
-          ordered_subgraph_outputs.push_back(output_def);
+          ordered_subgraph_outputs.insert(output_def);
         }
       }
 
@@ -165,7 +166,7 @@ WebNNExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph_view
           const auto* output_def = output_defs[it->GetSrcArgIndex()];
           if (subgraph_outputs.count(output_def) == 0) {
             subgraph_outputs.insert(output_def);
-            ordered_subgraph_outputs.push_back(output_def);
+            ordered_subgraph_outputs.insert(output_def);
           }
         }
       }
