@@ -57,6 +57,17 @@ stages:
         clean: true
         submodules: recursive
 
+      - script: |
+          echo "##vso[task.setvariable variable=vsVersion]$(vsVersion)"
+        displayName: 'Set vsVersion variable'
+
+      - ${{ if eq(parameters['DoCompliance'], 'true') }}:
+        - template: ../../templates/compliance.yml
+          parameters :
+            msbuildPlatform: ${{ parameters.sln_platform }}
+            ${{ if eq(variables.vsVersion, '2019') }}:
+              vsVersion: $(vsVersion)
+
       - powershell: |
           if($env:TELEMETRYGUID)
           {
@@ -267,13 +278,6 @@ stages:
            7z x $(Build.ArtifactStagingDirectory)\onnxruntime-*.tar
           displayName: 'Unzip package to test'
           workingDirectory: '$(Build.ArtifactStagingDirectory)'
-
-      - ${{ if eq(parameters['DoCompliance'], 'true') }}:
-        - template: ../../templates/compliance.yml
-          parameters :
-            msbuildPlatform: ${{ parameters.sln_platform }}
-            ${{ if eq(variables.vsVersion, '2019') }}:
-              vsVersion: $(vsVersion)
 
       - template: ../../templates/component-governance-component-detection-steps.yml
         parameters :
