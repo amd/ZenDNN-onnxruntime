@@ -17,6 +17,10 @@ steps:
     debugMode: false
   continueOnError: true
 
+- script:
+    echo "vsVersion is ${{parameters.vsVersion}}"
+  displayName: 'Print vsVersion'
+
 #Manually set msBuildCommandline so that we can also set CAExcludePath
 - task: securedevelopmentteam.vss-secure-development-tools.build-task-prefast.SDLNativeRules@2
   displayName: 'Run the PREfast SDL Native Rules for MSBuild'
