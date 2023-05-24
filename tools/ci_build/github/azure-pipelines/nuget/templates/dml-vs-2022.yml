@@ -58,7 +58,7 @@ stages:
         submodules: recursive
 
       - script: |
-          echo "##vso[task.setvariable variable=vsVersion]$(vsVersion)"
+          echo "vsVersion is $(vsVersion)"
         displayName: 'Set vsVersion variable'
 
       - ${{ if eq(parameters['DoCompliance'], 'true') }}:
