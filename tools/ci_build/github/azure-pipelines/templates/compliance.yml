@@ -7,7 +7,7 @@ parameters:
 - name: vsVersion
   displayName: Visual Studio Version
   type: string
-  default: "2022"
+  default: '2022'
 
 steps:
 - task: CredScan@2
@@ -25,7 +25,7 @@ steps:
   - script:
       echo ${{parameters.vsVersion}}
     displayName: 'Print vsVersion2'
-- ${{if eq(parameters.vsVersion, "2019")}}:
+- ${{if not(parameters.vsVersion, 2019)}}:
   - script:
       echo ${{parameters.vsVersion}}
     displayName: 'Print vsVersion3'
