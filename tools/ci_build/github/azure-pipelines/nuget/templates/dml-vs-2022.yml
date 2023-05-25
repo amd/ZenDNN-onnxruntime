@@ -49,7 +49,7 @@ stages:
       ${{ if eq(parameters.EnableLto, true) }}:
         build_py_lto_flag: --enable_lto
       ${{ if or(eq(parameters.AgentPool, 'aiinfra-dml-winbuild'), eq(parameters.AgentPool, 'onnxruntime-Win-CPU-2019')) }}:
-        vs2022: false
+        vsVersion: '2019'
 
     steps:
       # Windows_CI_GPU_DML_Dev_arm64 build job still needs protobuf submodule
