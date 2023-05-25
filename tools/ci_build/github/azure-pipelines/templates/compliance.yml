@@ -17,11 +17,11 @@ steps:
     debugMode: false
   continueOnError: true
 
-- ${{if eq(parameters.vsVer, '2019')}}:
+- ${{if eq('parameters.vsVer', '2019')}}:
   - script:
       echo "vsVer is ${{parameters.vsVer}}"
     displayName: 'Print vsVer1'
-- ${{if eq(parameters.vsVer, 2019)}}:
+- ${{if eq('parameters.vsVer', 2019)}}:
   - script:
       echo ${{parameters.vsVer}}
     displayName: 'Print vsVer2'
