@@ -25,11 +25,6 @@ steps:
   - script:
       echo ${{parameters.vsVersion}}
     displayName: 'Print vsVersion2'
-- ${{if not(parameters.vsVersion, 2019)}}:
-  - script:
-      echo ${{parameters.vsVersion}}
-    displayName: 'Print vsVersion3'
-
 
 #Manually set msBuildCommandline so that we can also set CAExcludePath
 - task: securedevelopmentteam.vss-secure-development-tools.build-task-prefast.SDLNativeRules@2
