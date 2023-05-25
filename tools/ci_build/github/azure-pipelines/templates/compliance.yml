@@ -7,7 +7,7 @@ parameters:
 - name: vsVersion
   displayName: Visual Studio Version
   type: string
-  default: '2022'
+  default: "2022"
 
 steps:
 - task: CredScan@2
@@ -17,10 +17,18 @@ steps:
     debugMode: false
   continueOnError: true
 
-- ${{ if eq(parameters.vsVersion, '2019')}}:
+- ${{if eq(parameters.vsVersion, '2019')}}:
   - script:
       echo "vsVersion is ${{parameters.vsVersion}}"
-    displayName: 'Print vsVersion'
+    displayName: 'Print vsVersion1'
+- ${{if eq(parameters.vsVersion, 2019)}}:
+  - script:
+      echo ${{parameters.vsVersion}}
+    displayName: 'Print vsVersion2'
+- ${{if eq(parameters.vsVersion, "2019")}}:
+  - script:
+      echo ${{parameters.vsVersion}}
+    displayName: 'Print vsVersion3'
 
 
 #Manually set msBuildCommandline so that we can also set CAExcludePath
@@ -29,12 +37,12 @@ steps:
   inputs:
     userProvideBuildInfo: msBuildInfo
     msBuildArchitecture: x64
-    ${{ if eq(parameters.vsVersion, '2019')}}:
+    ${{if eq(parameters.vsVersion, '2019')}}:
       msBuildCommandline: '"C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\MSBuild\Current\Bin\amd64\msbuild.exe" "$(Build.BinariesDirectory)\RelWithDebInfo\onnxruntime.sln" /p:platform="${{parameters.msbuildPlatform}}" /p:configuration="RelWithDebInfo" /p:CAExcludePath="$(Build.BinariesDirectory);$(Build.SourcesDirectory)\cmake;C:\program files (x86)" /p:VisualStudioVersion="16.0" /m /p:PreferredToolArchitecture=x64'
-      msBuildVersion: 16.0
-    ${{ if eq(parameters.vsVersion, '2022')}}:
+      msBuildVersion: '16.0'
+    ${{if eq(parameters.vsVersion, '2022')}}:
       msBuildCommandline: '"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\amd64\msbuild.exe" "$(Build.BinariesDirectory)\RelWithDebInfo\onnxruntime.sln" /p:platform="${{parameters.msbuildPlatform}}" /p:configuration="RelWithDebInfo" /p:CAExcludePath="$(Build.BinariesDirectory);$(Build.SourcesDirectory)\cmake;C:\program files" /p:VisualStudioVersion="17.0" /m /p:PreferredToolArchitecture=x64'
-      msBuildVersion: 17.0
+      msBuildVersion: '17.0'
   continueOnError: true
 
 - task: BinSkim@3
