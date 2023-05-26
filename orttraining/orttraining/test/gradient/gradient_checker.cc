@@ -227,18 +227,18 @@ inline Status GradientChecker<X_T, Y_T, JAC_T>::ComputeTheoreticalJacobianTransp
 
 template <typename X_T, typename Y_T, typename JAC_T>
 inline Status GradientChecker<X_T, Y_T, JAC_T>::InitOpTesterWithGraph(
-    OpTester& op_session, const std::vector<TensorInfo>& x_infos, const std::vector<TensorInfo>& y_infos,
+    OpTester& op_tester, const std::vector<TensorInfo>& x_infos, const std::vector<TensorInfo>& y_infos,
     std::vector<std::vector<X_T>>* x_datas, std::vector<std::vector<Y_T>>* y_datas,
     const std::vector<AttributeProto>& attributes,
     const std::unordered_map<std::string, int>& extra_domain_to_version) {
-  AddDatas(op_session, x_infos, y_infos, x_datas, y_datas);
+  AddDatas(op_tester, x_infos, y_infos, x_datas, y_datas);
   // Currently only allows setting int attributes to zero. TODO: Expand this
   for (auto attr : attributes) {
-    op_session.AddAttributeProto(attr);
+    op_tester.AddAttributeProto(attr);
   }
 
   // build graph
-  auto p_model = op_session.BuildGraph(extra_domain_to_version);
+  auto p_model = op_tester.BuildGraph(extra_domain_to_version);
   auto& graph = p_model->MainGraph();
 
   Status status = Status::OK();
@@ -253,9 +253,9 @@ inline Status GradientChecker<X_T, Y_T, JAC_T>::InitOpTesterWithGraph(
     return status;
   }
 
+  // TODO: This should happen automatically now with the call to BuildGraph
   // cache the graph for later use
-  std::shared_ptr<onnxruntime::Model> model_shared_ptr(std::move(p_model));
-  op_session.SetModelCache(model_shared_ptr);
+  // op_tester.SetCachedModel(std::move(p_model));
 
   return Status::OK();
 }
@@ -269,7 +269,9 @@ inline Status GradientChecker<X_T, Y_T, JAC_T>::InitOpTesterWithGradGraph(
   ORT_RETURN_IF_ERROR(
       InitOpTesterWithGraph(op_session, x_infos, y_infos, x_datas, y_datas, attributes, extra_domain_to_version));
   // build grad graph
-  auto p_model = op_session.GetModelCache();
+  auto* p_model = op_session.GetMutableModel();
+  ORT_ENFORCE(p_model, "OpTester::BuildGraph must have been called previously to create the model.");
+
   auto& graph = p_model->MainGraph();
 
   std::unordered_set<std::string> weights_to_train;
@@ -290,9 +292,7 @@ inline Status GradientChecker<X_T, Y_T, JAC_T>::InitOpTesterWithGradGraph(
   gradient_graph_config.set_gradients_as_graph_outputs = true;
   training::GradientGraphBuilder grad_graph_builder(&graph, dy_values, weights_to_train, "", gradient_graph_config,
                                                     logging::LoggingManager::DefaultLogger());
-  Status status = grad_graph_builder.Build();
-  EXPECT_TRUE(status.IsOK()) << status.ErrorMessage();
-
+  ASSERT_STATUS_OK(grad_graph_builder.Build());
   return Status::OK();
 }
 

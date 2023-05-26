@@ -3,19 +3,74 @@
 
 #pragma once
 
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "core/framework/framework_common.h"
 #include "core/framework/execution_provider.h"
 #include "core/framework/ort_value.h"
 #include "core/providers/cpu/cpu_execution_provider.h"
-
-#include <memory>
-#include <string>
-#include <vector>
+#include "core/util/math_cpuonly.h"
 
 namespace onnxruntime {
 class Graph;
 
 namespace test {
+
+struct ValidateOutputParams {
+  bool sort_output_ = false;
+  optional<float> absolute_error_;
+  optional<float> relative_error_;
+};
+
+void ValidateOutput(const std::string_view output_name, const Tensor& expected, const Tensor& output,
+                    const std::string& provider_type, ValidateOutputParams = {});
+
+void DebugTrap();
+
+inline const Tensor& FetchTensor(const OrtValue& ort_value) {
+  return ort_value.Get<Tensor>();
+}
+
+inline void ConvertFloatToMLFloat16(const float* f_datat, MLFloat16* h_data, int input_size) {
+  auto in_vector = ConstEigenVectorMap<float>(f_datat, input_size);
+  auto output_vector = EigenVectorMap<Eigen::half>(static_cast<Eigen::half*>(static_cast<void*>(h_data)), input_size);
+  output_vector = in_vector.template cast<Eigen::half>();
+}
+
+inline void ConvertMLFloat16ToFloat(const MLFloat16* h_data, float* f_data, int input_size) {
+  auto in_vector =
+      ConstEigenVectorMap<Eigen::half>(static_cast<const Eigen::half*>(static_cast<const void*>(h_data)), input_size);
+  auto output_vector = EigenVectorMap<float>(f_data, input_size);
+  output_vector = in_vector.template cast<float>();
+}
+
+inline std::vector<MLFloat16> FloatsToMLFloat16s(const std::vector<float>& f) {
+  std::vector<MLFloat16> m(f.size());
+  ConvertFloatToMLFloat16(f.data(), m.data(), static_cast<int>(f.size()));
+  return m;
+}
+
+inline std::vector<BFloat16> MakeBFloat16(const std::initializer_list<float>& input) {
+  std::vector<BFloat16> output;
+  std::transform(input.begin(), input.end(), std::back_inserter(output), [](float f) { return BFloat16(f); });
+  return output;
+}
+
+inline std::vector<BFloat16> FloatsToBFloat16s(const std::vector<float>& input) {
+  std::vector<BFloat16> output;
+  std::transform(input.begin(), input.end(), std::back_inserter(output), [](float f) { return BFloat16(f); });
+  return output;
+}
+
+// inline std::vector<int64_t> GetShapeVector(const TensorShape& shape) {
+//   std::vector<int64_t> result;
+//   const auto dims = shape.GetDims();
+//   result.resize(dims.size());
+//   result.assign(dims.begin(), dims.end());
+//   return result;
+// }
 
 // If set to All: verify the entire graph is taken by ep
 // If set to Some: verify that at least one node is assigned to ep

@@ -11,13 +11,503 @@
 #include "core/framework/tensorprotoutils.h"
 
 #include "test/util/include/asserts.h"
-#include "test/util/include/test/test_environment.h"
+#include "test/util/include/test_environment.h"
 #include "test/util/include/inference_session_wrapper.h"
 
 #include "gmock/gmock.h"
 
 namespace onnxruntime {
 namespace test {
+namespace {
+
+template <typename T>
+Tensor copy_sort(const Tensor& src, const AllocatorPtr& allocator) {
+  Tensor result(src.DataType(), src.Shape(), allocator);
+  memcpy(result.MutableDataRaw(), src.DataRaw(), src.SizeInBytes());
+  auto dst_span = gsl::make_span(result.MutableData<T>(), result.MutableData<T>() + result.Shape().Size());
+  std::sort(dst_span.begin(), dst_span.end());
+  return result;
+}
+
+// Check functions for tensor types
+template <typename T>
+void sort_expected_and_actual_buffers(const Tensor& expected, Tensor& expected_sorted,
+                                      const Tensor& actual, Tensor& actual_sorted) {
+  auto allocator = TestCPUExecutionProvider()->GetAllocator(OrtMemTypeDefault);
+  expected_sorted = copy_sort<T>(expected, allocator);
+  actual_sorted = copy_sort<T>(actual, allocator);
+}
+
+// Check functions for tensor types
+template <typename T>
+void sort_expected_and_actual_buffers(std::vector<T>& expected,
+                                      std::vector<T>& actual) {
+  ORT_ENFORCE(expected.size() == actual.size(),
+              "The 2 containers contain different number of elements");
+  std::sort(expected.begin(), expected.end());
+  std::sort(actual.begin(), actual.end());
+}
+
+// The default implementation compares for equality, specialized versions for
+// other types are below
+template <typename T>
+struct TensorCheck {
+  void operator()(const Tensor& expected_tensor, const Tensor& output_tensor,
+                  const std::string& provider_type, const ValidateOutputParams& params) const {
+    Tensor expected_sorted, output_sorted;
+    const T* expected;
+    const T* output;
+    const auto size = output_tensor.Shape().Size();
+    if (params.sort_output_) {
+      // if order can be jumbled in the output of an operator, sort both the
+      // expected and output buffers prior to
+      // comparison this is a "best-effort" algo and should satisfy the
+      // requirement for the few ops that do require this
+      // support without investing in a more sophisticated infrastructure for the
+      // same
+      sort_expected_and_actual_buffers<T>(expected_tensor, expected_sorted, output_tensor, output_sorted);
+      expected = expected_sorted.Data<T>();
+      output = output_sorted.Data<T>();
+    } else {
+      expected = expected_tensor.Data<T>();
+      output = output_tensor.Data<T>();
+    }
+
+    for (int i = 0; i < size; ++i) {
+      EXPECT_EQ(expected[i], output[i]) << "i:" << i
+                                        << ", provider_type: " << provider_type;
+    }
+  }
+};
+
+template <>
+struct TensorCheck<uint8_t> {
+  void operator()(const Tensor& expected_tensor,
+                  const Tensor& output_tensor,
+                  const std::string& provider_type, const ValidateOutputParams& params) const {
+    const bool has_abs_err = params.absolute_error_.has_value();
+    const bool has_rel_err = params.relative_error_.has_value();
+
+    Tensor expected_sorted, output_sorted;
+    const uint8_t* expected;
+    const uint8_t* output;
+    const auto size = output_tensor.Shape().Size();
+    if (params.sort_output_) {
+      // if order can be jumbled in the output of an operator, sort both the
+      // expected and output buffers prior to
+      // comparison this is a "best-effort" algo and should satisfy the
+      // requirement for the few ops that do require this
+      // support without investing in a more sophisticated infrastructure for the
+      // same
+      sort_expected_and_actual_buffers<uint8_t>(expected_tensor, expected_sorted, output_tensor, output_sorted);
+      expected = expected_sorted.Data<uint8_t>();
+      output = output_sorted.Data<uint8_t>();
+    } else {
+      expected = expected_tensor.Data<uint8_t>();
+      output = output_tensor.Data<uint8_t>();
+    }
+
+    // For uint8_t results, we only allow NNAPI/XNNPACK EP to have an error tolerance, see below for the reason
+    // XNNPACK EP will always round to larger. For example, 0.1 will be rounded to 1.0
+    // For any other EPs, we still expect an exact match for the results
+    // TODO: Verify if DML can possibly have a ROUNDING_MODE parameter and conform to the other EPs #41968513
+    if ((provider_type == kNnapiExecutionProvider || provider_type == kDmlExecutionProvider ||
+         provider_type == kXnnpackExecutionProvider) &&
+        (has_abs_err || has_rel_err)) {
+      double threshold = has_abs_err
+                             ? *(params.absolute_error_)
+                             : 0.0;
+
+      for (int i = 0; i < size; ++i) {
+        if (has_rel_err) {
+          EXPECT_NEAR(expected[i], output[i],
+                      *(params.relative_error_) * expected[i])  // expected[i] is unsigned, can't be negative
+              << "i:" << i << ", provider_type: " << provider_type;
+        } else {  // has_abs_err
+          EXPECT_NEAR(expected[i], output[i], threshold)
+              << "i:" << i << ", provider_type: " << provider_type;
+        }
+      }
+    } else {
+      for (int i = 0; i < size; ++i) {
+        EXPECT_EQ(expected[i], output[i]) << "i:" << i
+                                          << ", provider_type: " << provider_type;
+      }
+    }
+  }
+};
+
+template <>
+struct TensorCheck<int8_t> {
+  void operator()(const Tensor& expected_tensor,
+                  const Tensor& output_tensor,
+                  const std::string& provider_type,
+                  const ValidateOutputParams& params) const {
+    Tensor expected_sorted, output_sorted;
+    const int8_t* expected;
+    const int8_t* output;
+    const auto size = output_tensor.Shape().Size();
+    if (params.sort_output_) {
+      // if order can be jumbled in the output of an operator, sort both the
+      // expected and output buffers prior to
+      // comparison this is a "best-effort" algo and should satisfy the
+      // requirement for the few ops that do require this
+      // support without investing in a more sophisticated infrastructure for the
+      // same
+      sort_expected_and_actual_buffers<int8_t>(expected_tensor, expected_sorted, output_tensor, output_sorted);
+      expected = expected_sorted.Data<int8_t>();
+      output = output_sorted.Data<int8_t>();
+    } else {
+      expected = expected_tensor.template Data<int8_t>();
+      output = output_tensor.template Data<int8_t>();
+    }
+
+    const bool has_abs_err = params.absolute_error_.has_value();
+    if (has_abs_err) {
+      double threshold = *(params.absolute_error_);
+
+      for (int i = 0; i < size; ++i) {
+        EXPECT_NEAR(expected[i], output[i], threshold)
+            << "i:" << i << ", provider_type: " << provider_type;
+      }
+    } else {
+      for (int i = 0; i < size; ++i) {
+        EXPECT_EQ(expected[i], output[i])
+            << "i:" << i << ", provider_type: " << provider_type;
+      }
+    }
+  }
+};
+
+template <>
+struct TensorCheck<double> {
+  void operator()(const Tensor& expected_tensor,
+                  const Tensor& output_tensor,
+                  const std::string& provider_type,
+                  const ValidateOutputParams& params) const {
+    auto size = output_tensor.Shape().Size();
+
+    bool has_abs_err = params.absolute_error_.has_value();
+    bool has_rel_err = params.relative_error_.has_value();
+
+    // deal with rare cases in which order of output data from a kernel MAY be
+    // undefined
+    Tensor expected_sorted, output_sorted;
+    const double* expected;
+    const double* output;
+    if (params.sort_output_) {
+      sort_expected_and_actual_buffers<double>(expected_tensor, expected_sorted, output_tensor, output_sorted);
+      expected = expected_sorted.Data<double>();
+      output = output_sorted.Data<double>();
+    } else {
+      expected = expected_tensor.Data<double>();
+      output = output_tensor.Data<double>();
+    }
+
+    double threshold = 0.001;
+#if defined(USE_CUDA) || defined(USE_ROCM) || defined(USE_DML)
+    threshold = 0.005;
+#endif
+
+    for (int i = 0; i < size; ++i) {
+      // NOTE: Check isnan first to work around MSVC linker bug when /LTCG:incremental is specified.
+      // If the isinf check is first the isnan check and branch gets omitted
+      if (std::isnan(expected[i])) {
+        ASSERT_TRUE(std::isnan(output[i])) << "Expected NaN. i:" << i << ", provider_type: " << provider_type;
+      } else if (std::isinf(expected[i])) {  // Test infinity for equality
+        ASSERT_EQ(expected[i], output[i]) << "Expected infinity. i:" << i << ", provider_type: " << provider_type;
+      } else {
+        if (!has_abs_err && !has_rel_err) {
+          // the default for existing tests
+          ASSERT_NEAR(expected[i], output[i], threshold)
+              << "i:" << i << ", provider_type: " << provider_type;
+        } else {
+          if (has_abs_err) {
+            ASSERT_NEAR(expected[i], output[i],
+                        *(params.absolute_error_))
+                << "i:" << i << ", provider_type: " << provider_type;
+          }
+          if (has_rel_err) {
+            ASSERT_NEAR(expected[i], output[i],
+                        *(params.relative_error_) *
+                            std::abs(expected[i]))
+                << "i:" << i << ", provider_type: " << provider_type;
+          }
+        }
+      }
+    }
+  }
+};
+
+template <typename TypeToCheck>
+void InternalNumericalCheck(const Tensor& expected_tensor,
+                            const Tensor& output_tensor,
+                            const std::string& provider_type,
+                            const ValidateOutputParams& params) {
+  const bool has_abs_err = params.absolute_error_.has_value();
+  const bool has_rel_err = params.relative_error_.has_value();
+
+  // deal with rare cases in which order of output data from a kernel MAY be
+  // undefined
+  Tensor expected_sorted, output_sorted;
+  const TypeToCheck* expected;
+  const TypeToCheck* output;
+  auto size = output_tensor.Shape().Size();
+  if (params.sort_output_) {
+    sort_expected_and_actual_buffers<TypeToCheck>(expected_tensor, expected_sorted, output_tensor, output_sorted);
+    expected = expected_sorted.Data<TypeToCheck>();
+    output = output_sorted.Data<TypeToCheck>();
+  } else {
+    expected = expected_tensor.Data<TypeToCheck>();
+    output = output_tensor.Data<TypeToCheck>();
+  }
+
+#if defined(USE_CUDA) || defined(USE_ROCM) || defined(USE_DML)
+  constexpr float threshold = 0.005f;
+#else
+  constexpr float threshold = 0.0001f;
+#endif
+
+  for (int i = 0; i < size; ++i) {
+    // NOTE: Check isnan first to work around MSVC linker bug when /LTCG:incremental is specified.
+    // If the isinf check is first the isnan check and branch gets omitted
+    if (std::isnan(expected[i])) {
+      ASSERT_TRUE(std::isnan(output[i])) << "Expected NaN. i:" << i << ", provider_type: " << provider_type;
+    } else if (std::isinf(expected[i])) {  // Test infinity for equality
+      ASSERT_EQ(expected[i], output[i]) << "Expected infinity. i:" << i << ", provider_type: " << provider_type;
+    } else {
+      if (!has_abs_err && !has_rel_err) {
+        // the default for existing tests
+        ASSERT_NEAR(expected[i], output[i], threshold)
+            << "i:" << i << ", provider_type: " << provider_type;
+      } else {
+        if (has_abs_err) {
+          ASSERT_NEAR(expected[i], output[i],
+                      *(params.absolute_error_))
+              << "i:" << i << ", provider_type: " << provider_type;
+        }
+        if (has_rel_err) {
+          ASSERT_NEAR(expected[i], output[i],
+                      *(params.relative_error_) *
+                          std::abs(expected[i]))
+              << "i:" << i << ", provider_type: " << provider_type;
+        }
+      }
+    }
+  }
+}
+
+template <>
+struct TensorCheck<float> {
+  void operator()(const Tensor& expected_tensor,
+                  const Tensor& output_tensor,
+                  const std::string& provider_type,
+                  const ValidateOutputParams& params) const {
+    InternalNumericalCheck<float>(expected_tensor, output_tensor, provider_type, params);
+  }
+};
+
+template <>
+struct TensorCheck<MLFloat16> {
+  void operator()(const Tensor& expected_tensor,
+                  const Tensor& output_tensor,
+                  const std::string& provider_type,
+                  const ValidateOutputParams& params) const {
+    auto* expected = expected_tensor.Data<MLFloat16>();
+    auto* output = output_tensor.Data<MLFloat16>();
+    auto size = output_tensor.Shape().Size();
+
+    std::vector<float> f_expected(size);
+    std::vector<float> f_output(size);
+    ConvertMLFloat16ToFloat(expected, f_expected.data(), static_cast<int>(size));
+    ConvertMLFloat16ToFloat(output, f_output.data(), static_cast<int>(size));
+
+    // deal with rare cases in which order of output data from a kernel MAY be
+    // undefined
+    if (params.sort_output_) {
+      sort_expected_and_actual_buffers<float>(f_expected, f_output);
+    }
+
+    const bool has_abs_err = params.absolute_error_.has_value();
+    const bool has_rel_err = params.relative_error_.has_value();
+
+    float threshold = 0.001f;
+#if defined(USE_TENSORRT) || defined(ENABLE_TRAINING_CORE) || defined(USE_CUDA) || defined(USE_ROCM)
+    threshold = 0.005f;
+#elif defined(USE_DML)
+    threshold = 0.02f;
+#endif
+    for (int i = 0; i < size; ++i) {
+      if (std::isnan(f_expected[i])) {
+        EXPECT_TRUE(std::isnan(f_expected[i])) << "Expected NaN. i:" << i << ", provider_type: " << provider_type;
+      } else if (std::isinf(f_expected[i])) {  // Test infinity for equality
+        EXPECT_EQ(f_expected[i], f_output[i]) << "Expected infinity. i:" << i << ", provider_type: " << provider_type;
+      } else {
+        if (!has_abs_err && !has_rel_err) {
+          // the default for existing tests
+          EXPECT_NEAR(f_expected[i], f_output[i], threshold)
+              << "i:" << i << ", provider_type: " << provider_type;
+        } else {
+          if (has_abs_err) {
+            EXPECT_NEAR(f_expected[i], f_output[i],
+                        *(params.absolute_error_))
+                << "i:" << i << ", provider_type: " << provider_type;
+          }
+          if (has_rel_err) {
+            EXPECT_NEAR(f_expected[i], f_output[i],
+                        *(params.relative_error_) *
+                            std::abs(expected[i]))
+                << "i:" << i << ", provider_type: " << provider_type;
+          }
+        }
+      }
+    }
+  }
+};
+
+template <>
+struct TensorCheck<BFloat16> {
+  void operator()(const Tensor& expected_tensor,
+                  const Tensor& output_tensor,
+                  const std::string& provider_type,
+                  const ValidateOutputParams& params) const {
+    auto* expected = expected_tensor.Data<BFloat16>();
+    auto* output = output_tensor.Data<BFloat16>();
+    auto size = output_tensor.Shape().Size();
+
+    std::vector<float> f_expected(size);
+    std::vector<float> f_output(size);
+    BFloat16ToFloat(expected, f_expected.data(), static_cast<size_t>(size));
+    BFloat16ToFloat(output, f_output.data(), static_cast<size_t>(size));
+
+    // deal with rare cases in which order of output data from a kernel MAY be
+    // undefined
+    if (params.sort_output_) {
+      sort_expected_and_actual_buffers<float>(f_expected, f_output);
+    }
+
+    /// XXX: May need to adjust threshold as BFloat is coarse
+    float abs_threshold = 0.0001f;
+    float threshold = 0.001f;
+#if defined(USE_TENSORRT) || defined(ENABLE_TRAINING_CORE) || defined(USE_CUDA) || defined(USE_ROCM) || defined(USE_DML) || defined(USE_DNNL)
+    threshold = 0.05f;  // expect at least 95% close
+#endif
+
+    for (int i = 0; i < size; ++i) {
+      if (std::isnan(f_expected[i])) {
+        EXPECT_TRUE(std::isnan(f_expected[i])) << "Expected NaN. i:" << i << ", provider_type: " << provider_type;
+      } else if (std::isinf(f_expected[i])) {  // Test infinity for equality
+        EXPECT_EQ(f_expected[i], f_output[i]) << "Expected infinity. i:" << i << ", provider_type: " << provider_type;
+      } else {
+        // the default for existing tests
+        const float max_value = fmax(fabs(f_expected[i]), fabs(f_output[i]));
+        if (max_value != 0) {  // max_value = 0 means output and expected are 0s.
+          const float abs_error = fabs(f_expected[i] - f_output[i]);
+          if (abs_error <= abs_threshold) {
+            // if the absolute error is small enough, then no need to calculate realative error
+            EXPECT_NEAR(0, abs_error, abs_threshold) << "provider_type: "
+                                                     << provider_type;
+          } else {
+            // default for existing tests.
+            const float rel_error = abs_error / max_value;
+            EXPECT_NEAR(0, rel_error, threshold) << "provider_type: "
+                                                 << provider_type;
+          }
+        }
+      }
+    }
+  }
+};
+
+// Check for non tensor types
+
+template <typename T>
+void Check(const BaseTester::Data& expected_data, const T& run_output,
+           const std::string& provider_type) {
+  EXPECT_EQ(expected_data.data_.Get<T>(), run_output) << "provider_type: "
+                                                      << provider_type;
+}
+
+template <>
+void Check<TensorSeq>(const BaseTester::Data& expected_data,
+                      const TensorSeq& output_seq,
+                      const std::string& provider_type) {
+  const auto& exp_seq = expected_data.data_.Get<TensorSeq>();
+
+  // first ensure data types match
+  EXPECT_EQ(exp_seq.DataType(), output_seq.DataType())
+      << "Data types don't match: Expected: "
+      << DataTypeImpl::ToString(exp_seq.DataType())
+      << " Output: " << output_seq.DataType()
+      << " provider_type: " << provider_type;
+
+  // check num of contained tensors
+  size_t expected_num_tensors = exp_seq.Size();
+  size_t output_num_tensors = output_seq.Size();
+  EXPECT_EQ(expected_num_tensors, output_num_tensors)
+      << "Mismatch in number of tensors in the sequence"
+      << " Expected: " << expected_num_tensors
+      << " Output: " << output_num_tensors
+      << " provider_type: " << provider_type;
+
+  // now check the contents of the tensors
+  CheckParams check_params = MakeCheckParams(expected_data);
+
+  auto element_type = exp_seq.DataType()->AsPrimitiveDataType()->GetDataType();
+  utils::MLTypeCallDispatcher<bool, float, double, uint8_t, uint16_t, uint32_t, uint64_t,
+                              int8_t, int16_t, int32_t, int64_t, std::string, MLFloat16,
+                              BFloat16>
+      t_disp(element_type);
+
+  for (size_t i = 0; i < output_num_tensors; ++i) {
+    t_disp.Invoke<TensorCheck>(exp_seq.Get(i), output_seq.Get(i), provider_type, check_params);
+  }
+}
+
+template <typename Type>
+void CheckDispatch(MLDataType type, const BaseTester::Data& expected_data,
+                   OrtValue& ort_value, const std::string& provider_type) {
+  if (type == DataTypeImpl::GetType<Type>())
+    Check<Type>(expected_data, ort_value.Get<Type>(), provider_type);
+  else
+    ORT_THROW("OpTester:Check() not implemented for output tensor type of ", type);
+}
+
+template <typename Type, typename Next, typename... Types>
+void CheckDispatch(MLDataType type, const BaseTester::Data& expected_data,
+                   OrtValue& ort_value, const std::string& provider_type) {
+  if (type == DataTypeImpl::GetType<Type>())
+    Check<Type>(expected_data, ort_value.Get<Type>(), provider_type);
+  else
+    CheckDispatch<Next, Types...>(type, expected_data, ort_value,
+                                  provider_type);
+}
+
+}  // namespace
+
+void DebugTrap() {
+#if _MSC_VER
+  __debugbreak();
+#else
+  raise(SIGTRAP);
+#endif
+}
+
+void ValidateOutput(const std::string_view output_name, const Tensor& expected, const Tensor& output,
+                    const std::string& provider_type, ValidateOutputParams params) {
+  ORT_ENFORCE(expected.Shape() == output.Shape(),
+              "Expected output shape [", expected.Shape(), "] did not match run output shape [",
+              output.Shape(), "] for ", output_name);
+
+  utils::MLTypeCallDispatcher<bool, float, double, uint8_t, uint16_t, uint32_t, uint64_t,
+                              int8_t, int16_t, int32_t, int64_t, std::string, MLFloat16,
+                              BFloat16>
+      t_disp(output.GetElementType());
+
+  t_disp.Invoke<TensorCheck>(expected, output, provider_type, params);
+}
+
+// TODO: Could/should this use ValidateOutputTensor or vice-versa so we don't have two different implementations
 static void VerifyOutputs(const std::vector<std::string>& output_names,
                           const std::vector<OrtValue>& expected_fetches,
                           const std::vector<OrtValue>& fetches,
