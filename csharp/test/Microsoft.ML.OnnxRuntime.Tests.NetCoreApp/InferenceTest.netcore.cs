@@ -337,6 +337,8 @@ namespace Microsoft.ML.OnnxRuntime.Tests
 
                 { "test_adagrad", "ai.onnx.preview.training:Adagrad(-1) is not a registered function/op"},
                 { "test_adagrad_multiple", "ai.onnx.preview.training:Adagrad(-1) is not a registered function/op"},
+
+                { "test_zfnet512", "skip it as ZFNET-512"},
             };
 
             // The following models fails on nocontribops win CI
@@ -827,7 +829,7 @@ namespace Microsoft.ML.OnnxRuntime.Tests
             return libFullPath;
         }
 
-        private void ValidateModelWithCustomOps(SessionOptions options) 
+        private void ValidateModelWithCustomOps(SessionOptions options)
         {
             string modelPath = "custom_op_test.onnx";
 
@@ -953,8 +955,10 @@ namespace Microsoft.ML.OnnxRuntime.Tests
             }
         }
 
-        // TestGpu() will test the CUDA EP on CUDA enabled builds and
-        // the DML EP on DML enabled builds
+        // TestGpu() will test
+        //  - the CUDA EP on CUDA enabled builds
+        //  - the DML EP on DML enabled builds
+        //  - the ROCm EP on ROCm enabled builds
         [GpuFact(DisplayName = "TestGpu")]
         private void TestGpu()
         {

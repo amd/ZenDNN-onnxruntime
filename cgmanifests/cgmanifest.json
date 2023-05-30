@@ -565,13 +565,13 @@
          }
       },
       {
-        "component": {
-          "type": "git",
-          "git": {
-            "commitHash": "3147391d946bb4b6c68edd901f2add6ac1f31f8c",
-            "repositoryUrl": "https://gitlab.com/libeigen/eigen.git"
-          }
-        }
+         "component": {
+            "type": "git",
+            "git": {
+               "commitHash": "d10b27fe37736d2944630ecd7557cefa95cf87c9",
+               "repositoryUrl": "https://gitlab.com/libeigen/eigen.git"
+            }            
+         }
       }
    ],
    "Version": 1
