@@ -100,13 +100,13 @@ class GradientChecker {
                                                 std::vector<std::vector<Y_T>>* y_datas,
                                                 std::vector<std::unique_ptr<IExecutionProvider>>* execution_providers);
 
-  Status InitOpTesterWithGraph(OpTester& op_tester, const std::vector<TensorInfo>& x_infos,
-                               const std::vector<TensorInfo>& y_infos, std::vector<std::vector<X_T>>* x_datas,
-                               std::vector<std::vector<Y_T>>* y_datas,
-                               const std::vector<ONNX_NAMESPACE::AttributeProto>& attributes,
-                               const std::unordered_map<std::string, int>& extra_domain_to_version = {});
+  void InitOpTesterWithGraph(OpTester& op_tester, const std::vector<TensorInfo>& x_infos,
+                             const std::vector<TensorInfo>& y_infos, std::vector<std::vector<X_T>>* x_datas,
+                             std::vector<std::vector<Y_T>>* y_datas,
+                             const std::vector<ONNX_NAMESPACE::AttributeProto>& attributes,
+                             const std::unordered_map<std::string, int>& extra_domain_to_version = {});
 
-  Status InitOpTesterWithGradGraph(OpTester& op_tester, const std::vector<TensorInfo>& x_infos,
+  void InitOpTesterWithGradGraph(OpTester& op_tester, const std::vector<TensorInfo>& x_infos,
                                    const std::vector<TensorInfo>& y_infos, std::vector<std::vector<X_T>>* x_datas,
                                    std::vector<std::vector<Y_T>>* y_datas,
                                    const std::vector<ONNX_NAMESPACE::AttributeProto>& attributes);

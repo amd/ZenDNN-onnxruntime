@@ -1254,7 +1254,7 @@ TEST(Loop, OptionalTypeAsLoopCarriedDependency) {
 
     // Since this test is being written at a time when only opset 15  has been released, we set
     // `test_allow_released_onnx_opset_only_` to 'false' to allow this test to run
-    test.test_allow_released_onnx_opset_only_ = false;
+    test.SetAllowUnreleasedOnnxOpset();
 
     auto body = create_subgraph(true);
     test.AddAttribute<GraphProto>("body", body);
@@ -1273,7 +1273,7 @@ TEST(Loop, OptionalTypeAsLoopCarriedDependency) {
     OpTester test("Loop", 16);  // Opset 16 supports optional type
     // Since this test is being written at a time when only opset 15  has been released, we set
     // `test_allow_released_onnx_opset_only_` to 'false' to allow this test to run
-    test.test_allow_released_onnx_opset_only_ = false;
+    test.SetAllowUnreleasedOnnxOpset();
 
     auto body = create_subgraph(true);
     test.AddAttribute<GraphProto>("body", body);
@@ -1293,7 +1293,7 @@ TEST(Loop, OptionalTypeAsLoopCarriedDependency) {
     OpTester test("Loop", 16);  // Opset 16 supports optional type
     // Since this test is being written at a time when only opset 15  has been released, we set
     // `test_allow_released_onnx_opset_only_` to 'false' to allow this test to run
-    test.test_allow_released_onnx_opset_only_ = false;
+    test.SetAllowUnreleasedOnnxOpset();
 
     auto body = create_subgraph(false);
     test.AddAttribute<GraphProto>("body", body);
@@ -1313,7 +1313,7 @@ TEST(Loop, OptionalTypeAsLoopCarriedDependency) {
     OpTester test("Loop", 16);  // Opset 16 supports optional type
     // Since this test is being written at a time when only opset 15  has been released, we set
     // `test_allow_released_onnx_opset_only_` to 'false' to allow this test to run
-    test.test_allow_released_onnx_opset_only_ = false;
+    test.SetAllowUnreleasedOnnxOpset();
 
     auto body = create_subgraph(false);
     test.AddAttribute<GraphProto>("body", body);

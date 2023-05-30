@@ -34,9 +34,9 @@
 // #include "test/test_environment.h"
 // #include "test/util/include/asserts.h"
 
-#include "test/util/include/test_utils.h"
-#include "test/util/include/op_tester.h"
-#include "test/util/include/model_tester.h"
+#include "test/providers/checkers.h"
+#include "test/providers/op_tester.h"
+#include "test/providers/model_tester.h"
 
 namespace onnxruntime {
 namespace test {

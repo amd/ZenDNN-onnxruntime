@@ -18,11 +18,14 @@ limitations under the License.
 #include "orttraining/test/gradient/gradient_checker.h"
 
 #include <random>
-#include "orttraining/test/gradient/gradient_op_test_utils.h"
+
 #include "orttraining/core/framework/gradient_graph_builder.h"
 #include "orttraining/core/graph/gradient_config.h"
-#include "test/util/include/test_random_seed.h"
+#include "orttraining/test/gradient/gradient_op_test_utils.h"
+
+#include "test/util/include/asserts.h"
 #include "test/util/include/default_providers.h"
+#include "test/util/include/test_random_seed.h"
 
 namespace onnxruntime {
 namespace test {
@@ -226,7 +229,7 @@ inline Status GradientChecker<X_T, Y_T, JAC_T>::ComputeTheoreticalJacobianTransp
 }
 
 template <typename X_T, typename Y_T, typename JAC_T>
-inline Status GradientChecker<X_T, Y_T, JAC_T>::InitOpTesterWithGraph(
+inline void GradientChecker<X_T, Y_T, JAC_T>::InitOpTesterWithGraph(
     OpTester& op_tester, const std::vector<TensorInfo>& x_infos, const std::vector<TensorInfo>& y_infos,
     std::vector<std::vector<X_T>>* x_datas, std::vector<std::vector<Y_T>>* y_datas,
     const std::vector<AttributeProto>& attributes,
@@ -238,53 +241,38 @@ inline Status GradientChecker<X_T, Y_T, JAC_T>::InitOpTesterWithGraph(
   }
 
   // build graph
-  auto p_model = op_tester.BuildGraph(extra_domain_to_version);
-  auto& graph = p_model->MainGraph();
+  auto& graph = op_tester.BuildGraph(extra_domain_to_version);
 
-  Status status = Status::OK();
-  status = graph.Resolve();
-
-  if (!status.IsOK()) {
-    LOGS_DEFAULT(ERROR) << "Resolve failed with status: " << status.ErrorMessage();
-    EXPECT_TRUE(status.IsOK()) << status.ErrorMessage();
-  }
-
-  if (!status.IsOK()) {
-    return status;
-  }
-
-  // TODO: This should happen automatically now with the call to BuildGraph
-  // cache the graph for later use
-  // op_tester.SetCachedModel(std::move(p_model));
-
-  return Status::OK();
+  ASSERT_STATUS_OK(graph.Resolve());
 }
 
 template <typename X_T, typename Y_T, typename JAC_T>
-inline Status GradientChecker<X_T, Y_T, JAC_T>::InitOpTesterWithGradGraph(
+inline void GradientChecker<X_T, Y_T, JAC_T>::InitOpTesterWithGradGraph(
     OpTester& op_session, const std::vector<TensorInfo>& x_infos, const std::vector<TensorInfo>& y_infos,
     std::vector<std::vector<X_T>>* x_datas, std::vector<std::vector<Y_T>>* y_datas,
     const std::vector<AttributeProto>& attributes) {
   std::unordered_map<std::string, int> extra_domain_to_version{{kMSDomain, 1}, {kOnnxDomain, 9}};
-  ORT_RETURN_IF_ERROR(
-      InitOpTesterWithGraph(op_session, x_infos, y_infos, x_datas, y_datas, attributes, extra_domain_to_version));
-  // build grad graph
-  auto* p_model = op_session.GetMutableModel();
-  ORT_ENFORCE(p_model, "OpTester::BuildGraph must have been called previously to create the model.");
+  InitOpTesterWithGraph(op_session, x_infos, y_infos, x_datas, y_datas, attributes, extra_domain_to_version);
 
-  auto& graph = p_model->MainGraph();
+  // build grad graph
+  auto* model = op_session.GetMutableModel();
+  ASSERT_NE(model, nullptr) << "BuildGraph should have been called before calling InitOpTesterWithGradGraph";
+  auto& graph = model->MainGraph();
 
   std::unordered_set<std::string> weights_to_train;
-  for (size_t i = 0; i < op_session.GetInputData().size(); i++) {
+  const auto& input_data = op_session.GetInputData();
+  const auto& output_data = op_session.GetOutputData();
+
+  for (size_t i = 0; i < input_data.size(); i++) {
     if (x_infos[i].has_gradient) {
-      weights_to_train.insert(op_session.GetInputData()[i].def_.Name());
+      weights_to_train.insert(input_data[i].def_.Name());
     }
   }
 
   std::unordered_set<std::string> dy_values;
-  for (size_t i = 0; i < op_session.GetOutputData().size(); i++) {
+  for (size_t i = 0; i < output_data.size(); i++) {
     if (y_infos[i].has_gradient) {
-      dy_values.insert(op_session.GetOutputData()[i].def_.Name());
+      dy_values.insert(output_data[i].def_.Name());
     }
   }
 
