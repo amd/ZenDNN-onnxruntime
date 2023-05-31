@@ -426,7 +426,7 @@ def get_runtime_pytorch_version():
 def save_tuning_results(session, is_training):
     if ortmodule._defined_from_envvar("ORTMODULE_ENABLE_TUNING", 0) != 0:
         tuning_results_path = ortmodule._defined_from_envvar("ORTMODULE_TUNING_RESULTS_PATH", "")
-        if tuning_results_path != "":
+        if tuning_results_path:
             if not tuning_results_path.endswith("/"):
                 tuning_results_path += "/"
             os.makedirs(os.path.dirname(tuning_results_path), exist_ok=True)
@@ -439,11 +439,11 @@ def save_tuning_results(session, is_training):
 def set_tuning_results(session, is_training):
     if ortmodule._defined_from_envvar("ORTMODULE_ENABLE_TUNING", 0) == 0:
         tuning_results_path = ortmodule._defined_from_envvar("ORTMODULE_TUNING_RESULTS_PATH", "")
-        if tuning_results_path != "":
+        if tuning_results_path:
             if not tuning_results_path.endswith("/"):
                 tuning_results_path += "/"
             suffix = "training" if is_training else "inference"
             tuning_result_file = f"{tuning_results_path}tuning_results_{suffix}.json"
             if os.path.isfile(tuning_result_file):
-                with open(tuning_result_file, "r") as f:
+                with open(tuning_result_file) as f:
                     session.set_tuning_results(json.load(f))
