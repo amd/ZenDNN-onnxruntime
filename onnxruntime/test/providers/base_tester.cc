@@ -6,6 +6,7 @@
 #include "gmock/gmock.h"
 
 #include "core/common/logging/logging.h"
+#include "core/framework/tensorprotoutils.h"
 #include "core/graph/constants.h"
 #include "core/graph/model_load_utils.h"
 #include "core/session/inference_session.h"
@@ -311,7 +312,7 @@ void BaseTester::ExecuteModel(Model& model, SessionType& session,
 
   for (int i = 0; i < num_run_calls_; ++i) {
     fetches_.clear();
-    status = session.Run(run_options ? *run_options : {}, feeds, output_names, &fetches_);
+    status = session.Run(run_options ? *run_options : RunOptions{}, feeds, output_names, &fetches_);
 
     if (status.IsOK()) {
       ASSERT_EQ(expect_result, ExpectResult::kExpectSuccess) << "Run succeeded but expected failure.";
@@ -341,14 +342,15 @@ void BaseTester::ExecuteModel(Model& model, SessionType& session,
       for (auto& expected_data : output_data_) {
         OrtValue& ort_value = fetches_[idx];
 
-        if (expected_data.def.Exists()) {           // optional edges won't exist (so skip them)
+        if (expected_data.def.Exists()) {  // optional edges won't exist (so skip them)
+          const auto& name = expected_data.def.Name();
           if (!expected_data.data.IsAllocated()) {  // optional type output (None)
-            EXPECT_TRUE(!ort_value.IsAllocated()) << "Expected to see an output of None "
-                                                  << "but instead got an output that wasn't None";
+            EXPECT_TRUE(!ort_value.IsAllocated()) << "Expected to see an output of None for " << name
+                                                  << " but instead got an output that wasn't None";
 
             // Make sure types align
             EXPECT_EQ(expected_data.data.Type(), ort_value.Type())
-                << "Expected optional type: " << expected_data.data.Type()
+                << "Expected optional type: " << expected_data.data.Type() << " for " << name
                 << " but instead got optional type: " << ort_value.Type();
           }
 
@@ -371,9 +373,9 @@ void BaseTester::ExecuteModel(Model& model, SessionType& session,
               }
             }
 
-            Check(expected_data, ort_value.Get<Tensor>(), provider_type);
+            Check(name, {}, expected_data.data, ort_value, provider_type);
           } else {
-            Check(expected_data, ort_value, provider_type);
+            Check(name, {}, expected_data.data, ort_value, provider_type);
           }
 
           ++idx;

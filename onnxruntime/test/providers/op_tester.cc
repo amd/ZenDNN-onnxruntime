@@ -26,7 +26,7 @@ void OpTester::AddNodes(onnxruntime::Graph& graph,
 
 onnxruntime::Model& OpTester::BuildGraph(const std::unordered_map<std::string, int>& extra_domain_to_version,
                                          const ModelOptions& model_options) {
-  const auto get_defs = [](const std::vector<BaseTester::Data>& data) {
+  const auto get_defs = [](std::vector<BaseTester::Data>& data) {
     std::vector<onnxruntime::NodeArg*> defs;
     defs.reserve(data.size());
     std::transform(data.begin(), data.end(), std::back_inserter(defs),

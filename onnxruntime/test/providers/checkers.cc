@@ -392,6 +392,7 @@ struct TensorCheck<BFloat16> {
 };
 }  // namespace
 
+// Check for Tensor types
 void Check(std::string_view name, const ValidateOutputParams& params,
            const OrtValue& expected, const Tensor& actual, const std::string& provider_type) {
   ORT_ENFORCE(expected.Get<Tensor>().Shape() == actual.Shape(),
@@ -406,6 +407,18 @@ void Check(std::string_view name, const ValidateOutputParams& params,
 
   t_disp.Invoke<TensorCheck>(expected.Get<Tensor>(), actual, provider_type, params);
 }
+
+// Check for non-Tensor types
+template <typename T>
+void Check(std::string_view name, const ValidateOutputParams& /*params*/,
+           const OrtValue& expected, const T& actual, const std::string& provider_type) {
+  EXPECT_EQ(expected.Get<T>(), actual) << "name: " << name << " provider_type : " << provider_type;
+}
+
+// Check for sequence of tensors
+template <>
+void Check<TensorSeq>(std::string_view name, const ValidateOutputParams& params,
+                      const OrtValue& expected, const TensorSeq& actual, const std::string& provider_type);
 
 template <>
 void Check<TensorSeq>(std::string_view name, const ValidateOutputParams& params,

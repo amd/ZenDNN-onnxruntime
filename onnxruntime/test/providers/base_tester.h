@@ -627,11 +627,11 @@ class BaseTester {
     ValidateOutputParams validation_params;
   };
 
-  const std::vector<Data>& GetInputData() {
+  std::vector<Data>& GetInputData() {
     return input_data_;
   }
 
-  const std::vector<Data>& GetOutputData() {
+  std::vector<Data>& GetOutputData() {
     return output_data_;
   }
 
