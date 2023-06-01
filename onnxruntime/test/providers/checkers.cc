@@ -402,7 +402,7 @@ void Check(std::string_view name, const ValidateOutputParams& /*params*/,
 // Check for Tensors
 template <>
 void Check<Tensor>(std::string_view name, const ValidateOutputParams& params,
-           const OrtValue& expected, const Tensor& actual, const std::string& provider_type) {
+                   const OrtValue& expected, const Tensor& actual, const std::string& provider_type) {
   const Tensor& expected_tensor = expected.Get<Tensor>();
   ORT_ENFORCE(expected_tensor.Shape() == actual.Shape(),
               "Expected output shape [", expected_tensor.Shape(),
@@ -441,8 +441,12 @@ void Check<TensorSeq>(std::string_view name, const ValidateOutputParams& params,
   // now check the contents of the tensors
   auto element_type = exp_seq.DataType()->AsPrimitiveDataType()->GetDataType();
   utils::MLTypeCallDispatcher<bool, float, double, uint8_t, uint16_t, uint32_t, uint64_t,
-                              int8_t, int16_t, int32_t, int64_t, std::string, MLFloat16,
-                              BFloat16>
+                              int8_t, int16_t, int32_t, int64_t, std::string,
+#if !defined(DISABLE_FLOAT8_TYPES)
+
+                              Float8E4M3FN, Float8E4M3FNUZ, Float8E5M2, Float8E5M2FNUZ,
+#endif
+                              MLFloat16, BFloat16>
       t_disp(element_type);
 
   for (size_t i = 0; i < output_num_tensors; ++i) {
