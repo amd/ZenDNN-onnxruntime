@@ -68,9 +68,13 @@ onnxruntime::Model& OpTester::BuildModel(const std::unordered_map<std::string, i
 }
 
 onnxruntime::Model* OpTester::CreateModelToTest(const ModelOptions& model_options) {
+  if (!cache_model_) {
+    model_ = nullptr;
+  }
+
   if (!model_ || !cache_model_) {
     Status status = Status::OK();
-    const auto& ctx = RunContext();
+    const auto& ctx = GetRunContext();
 
     auto& model = BuildModel({}, model_options);
     auto& graph = model.MainGraph();
@@ -95,6 +99,8 @@ onnxruntime::Model* OpTester::CreateModelToTest(const ModelOptions& model_option
       } else {
         EXPECT_TRUE(status.IsOK()) << "Resolve failed with status: " << status.ErrorMessage();
       }
+
+      model_ = nullptr;
     }
   } else {
     // reset EP assignments in case the next test uses a different EP.

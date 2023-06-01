@@ -310,9 +310,11 @@ void BaseTester::ExecuteModel(Model& model, SessionType& session,
     return;
   }
 
+  RunOptions default_run_options;
+
   for (int i = 0; i < num_run_calls_; ++i) {
     fetches_.clear();
-    status = session.Run(run_options ? *run_options : RunOptions{}, feeds, output_names, &fetches_);
+    status = session.Run(run_options ? *run_options : default_run_options, feeds, output_names, &fetches_);
 
     if (status.IsOK()) {
       ASSERT_EQ(expect_result, ExpectResult::kExpectSuccess) << "Run succeeded but expected failure.";
