@@ -60,12 +60,10 @@ TEST(DebugNodeInputsOutputs, BasicFileOutput) {
           const std::vector<OrtValue>& fetches,
           const std::string& /*provider_type*/) {
         ASSERT_EQ(fetches.size(), 1u);
-        FetchTensor(fetches[0]);
-        VerifyTensorProtoFileData(
-            temp_dir.Path() + ORT_TSTR("/x.tensorproto"),
-            gsl::make_span(input));
-        VerifyTensorProtoFileData(
-            temp_dir.Path() + ORT_TSTR("/y.tensorproto"),
+        // check it contains a tensor
+        fetches[0].Get<Tensor>();
+        VerifyTensorProtoFileData(temp_dir.Path() + ORT_TSTR("/x.tensorproto"), gsl::make_span(input));
+        VerifyTensorProtoFileData(temp_dir.Path() + ORT_TSTR("/y.tensorproto"),
             gsl::make_span(output));
       };
 
