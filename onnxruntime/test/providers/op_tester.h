@@ -80,13 +80,13 @@ class OpTester : public BaseTester {
     return model_.get();
   }
 
+  onnxruntime::Model& BuildModel(const std::unordered_map<std::string, int>& extra_domain_to_version = {},
+                                 const ModelOptions& model_options = {});
+
  protected:
   const std::string& Op() const noexcept {
     return op_;
   }
-
-  onnxruntime::Model& BuildGraph(const std::unordered_map<std::string, int>& extra_domain_to_version = {},
-                                 const ModelOptions& model_options = {});
 
  private:
   // create model for testing

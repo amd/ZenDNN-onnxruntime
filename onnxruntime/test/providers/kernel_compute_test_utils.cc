@@ -167,7 +167,7 @@ void KernelComputeTester::Run(std::unordered_set<int> strided_outputs) {
       }
 
       Check(output_data_[i].def_.Name(), ValidateOutputParams{},
-            output_data_[i].value_, cpu_value.Get<Tensor>(), provider_);
+            output_data_[i].value_, cpu_value, provider_);
     }
   }
 }

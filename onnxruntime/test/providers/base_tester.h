@@ -651,6 +651,15 @@ class BaseTester {
     test_allow_released_onnx_opset_only_ = false;
   }
 
+  // TODO: This is a little ugly and potentially error prone, and is only used by gradient_test.cc in training
+  //       Can we create a new OpTester instance instead of having a Clear()?
+  // clear input/output data, fetches will be cleared in Run()
+  void ClearData() {
+    input_data_.clear();
+    output_data_.clear();
+    initializer_indexes_.clear();
+  }
+
  protected:
   // if the derived class is caching the model this helper can be called in CreateModelToTest to reset the nodes
   static void ClearEpsForAllNodes(Graph& graph);
@@ -668,15 +677,6 @@ class BaseTester {
   void SetAddShapeToTensorData(bool add_shape) { add_shape_to_tensor_data_ = add_shape; }
   void SetAddSymbolicDimToTensorData(bool symbolic_dim) { add_symbolic_dim_to_tensor_data_ = symbolic_dim; }
   void SetRunCalled() { run_called_ = true; }
-
-  // TODO: This is a little ugly and potentially error prone, and is only used by gradient_test.cc in training
-  //       Can we create a new OpTester instance instead of having a Clear()?
-  // clear input/output data, fetches will be cleared in Run()
-  void ClearData() {
-    input_data_.clear();
-    output_data_.clear();
-    initializer_indexes_.clear();
-  }
 
   struct RunContext {
     SessionOptions session_options{};

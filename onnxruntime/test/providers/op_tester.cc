@@ -24,7 +24,7 @@ void OpTester::AddNodes(onnxruntime::Graph& graph,
     add_attribute_fn(node);
 }
 
-onnxruntime::Model& OpTester::BuildGraph(const std::unordered_map<std::string, int>& extra_domain_to_version,
+onnxruntime::Model& OpTester::BuildModel(const std::unordered_map<std::string, int>& extra_domain_to_version,
                                          const ModelOptions& model_options) {
   const auto get_defs = [](std::vector<BaseTester::Data>& data) {
     std::vector<onnxruntime::NodeArg*> defs;
@@ -72,7 +72,7 @@ onnxruntime::Model* OpTester::CreateModelToTest(const ModelOptions& model_option
     Status status = Status::OK();
     const auto& ctx = RunContext();
 
-    auto& model = BuildGraph({}, model_options);
+    auto& model = BuildModel({}, model_options);
     auto& graph = model.MainGraph();
 
     if (GetAddShapeToTensorData() && ctx.expect_result == ExpectResult::kExpectFailure) {

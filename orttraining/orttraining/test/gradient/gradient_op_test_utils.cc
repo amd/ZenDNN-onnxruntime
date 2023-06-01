@@ -33,7 +33,7 @@ void GradientOpTester::Run(int output_index_to_use_as_loss,
     Model* p_model = GetMutableModel();
     bool using_cached_model = p_model;
 
-    Model& model = using_cached_model ? *p_model : BuildGraph(extra_domain_to_version);
+    Model& model = using_cached_model ? *p_model : BuildModel(extra_domain_to_version);
     Graph& graph = model.MainGraph();
 
     if (using_cached_model) {

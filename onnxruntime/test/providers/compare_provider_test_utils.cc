@@ -50,7 +50,7 @@ void CompareOpTester::CompareWithCPU(const std::string& target_provider_type,
   std::unique_ptr<IExecutionProvider> target_execution_provider = GetExecutionProvider(target_provider_type);
   ASSERT_TRUE(target_execution_provider != nullptr) << "provider_type " << target_provider_type << " is not supported.";
 
-  auto& model = BuildGraph(extra_domain_to_version);
+  auto& model = BuildModel(extra_domain_to_version);
   auto& graph = model.MainGraph();
 
   // In InferenceSession::Initialize(), the call to graph partitioner, which is responsible
@@ -92,7 +92,7 @@ void CompareOpTester::CompareWithCPU(const std::string& target_provider_type,
 
   // run with target provider
   // build the graph again as the cpu graph may be with casts
-  auto& tp_model = BuildGraph(extra_domain_to_version);
+  auto& tp_model = BuildModel(extra_domain_to_version);
   auto& tp_graph = tp_model.MainGraph();
 
   ASSERT_STATUS_OK(tp_graph.Resolve());

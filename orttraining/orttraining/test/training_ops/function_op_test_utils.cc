@@ -15,7 +15,7 @@ namespace onnxruntime {
 namespace test {
 
 void OpFunctionTester::RunFunctionBodyGraphOnCPU(TwoDArray& results) {
-  auto& model = BuildGraph();
+  auto& model = BuildModel();
   auto& graph = model.MainGraph();
   const auto& op = Op();
 
