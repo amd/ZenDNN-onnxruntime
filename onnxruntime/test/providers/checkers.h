@@ -22,7 +22,7 @@ struct ValidateOutputParams {
 
 //// Check for Tensor
 //void Check(std::string_view name, const ValidateOutputParams& params,
-//           const OrtValue& expected, const Tensor& output_tensor, const std::string& provider_type);
+//           const Tensor& expected, const Tensor& output_tensor, const std::string& provider_type);
 
 // General purpose Check
 void Check(std::string_view name, const ValidateOutputParams& params,

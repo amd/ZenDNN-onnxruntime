@@ -392,11 +392,20 @@ struct TensorCheck<BFloat16> {
 };
 }  // namespace
 
-// Check for Tensor types
-void Check(std::string_view name, const ValidateOutputParams& params,
+// default Check
+template <typename T>
+void Check(std::string_view name, const ValidateOutputParams& /*params*/,
+           const OrtValue& expected, const T& actual, const std::string& provider_type) {
+  EXPECT_EQ(expected.Get<T>(), actual) << "name: " << name << " provider_type : " << provider_type;
+}
+
+// Check for Tensors
+template <>
+void Check<Tensor>(std::string_view name, const ValidateOutputParams& params,
            const OrtValue& expected, const Tensor& actual, const std::string& provider_type) {
-  ORT_ENFORCE(expected.Get<Tensor>().Shape() == actual.Shape(),
-              "Expected output shape [", expected.Get<Tensor>().Shape(),
+  const Tensor& expected_tensor = expected.Get<Tensor>();
+  ORT_ENFORCE(expected_tensor.Shape() == actual.Shape(),
+              "Expected output shape [", expected_tensor.Shape(),
               "] did not match run output shape [", actual.Shape(),
               "] for ", name);
 
@@ -405,21 +414,10 @@ void Check(std::string_view name, const ValidateOutputParams& params,
                               BFloat16>
       t_disp(actual.GetElementType());
 
-  t_disp.Invoke<TensorCheck>(expected.Get<Tensor>(), actual, provider_type, params);
-}
-
-// Check for non-Tensor types
-template <typename T>
-void Check(std::string_view name, const ValidateOutputParams& /*params*/,
-           const OrtValue& expected, const T& actual, const std::string& provider_type) {
-  EXPECT_EQ(expected.Get<T>(), actual) << "name: " << name << " provider_type : " << provider_type;
+  t_disp.Invoke<TensorCheck>(expected_tensor, actual, provider_type, params);
 }
 
 // Check for sequence of tensors
-template <>
-void Check<TensorSeq>(std::string_view name, const ValidateOutputParams& params,
-                      const OrtValue& expected, const TensorSeq& actual, const std::string& provider_type);
-
 template <>
 void Check<TensorSeq>(std::string_view name, const ValidateOutputParams& params,
                       const OrtValue& expected, const TensorSeq& output_seq, const std::string& provider_type) {
@@ -475,6 +473,7 @@ void CheckDispatch(MLDataType type, std::string_view name, const ValidateOutputP
 void Check(std::string_view name, const ValidateOutputParams& params, const OrtValue& expected, OrtValue& actual,
            const std::string& provider_type) {
   CheckDispatch<
+      Tensor,
 #if !defined(DISABLE_ML_OPS)
       VectorMapStringToFloat, VectorMapInt64ToFloat,
 #endif
