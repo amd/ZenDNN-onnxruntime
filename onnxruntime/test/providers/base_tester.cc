@@ -104,17 +104,15 @@ void BaseTester::FillFeeds(std::unordered_map<std::string, OrtValue>& feeds) {
 }
 
 void BaseTester::SetOutputAbsErr(const char* name, float v) {
-  auto it =
-      std::find_if(output_data_.begin(), output_data_.end(),
-                   [name](Data& data) { return (data.def.Name() == name); });
+  auto it = std::find_if(output_data_.begin(), output_data_.end(),
+                         [name](Data& data) { return (data.def.Name() == name); });
   ORT_ENFORCE(it != output_data_.end());
   it->validation_params.absolute_error = optional<float>(v);
 }
 
 void BaseTester::SetOutputRelErr(const char* name, float v) {
-  auto it =
-      std::find_if(output_data_.begin(), output_data_.end(),
-                   [name](Data& data) { return (data.def.Name() == name); });
+  auto it = std::find_if(output_data_.begin(), output_data_.end(),
+                         [name](Data& data) { return (data.def.Name() == name); });
   ORT_ENFORCE(it != output_data_.end());
   it->validation_params.relative_error = optional<float>(v);
 }
@@ -375,9 +373,9 @@ void BaseTester::ExecuteModel(Model& model, SessionType& session,
               }
             }
 
-            Check(name, {}, expected_data.data, ort_value, provider_type);
+            Check(name, expected_data.validation_params, expected_data.data, ort_value, provider_type);
           } else {
-            Check(name, {}, expected_data.data, ort_value, provider_type);
+            Check(name, expected_data.validation_params, expected_data.data, ort_value, provider_type);
           }
 
           ++idx;
@@ -392,15 +390,15 @@ void BaseTester::ExecuteModel(Model& model, SessionType& session,
   }
 }
 
-//void BaseTester::ClearEpsForAllNodes(Graph& graph) {
-//  const std::string empty;
-//  for (auto& node : graph.Nodes()) {
-//    node.SetExecutionProviderType(empty);
-//    for (auto& subgraph : node.GetAttributeNameToMutableSubgraphMap()) {
-//      ClearEpsForAllNodes(*subgraph.second);
-//    }
-//  }
-//}
+// void BaseTester::ClearEpsForAllNodes(Graph& graph) {
+//   const std::string empty;
+//   for (auto& node : graph.Nodes()) {
+//     node.SetExecutionProviderType(empty);
+//     for (auto& subgraph : node.GetAttributeNameToMutableSubgraphMap()) {
+//       ClearEpsForAllNodes(*subgraph.second);
+//     }
+//   }
+// }
 
 bool SetEpsForAllNodes(Graph& graph,
                        const std::vector<std::unique_ptr<IExecutionProvider>>& execution_providers,

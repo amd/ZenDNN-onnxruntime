@@ -42,7 +42,7 @@ class ModelTester : public BaseTester {
     model = model_.get();
   }
 
-  const PathString& model_uri_;
+  const PathString model_uri_;
   std::shared_ptr<Model> model_;
 };
 }  // namespace test
