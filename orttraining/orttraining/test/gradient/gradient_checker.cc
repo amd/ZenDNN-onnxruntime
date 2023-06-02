@@ -21,7 +21,6 @@ limitations under the License.
 
 #include "orttraining/core/framework/gradient_graph_builder.h"
 #include "orttraining/core/graph/gradient_config.h"
-#include "orttraining/test/gradient/gradient_op_test_utils.h"
 
 #include "test/util/include/asserts.h"
 #include "test/util/include/default_providers.h"
@@ -107,7 +106,7 @@ inline void GradientChecker<X_T, Y_T, JAC_T>::InitJacobians(size_t row_count, si
 
 template <typename X_T, typename Y_T, typename JAC_T>
 inline std::vector<OrtValue> GradientChecker<X_T, Y_T, JAC_T>::EvaluateFunctionAtInput(
-    OpTester& op_session, const std::vector<TensorInfo>& x_infos, const std::vector<TensorInfo>& y_infos,
+    GradientOpTester& op_session, const std::vector<TensorInfo>& x_infos, const std::vector<TensorInfo>& y_infos,
     std::vector<std::vector<X_T>>* x_datas, std::vector<std::vector<Y_T>>* y_datas,
     std::vector<std::unique_ptr<IExecutionProvider>>* execution_providers) {
   AddDatas(op_session, x_infos, y_infos, x_datas, y_datas);
@@ -121,7 +120,7 @@ inline std::vector<OrtValue> GradientChecker<X_T, Y_T, JAC_T>::EvaluateFunctionA
 }
 
 template <typename X_T, typename Y_T, typename JAC_T>
-inline void GradientChecker<X_T, Y_T, JAC_T>::AddDatas(OpTester& op_session, const std::vector<TensorInfo>& x_infos,
+inline void GradientChecker<X_T, Y_T, JAC_T>::AddDatas(GradientOpTester& op_session, const std::vector<TensorInfo>& x_infos,
                                                        const std::vector<TensorInfo>& y_infos,
                                                        std::vector<std::vector<X_T>>* x_datas,
                                                        std::vector<std::vector<Y_T>>* y_datas) {
@@ -177,8 +176,8 @@ inline void GradientChecker<X_T, Y_T, JAC_T>::ComputeTheoreticalJacobianTranspos
   size_t y_num = y_infos.size();
   size_t x_num = x_infos.size();
   // build the graph once and reuse it later in the looping logic
-  GradientOpTester op_session(op_def.type.c_str(), x_infos, y_infos, op_def.opset_version, op_def.domain.c_str(),
-                              false);
+  GradientOpTester op_session(op_def.type.c_str(), op_def.opset_version, op_def.domain.c_str(),
+                              false, &x_infos, &y_infos);
   op_session.AddShapeToTensorData(add_shape);
   InitOpTesterWithGradGraph(op_session, x_infos, y_infos, x_datas, y_datas, attributes);
 
@@ -228,7 +227,7 @@ inline void GradientChecker<X_T, Y_T, JAC_T>::ComputeTheoreticalJacobianTranspos
 
 template <typename X_T, typename Y_T, typename JAC_T>
 inline void GradientChecker<X_T, Y_T, JAC_T>::InitOpTesterWithGraph(
-    OpTester& op_tester, const std::vector<TensorInfo>& x_infos, const std::vector<TensorInfo>& y_infos,
+    GradientOpTester& op_tester, const std::vector<TensorInfo>& x_infos, const std::vector<TensorInfo>& y_infos,
     std::vector<std::vector<X_T>>* x_datas, std::vector<std::vector<Y_T>>* y_datas,
     const std::vector<AttributeProto>& attributes,
     const std::unordered_map<std::string, int>& extra_domain_to_version) {
@@ -246,7 +245,7 @@ inline void GradientChecker<X_T, Y_T, JAC_T>::InitOpTesterWithGraph(
 
 template <typename X_T, typename Y_T, typename JAC_T>
 inline void GradientChecker<X_T, Y_T, JAC_T>::InitOpTesterWithGradGraph(
-    OpTester& op_session, const std::vector<TensorInfo>& x_infos, const std::vector<TensorInfo>& y_infos,
+    GradientOpTester& op_session, const std::vector<TensorInfo>& x_infos, const std::vector<TensorInfo>& y_infos,
     std::vector<std::vector<X_T>>* x_datas, std::vector<std::vector<Y_T>>* y_datas,
     const std::vector<AttributeProto>& attributes) {
   std::unordered_map<std::string, int> extra_domain_to_version{{kMSDomain, 1}, {kOnnxDomain, 9}};
@@ -293,7 +292,7 @@ inline void GradientChecker<X_T, Y_T, JAC_T>::ComputeNumericJacobianTranspose(
   X_T x_delta = static_cast<X_T>(delta);
 
   // build the graph once and reuse it later in the looping logic
-  OpTester op_session(op_def.type.c_str(), op_def.opset_version, op_def.domain.c_str(), false);
+  GradientOpTester op_session(op_def.type.c_str(), op_def.opset_version, op_def.domain.c_str(), false);
   op_session.AddShapeToTensorData(add_shape);
   InitOpTesterWithGraph(op_session, x_infos, y_infos, x_datas, y_datas, attributes);
 
@@ -313,8 +312,7 @@ inline void GradientChecker<X_T, Y_T, JAC_T>::ComputeNumericJacobianTranspose(
 
       // Evaluate at positive delta.
       (*x_datas)[x_idx][r] = v + x_delta;
-      std::vector<OrtValue> y_plus =
-          EvaluateFunctionAtInput(op_session, x_infos, y_infos, x_datas, y_datas, execution_providers);
+      std::vector<OrtValue> y_plus = EvaluateFunctionAtInput(op_session, x_infos, y_infos, x_datas, y_datas, execution_providers);
 
       // Evaluate at negative delta.
       (*x_datas)[x_idx][r] = v - x_delta;

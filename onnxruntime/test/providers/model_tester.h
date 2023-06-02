@@ -28,35 +28,21 @@ class ModelTester : public BaseTester {
   /// <param name="test_name">Name of test to use in logs and error messages.</param>
   /// <param name="model_uri">Model to load</param>
   /// <param name="opset_version">Opset version for the model.</param>
-  /// <param name="cache">
-  /// Can the model be cached and re-used for each EP?
-  /// If optimizations may change the model on a per-EP basis consider setting this to false, or limiting the
-  /// optimization level when calling BaseTester::Run via SessionOptions.
-  /// </param>
-  explicit ModelTester(std::string_view test_name, const PathString& model_uri, int opset_version = -1,
-                       bool cache = true)
+  explicit ModelTester(std::string_view test_name, const PathString& model_uri, int opset_version = -1)
       : BaseTester{test_name, opset_version, onnxruntime::kOnnxDomain},
-        model_uri_{model_uri},
-        cache_{cache} {
+        model_uri_{model_uri} {
   }
 
   using ExpectResult = BaseTester::ExpectResult;
 
  private:
-  Model* CreateModelToTest(const ModelOptions& model_options) override {
-    if (!model_ || !cache_) {
-      auto status = Model::Load(model_uri_, model_, nullptr, DefaultLoggingManager().DefaultLogger(), model_options);
-      ORT_ENFORCE(status.IsOK(), status.ErrorMessage());
-    } else {
-      // previous run would have assigned nodes so we need to clear that out to allowing test a different EP
-      ClearEpsForAllNodes(model_->MainGraph());
-    }
+  void CreateModelToTest(const ModelOptions& model_options, Model*& model) override {
+    ASSERT_STATUS_OK(Model::Load(model_uri_, model_, nullptr, DefaultLoggingManager().DefaultLogger(), model_options));
 
-    return model_.get();
+    model = model_.get();
   }
 
   const PathString& model_uri_;
-  const bool cache_;
   std::shared_ptr<Model> model_;
 };
 }  // namespace test

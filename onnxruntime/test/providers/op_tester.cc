@@ -67,47 +67,36 @@ onnxruntime::Model& OpTester::BuildModel(const std::unordered_map<std::string, i
   return *model_;
 }
 
-onnxruntime::Model* OpTester::CreateModelToTest(const ModelOptions& model_options) {
-  if (!cache_model_) {
-    model_ = nullptr;
-  }
+void OpTester::CreateModelToTest(const ModelOptions& model_options, Model*& model) {
+  Status status = Status::OK();
 
-  if (!model_ || !cache_model_) {
-    Status status = Status::OK();
-    const auto& ctx = GetRunContext();
+  model = &BuildModel({}, model_options);
+  auto& graph = model->MainGraph();
 
-    auto& model = BuildModel({}, model_options);
-    auto& graph = model.MainGraph();
-
-    if (GetAddShapeToTensorData() && ctx.expect_result == ExpectResult::kExpectFailure) {
-      // capture possible exceptions from shape inference for invalid testcase
-      ORT_TRY {
-        status = graph.Resolve(ctx.resolve_options);
-      }
-      ORT_CATCH(const std::exception& ex) {
-        ORT_HANDLE_EXCEPTION([&]() {
-          status = ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, ex.what());
-        });
-      }
-    } else {
+  const auto& ctx = GetRunContext();
+  if (GetAddShapeToTensorData() && ctx.expect_result == ExpectResult::kExpectFailure) {
+    // capture possible exceptions from shape inference for invalid testcase
+    ORT_TRY {
       status = graph.Resolve(ctx.resolve_options);
     }
-
-    if (!status.IsOK()) {
-      if (ctx.expect_result == ExpectResult::kExpectFailure) {
-        EXPECT_THAT(status.ErrorMessage(), testing::HasSubstr(ctx.expected_failure_string));
-      } else {
-        EXPECT_TRUE(status.IsOK()) << "Resolve failed with status: " << status.ErrorMessage();
-      }
-
-      model_ = nullptr;
+    ORT_CATCH(const std::exception& ex) {
+      ORT_HANDLE_EXCEPTION([&]() {
+        status = ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, ex.what());
+      });
     }
   } else {
-    // reset EP assignments in case the next test uses a different EP.
-    ClearEpsForAllNodes(model_->MainGraph());
+    status = graph.Resolve(ctx.resolve_options);
   }
 
-  return model_.get();
+  if (!status.IsOK()) {
+    if (ctx.expect_result == ExpectResult::kExpectFailure) {
+      ASSERT_THAT(status.ErrorMessage(), testing::HasSubstr(ctx.expected_failure_string));
+    } else {
+      ASSERT_TRUE(status.IsOK()) << "Resolve failed with status: " << status.ErrorMessage();
+    }
+
+    model = nullptr;
+  }
 }
 
 }  // namespace test

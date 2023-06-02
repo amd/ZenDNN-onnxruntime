@@ -37,10 +37,9 @@ class OpTester : public BaseTester {
   //        OpTester will say it was successful as at least one EP ran, and the GPU implementation of v1 no longer has
   //        test coverage.
   explicit OpTester(std::string_view op, int opset_version = 7, std::string_view domain = onnxruntime::kOnnxDomain,
-                    bool cache_model = true, bool verify_output = true)
+                    bool verify_output = true)
       : BaseTester{op, opset_version, domain, verify_output},
-        op_{op},
-        cache_model_{cache_model} {
+        op_{op} {
   }
 
   using ExpectResult = BaseTester::ExpectResult;
@@ -90,10 +89,9 @@ class OpTester : public BaseTester {
 
  private:
   // create model for testing
-  Model* CreateModelToTest(const ModelOptions& model_options) override;
+  void CreateModelToTest(const ModelOptions& model_options, Model*& model) override;
 
   std::string op_;
-  const bool cache_model_;
   std::vector<std::function<void(onnxruntime::Node& node)>> add_attribute_funcs_;
   std::unique_ptr<onnxruntime::Model> model_;
 };

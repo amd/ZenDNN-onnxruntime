@@ -25,6 +25,11 @@ void GradientOpTester::Run(int output_index_to_use_as_loss,
                            const std::unordered_set<std::string>& /*excluded_provider_types*/,
                            const RunOptions* run_options,
                            std::vector<std::unique_ptr<IExecutionProvider>>* execution_providers) {
+  // this Run method is for usage when these two properties are set
+  assert(input_infos_ && output_infos_);
+  const auto& input_infos = *input_infos_;
+  const auto& output_infos = *input_infos_;
+
   try {
     Status status = Status::OK();
 
@@ -36,10 +41,7 @@ void GradientOpTester::Run(int output_index_to_use_as_loss,
     Model& model = using_cached_model ? *p_model : BuildModel(extra_domain_to_version);
     Graph& graph = model.MainGraph();
 
-    if (using_cached_model) {
-      // reset node assignments to allow testing with different EPs
-      ClearEpsForAllNodes(graph);
-    } else {
+    if (!using_cached_model) {
       if (expect_result == ExpectResult::kExpectFailure) {
         // capture possible exceptions from shape inference for invalid testcase
         try {
@@ -66,14 +68,14 @@ void GradientOpTester::Run(int output_index_to_use_as_loss,
       const auto& output_data = GetOutputData();
 
       for (size_t i = 0; i < input_data.size(); i++) {
-        if (input_infos_[i].has_gradient) {
+        if (input_infos[i].has_gradient) {
           weights_to_train.insert(input_data[i].def.Name());
         }
       }
 
       std::unordered_set<std::string> dy_values;
       for (size_t i = 0; i < output_data.size(); i++) {
-        if (output_infos_[i].has_gradient) {
+        if (output_infos[i].has_gradient) {
           dy_values.insert(output_data[i].def.Name());
         }
       }
@@ -244,6 +246,12 @@ void GradientOpTester::FillFeedsAndOutputNames(std::unordered_map<std::string, O
                                                std::vector<std::string>& output_names,
                                                int output_index_to_use_as_loss,
                                                int data_index_of_output) {
+  // this method is for usage when these two properties are set
+  assert(input_infos_ && output_infos_);
+
+  const auto& input_infos = *input_infos_;
+  const auto& output_infos = *input_infos_;
+
   OpTester::FillFeedsAndOutputNames(feeds, output_names);
   output_names.clear();  // ignore output names
 
@@ -252,7 +260,7 @@ void GradientOpTester::FillFeedsAndOutputNames(std::unordered_map<std::string, O
 
   // add gradients as output instead
   for (size_t i = 0; i < input_data.size(); ++i) {
-    if (!input_infos_[i].has_gradient) {
+    if (!input_infos[i].has_gradient) {
       continue;
     }
     output_names.push_back(input_data[i].def.Name() + "_grad");
@@ -261,7 +269,7 @@ void GradientOpTester::FillFeedsAndOutputNames(std::unordered_map<std::string, O
   // Append gradient names and values to feeds
   std::vector<Data> gradient_data;
   for (size_t i = 0; i < output_data.size(); i++) {
-    if (!output_infos_[i].has_gradient) {
+    if (!output_infos[i].has_gradient) {
       continue;
     }
 

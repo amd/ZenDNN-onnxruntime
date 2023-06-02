@@ -392,15 +392,15 @@ void BaseTester::ExecuteModel(Model& model, SessionType& session,
   }
 }
 
-void BaseTester::ClearEpsForAllNodes(Graph& graph) {
-  const std::string empty;
-  for (auto& node : graph.Nodes()) {
-    node.SetExecutionProviderType(empty);
-    for (auto& subgraph : node.GetAttributeNameToMutableSubgraphMap()) {
-      ClearEpsForAllNodes(*subgraph.second);
-    }
-  }
-}
+//void BaseTester::ClearEpsForAllNodes(Graph& graph) {
+//  const std::string empty;
+//  for (auto& node : graph.Nodes()) {
+//    node.SetExecutionProviderType(empty);
+//    for (auto& subgraph : node.GetAttributeNameToMutableSubgraphMap()) {
+//      ClearEpsForAllNodes(*subgraph.second);
+//    }
+//  }
+//}
 
 bool SetEpsForAllNodes(Graph& graph,
                        const std::vector<std::unique_ptr<IExecutionProvider>>& execution_providers,
@@ -580,7 +580,8 @@ void BaseTester::RunWithConfig(size_t* number_of_pre_packed_weights_counter,
                                                  kOrtSessionOptionsConfigStrictShapeTypeInference, "1") == "1";
     const ModelOptions model_options(allow_released_onnx_opset_only, strict_shape_type_inference);
 
-    auto* p_model = CreateModelToTest(model_options);
+    Model* p_model = nullptr;
+    CreateModelToTest(model_options, p_model);
     if (!p_model) {
       ASSERT_EQ(ctx_.expect_result, ExpectResult::kExpectFailure) << "Failed to create model to test.";
       return;

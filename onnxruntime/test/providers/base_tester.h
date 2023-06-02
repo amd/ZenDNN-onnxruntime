@@ -72,11 +72,10 @@ class BaseTester {
     }
   }
 
-  // Derived class to implement to provide the model to test. Model may be internally cached to re-use for
-  // runs with different EPs.
-  // Return is a pointer to allow testing scenarios where the expected result is ExpectResult::kExpectFailure.
-  // Derived class should consider calling ClearEpsForAllNodes to ensure all nodes use the current EP being tested.
-  virtual Model* CreateModelToTest(const ModelOptions& model_options) = 0;
+  // Derived class to implement to provide the model to test.
+  // Return is void so the GTEST ASSERT/EXPECT macros can be used in the implementation
+  // a pointer to allow testing scenarios where the expected result is ExpectResult::kExpectFailure.
+  virtual void CreateModelToTest(const ModelOptions& model_options, Model*& model) = 0;
 
   virtual ~BaseTester();
 
@@ -627,14 +626,6 @@ class BaseTester {
     ValidateOutputParams validation_params;
   };
 
-  std::vector<Data>& GetInputData() {
-    return input_data_;
-  }
-
-  std::vector<Data>& GetOutputData() {
-    return output_data_;
-  }
-
   void SetDeterminism(bool use_determinism) {
     use_determinism_ = use_determinism;
   }
@@ -651,18 +642,9 @@ class BaseTester {
     test_allow_released_onnx_opset_only_ = false;
   }
 
-  // TODO: This is a little ugly and potentially error prone, and is only used by gradient_test.cc in training
-  //       Can we create a new OpTester instance instead of having a Clear()?
-  // clear input/output data, fetches will be cleared in Run()
-  void ClearData() {
-    input_data_.clear();
-    output_data_.clear();
-    initializer_indexes_.clear();
-  }
-
  protected:
-  // if the derived class is caching the model this helper can be called in CreateModelToTest to reset the nodes
-  static void ClearEpsForAllNodes(Graph& graph);
+  //// if the derived class is caching the model this helper can be called in CreateModelToTest to reset the nodes
+  // static void ClearEpsForAllNodes(Graph& graph);
 
   const std::string& Domain() const { return domain_; }
   int Opset() const { return opset_version_; }
@@ -689,14 +671,22 @@ class BaseTester {
     Graph::ResolveOptions resolve_options{};
   };
 
-  void AddInitializers(onnxruntime::Graph& graph);
+  //void ClearData() {
+  //  input_data_.clear();
+  //  output_data_.clear();
+  //  initializer_indexes_.clear();
+  //}
 
-  const RunContext& GetRunContext() const {
-    return ctx_;
-  }
+  std::vector<Data>& GetInputData() { return input_data_; }
+  std::vector<Data>& GetOutputData() { return output_data_; }
+  std::vector<size_t> GetInitializerIndexes() { return initializer_indexes_; }
+
+  void AddInitializers(onnxruntime::Graph& graph);
 
   void FillFeedsAndOutputNames(std::unordered_map<std::string, OrtValue>& feeds,
                                std::vector<std::string>& output_names);
+
+  const RunContext& GetRunContext() const { return ctx_; }
 
   template <class SessionType>
   void ExecuteModel(Model& model,
