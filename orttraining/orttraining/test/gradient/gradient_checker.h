@@ -72,7 +72,7 @@ class GradientChecker {
  private:
   void InitJacobians(size_t row_count, size_t col_count, std::vector<std::vector<JAC_T>>* jacobians);
 
-  void AddDatas(GradientOpTester& op_session, const std::vector<TensorInfo>& x_infos, const std::vector<TensorInfo>& y_infos,
+  void AddDatas(GradientOpTester& op_tester, const std::vector<TensorInfo>& x_infos, const std::vector<TensorInfo>& y_infos,
                 std::vector<std::vector<X_T>>* x_datas, std::vector<std::vector<Y_T>>* y_datas);
 
   std::vector<OrtValue> EvaluateFunctionAtInput(GradientOpTester& op_tester, const std::vector<TensorInfo>& x_infos,

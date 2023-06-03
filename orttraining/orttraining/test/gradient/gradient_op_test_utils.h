@@ -52,23 +52,27 @@ class GradientOpTester : public OpTester {
         output_infos_{output_infos} {
   }
 
+  // we save the resolved model on the first build and re-use in Run calls
+  void BuildAndCacheModel(const std::unordered_map<std::string, int>& extra_domain_to_version) {
+    auto& model = OpTester::BuildModel(extra_domain_to_version);
+    ASSERT_STATUS_OK(model.MainGraph().Resolve());
+    cached_model_ = &model;
+  }
+
+  Model& GetModel() {
+    ORT_ENFORCE(cached_model_, "Expected BuildModel to have been called first");
+    return *cached_model_;
+  }
+
   // Initial Run
-  void Run(ExpectResult expect_result = ExpectResult::kExpectSuccess,
-           const std::string& expected_failure_string = "",
-           const std::unordered_set<std::string>& excluded_provider_types = {},
-           const RunOptions* run_options = nullptr,
-           std::vector<std::unique_ptr<IExecutionProvider>>* execution_providers = nullptr) {
-    BaseTester::Run(expect_result, expected_failure_string, excluded_provider_types, run_options, execution_providers);
+  void Run(std::vector<std::unique_ptr<IExecutionProvider>>* execution_providers) {
+    BaseTester::Run(ExpectResult::kExpectSuccess, "expected_failure_string", {}, nullptr, execution_providers);
   }
 
   // Run when input_infos_ and output_infos_ are provided
   void Run(int output_index_to_use_as_loss,
            int data_index_of_output,
-           ExpectResult expect_result = ExpectResult::kExpectSuccess,
-           const std::string& expected_failure_string = "",
-           const std::unordered_set<std::string>& excluded_provider_types = {},
-           const RunOptions* run_options = nullptr,
-           std::vector<std::unique_ptr<IExecutionProvider>>* execution_providers = nullptr);
+           std::vector<std::unique_ptr<IExecutionProvider>>* execution_providers);
 
   const std::vector<Data>& GetInputData() {
     return BaseTester::GetInputData();
@@ -92,6 +96,7 @@ class GradientOpTester : public OpTester {
 
   const std::vector<TensorInfo>* input_infos_;
   const std::vector<TensorInfo>* output_infos_;
+  Model* cached_model_{nullptr};
 };
 }  // namespace test
 }  // namespace onnxruntime

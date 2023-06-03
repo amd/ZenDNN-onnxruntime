@@ -3,9 +3,8 @@
 
 #pragma once
 
-#include "test/providers/base_tester.h"
-
 #include "core/graph/constants.h"
+#include "test/providers/base_tester.h"
 
 namespace onnxruntime {
 class InferenceSession;
@@ -74,10 +73,6 @@ class OpTester : public BaseTester {
                         std::vector<onnxruntime::NodeArg*>& graph_input_defs,
                         std::vector<onnxruntime::NodeArg*>& graph_output_defs,
                         std::vector<std::function<void(onnxruntime::Node& node)>>& add_attribute_funcs);
-
-  onnxruntime::Model* GetMutableModel() {
-    return model_.get();
-  }
 
   onnxruntime::Model& BuildModel(const std::unordered_map<std::string, int>& extra_domain_to_version = {},
                                  const ModelOptions& model_options = {});

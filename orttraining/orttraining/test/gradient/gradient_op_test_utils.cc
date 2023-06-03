@@ -17,79 +17,15 @@
 namespace onnxruntime {
 namespace test {
 
-// TODO: Refactor this so that we don't build gradient graph in every run
 void GradientOpTester::Run(int output_index_to_use_as_loss,
                            int data_index_of_output,
-                           ExpectResult expect_result,
-                           const std::string& expected_failure_string,
-                           const std::unordered_set<std::string>& /*excluded_provider_types*/,
-                           const RunOptions* run_options,
                            std::vector<std::unique_ptr<IExecutionProvider>>* execution_providers) {
-  // this Run method is for usage when these two properties are set
-  assert(input_infos_ && output_infos_);
-  const auto& input_infos = *input_infos_;
-  const auto& output_infos = *input_infos_;
-
   try {
-    Status status = Status::OK();
-
     std::unordered_map<std::string, int> extra_domain_to_version{{kMSDomain, 1}, {kOnnxDomain, 9}};
 
-    Model* p_model = GetMutableModel();
-    bool using_cached_model = p_model;
-
-    Model& model = using_cached_model ? *p_model : BuildModel(extra_domain_to_version);
+    ASSERT_NE(cached_model_, nullptr);
+    Model& model = *cached_model_;
     Graph& graph = model.MainGraph();
-
-    if (!using_cached_model) {
-      if (expect_result == ExpectResult::kExpectFailure) {
-        // capture possible exceptions from shape inference for invalid testcase
-        try {
-          status = graph.Resolve();
-        } catch (const std::exception& ex) {
-          status = ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, ex.what());
-        }
-      } else {
-        status = graph.Resolve();
-      }
-
-      if (!status.IsOK()) {
-        if (expect_result == ExpectResult::kExpectFailure) {
-          EXPECT_THAT(status.ErrorMessage(), testing::HasSubstr(expected_failure_string));
-        } else {
-          FAIL() << "Resolve failed with status: " << status.ErrorMessage();
-        }
-      }
-
-      // TODO: We will need finer control over both inputs and ouptuts
-      // Not all inputs/outputs reqiures/have a gradient, e.g.index in gather
-      std::unordered_set<std::string> weights_to_train;
-      const auto& input_data = GetInputData();
-      const auto& output_data = GetOutputData();
-
-      for (size_t i = 0; i < input_data.size(); i++) {
-        if (input_infos[i].has_gradient) {
-          weights_to_train.insert(input_data[i].def.Name());
-        }
-      }
-
-      std::unordered_set<std::string> dy_values;
-      for (size_t i = 0; i < output_data.size(); i++) {
-        if (output_infos[i].has_gradient) {
-          dy_values.insert(output_data[i].def.Name());
-        }
-      }
-
-      training::GradientGraphConfiguration gradient_graph_config;
-      gradient_graph_config.set_gradients_as_graph_outputs = true;
-      training::GradientGraphBuilder grad_graph_builder(&graph,
-                                                        dy_values,
-                                                        weights_to_train,
-                                                        "",
-                                                        gradient_graph_config,
-                                                        logging::LoggingManager::DefaultLogger());
-      EXPECT_STATUS_OK(grad_graph_builder.Build());
-    }
 
     // Hookup the inputs and outputs
     std::unordered_map<std::string, OrtValue> feeds;
@@ -106,13 +42,13 @@ void GradientOpTester::Run(int output_index_to_use_as_loss,
         new_input_args.emplace_back(input_arg);
       }
     }
+
     if (new_input_args.size() != input_size) {
       graph.SetInputs(new_input_args);  // By setting this, Graph::SetGraphInputsOutputs could infer the input as expected.
       graph.SetGraphResolveNeeded();
       graph.SetGraphProtoSyncNeeded();
 
-      status = graph.Resolve();
-      EXPECT_TRUE(status.IsOK()) << status.ErrorMessage();
+      ASSERT_STATUS_OK(graph.Resolve());
     }
 
     // Run the model
@@ -140,8 +76,7 @@ void GradientOpTester::Run(int output_index_to_use_as_loss,
 
       onnxruntime::training::TrainingSession session_object{so, GetEnvironment()};
 
-      ASSERT_TRUE(!execution_providers->empty())
-          << "Empty execution providers vector.";
+      ASSERT_TRUE(!execution_providers->empty()) << "Empty execution providers vector.";
       std::string provider_types;
 
       for (auto& entry : *execution_providers) {
@@ -166,8 +101,7 @@ void GradientOpTester::Run(int output_index_to_use_as_loss,
       has_run = true;
 
       ExecuteModel<onnxruntime::training::TrainingSession>(
-          *p_model, session_object, expect_result, expected_failure_string,
-          run_options, feeds, output_names, provider_types);
+          model, session_object, ExpectResult::kExpectSuccess, "", nullptr, feeds, output_names, provider_types);
     } else {
       for (const std::string& provider_type : all_provider_types) {
         std::unique_ptr<IExecutionProvider> execution_provider;
@@ -227,8 +161,7 @@ void GradientOpTester::Run(int output_index_to_use_as_loss,
         EXPECT_TRUE(session_object.RegisterExecutionProvider(std::move(execution_provider)).IsOK());
 
         ExecuteModel<onnxruntime::training::TrainingSession>(
-            *p_model, session_object, expect_result, expected_failure_string, run_options,
-            feeds, output_names, provider_type);
+            model, session_object, ExpectResult::kExpectSuccess, "", nullptr, feeds, output_names, provider_type);
       }
     }
 

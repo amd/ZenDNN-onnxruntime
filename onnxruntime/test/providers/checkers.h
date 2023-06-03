@@ -15,30 +15,14 @@ namespace onnxruntime {
 namespace test {
 
 struct ValidateOutputParams {
-  std::optional<float> absolute_error;
   std::optional<float> relative_error;
+  std::optional<float> absolute_error;
   bool sort_output = false;
 };
 
-//// Check for Tensor
-//void Check(std::string_view name, const ValidateOutputParams& params,
-//           const Tensor& expected, const Tensor& output_tensor, const std::string& provider_type);
-
-// General purpose Check
+// General purpose Check to compare to OrtValue instances 
 void Check(std::string_view name, const ValidateOutputParams& params,
            const OrtValue& expected, OrtValue& actual, const std::string& provider_type);
-
-//// Check for non tensor types
-//template <typename T>
-//void Check(std::string_view name, const ValidateOutputParams& /*params*/,
-//           const OrtValue& expected, const T& actual, const std::string& provider_type) {
-//  EXPECT_EQ(expected.Get<T>(), actual) << "name: " << name << " provider_type : " << provider_type;
-//}
-//
-//// Check for sequence of tensors
-//template <>
-//void Check<TensorSeq>(std::string_view name, const ValidateOutputParams& params,
-//                      const OrtValue& expected, const TensorSeq& actual, const std::string& provider_type);
 
 inline void ConvertFloatToMLFloat16(const float* f_datat, MLFloat16* h_data, int input_size) {
   auto in_vector = ConstEigenVectorMap<float>(f_datat, input_size);
