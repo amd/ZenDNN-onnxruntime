@@ -40,7 +40,6 @@ using TestDataVector = std::tuple<std::vector<std::vector<TensorInfo>>,         
 
 class GradientOpTester : public OpTester {
  public:
-  // ctor for testing where gradIents are set
   explicit GradientOpTester(const char* op,
                             int opset_version = 9,
                             const char* domain = onnxruntime::kOnnxDomain,
@@ -60,16 +59,16 @@ class GradientOpTester : public OpTester {
   }
 
   Model& GetModel() {
-    ORT_ENFORCE(cached_model_, "Expected BuildModel to have been called first");
+    ORT_ENFORCE(cached_model_, "Expected BuildAndCacheModel to have been called first");
     return *cached_model_;
   }
 
-  // Initial Run
+  // Basic Run
   void Run(std::vector<std::unique_ptr<IExecutionProvider>>* execution_providers) {
     BaseTester::Run(ExpectResult::kExpectSuccess, "expected_failure_string", {}, nullptr, execution_providers);
   }
 
-  // Run when input_infos_ and output_infos_ are provided
+  // Run when input_infos_ and output_infos_ are set
   void Run(int output_index_to_use_as_loss,
            int data_index_of_output,
            std::vector<std::unique_ptr<IExecutionProvider>>* execution_providers);

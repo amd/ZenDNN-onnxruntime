@@ -1,14 +1,15 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
+#include "test/providers/compare_provider_test_utils.h"
+
 #include "core/optimizer/insert_cast_transformer.h"
 #include "core/session/inference_session.h"
 
-#include "test/compare_ortvalue.h"
-#include "test/test_environment.h"
-#include "test/providers/compare_provider_test_utils.h"
 #include "test/util/include/asserts.h"
+#include "test/util/include/compare_ortvalue.h"
 #include "test/util/include/default_providers.h"
+#include "test/util/include/test_environment.h"
 
 using namespace std;
 

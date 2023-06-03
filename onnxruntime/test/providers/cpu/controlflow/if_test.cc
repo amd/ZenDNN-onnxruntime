@@ -477,9 +477,6 @@ TEST(If, TestIfWithSequencesAsOutput) {
 class IfOpTesterWithOptionalTypeAsOutput : public OpTester {
  public:
   IfOpTesterWithOptionalTypeAsOutput() : OpTester("If", 16) {
-    // Since this test is being written at a time when only opset 15  has been released, we override
-    // IsAllowReleasedONNXOpsetsOnlySetForThisTest() to return `false`to allow this test to run
-    SetAllowUnreleasedOnnxOpset();
   }
 
  protected:

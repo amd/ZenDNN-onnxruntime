@@ -23,7 +23,6 @@ limitations under the License.
 namespace onnxruntime {
 namespace test {
 
-class GradientOpTester;
 
 // TODO: This class currently assumes the inputs share types and the outputs share a type.
 // However there are cases like MaxPool and Gather where this is not true.
