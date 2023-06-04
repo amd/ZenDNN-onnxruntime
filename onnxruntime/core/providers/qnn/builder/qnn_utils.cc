@@ -519,21 +519,21 @@ static nlohmann::json GetQnnTensorJSON(const Qnn_Tensor_t& tensor, bool include_
 
       std::string_view tensor_name = GetQnnTensorName(tensor);
 
-      // TODO: Handle errors.
+      // TODO: Handle errors without exceptions
       // Write tensor name
-      (void)weights_writer.WriteValue<uint32_t>(gsl::narrow_cast<uint32_t>(tensor_name.size()));  // name length
-      (void)weights_writer.WriteString(tensor_name);  // name string
+      ORT_THROW_IF_ERROR(weights_writer.WriteValue<uint32_t>(gsl::narrow_cast<uint32_t>(tensor_name.size())));  // name length
+      ORT_THROW_IF_ERROR(weights_writer.WriteString(tensor_name));  // name string
 
       // Write element type.
-      (void)weights_writer.WriteValue<uint32_t>(elem_data_type);
+      ORT_THROW_IF_ERROR(weights_writer.WriteValue<uint32_t>(elem_data_type));
 
       // Write shape.
-      (void)weights_writer.WriteValue<uint32_t>(gsl::narrow_cast<uint32_t>(dims.size()));  // rank
-      (void)weights_writer.WriteValues<uint32_t>(dims);  // dim values
+      ORT_THROW_IF_ERROR(weights_writer.WriteValue<uint32_t>(gsl::narrow_cast<uint32_t>(dims.size())));  // rank
+      ORT_THROW_IF_ERROR(weights_writer.WriteValues<uint32_t>(dims));  // dim values
 
       // Write binary weight data.
-      (void)weights_writer.WriteString({reinterpret_cast<const char*>(qnn_buf.data),
-                                        qnn_buf.dataSize});
+      ORT_THROW_IF_ERROR(weights_writer.WriteString({reinterpret_cast<const char*>(qnn_buf.data),
+                                                     qnn_buf.dataSize}));
     }
   }
 
