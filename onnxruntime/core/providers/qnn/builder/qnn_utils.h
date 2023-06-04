@@ -5,13 +5,18 @@
 
 #include "QnnTypes.h"
 #include "core/session/onnxruntime_cxx_api.h"
+#include "core/framework/endian_utils.h"
 
 #include "nlohmann/json.hpp"
 
+#include <assert.h>
+#include <cstring>
 #include <functional>
 #include <numeric>
 #include <vector>
 #include <string>
+#include <string_view>
+#include <fstream>
 #include <unordered_set>
 
 namespace onnxruntime {
@@ -55,6 +60,106 @@ class QnnJSONGraph {
   nlohmann::json json_;
   std::unordered_set<std::string> seen_tensors_;   // Tracks tensors already added to JSON graph.
   std::unordered_set<std::string> seen_op_types_;  // Tracks unique operator types.
+};
+
+class LittleEndianFileWriter {
+ public:
+  static constexpr size_t DEFAULT_BUF_SIZE = 4096;
+
+  // Create a writer that allocates a buffer from the heap.
+  LittleEndianFileWriter(const char* filepath, size_t backing_buffer_size = DEFAULT_BUF_SIZE) {
+    ofs_.open(filepath, std::ofstream::binary);
+
+    backing_heap_data_ = std::make_unique<unsigned char[]>(backing_buffer_size);
+    buffer_ = gsl::make_span(backing_heap_data_.get(), backing_buffer_size);
+    buffer_tail_ = 0;
+  }
+
+  // Create a writer that uses the provided buffer.
+  LittleEndianFileWriter(const char* filepath, gsl::span<unsigned char> buffer) : buffer_(buffer), buffer_tail_(0) {
+    ofs_.open(filepath, std::ofstream::binary);
+  }
+
+  void Flush() {
+    assert(buffer_tail_ <= buffer_.size());
+    ofs_.write(reinterpret_cast<const char*>(buffer_.data()), buffer_tail_);
+    buffer_tail_ = 0;
+  }
+
+  // Write a POD (e.g., int or a basic struct) into stream.
+  template <typename T>
+  common::Status WriteValue(const T& data) {
+	static_assert(std::is_trivially_copyable<T>::value, "T must be trivially copyable");
+    constexpr size_t data_size = sizeof(T);
+
+    // Flush current buffer of bytes if writing this data would fill buffer or cause it to overflow.
+    if ((buffer_tail_ + data_size) >= buffer_.size()) {
+      Flush(); 
+    }
+
+    ORT_RETURN_IF(buffer_.size() - buffer_tail_ < data_size, "Not enough room to write value into buffer");
+
+    // Copy data value into private buffer in little-endian byte order.
+    utils::detail::CopyLittleEndian(data_size, gsl::make_span(reinterpret_cast<const unsigned char*>(&data), data_size),
+                                    buffer_.subspan(buffer_tail_, data_size));
+    buffer_tail_ += data_size;
+
+    return common::Status::OK();
+  }
+
+  template <typename T>
+  common::Status WriteValues(gsl::span<const T> data) {
+	static_assert(std::is_trivially_copyable<T>::value, "T must be trivially copyable");
+    const size_t total_write_bytes = data.size_bytes();
+
+    // Flush current buffer of bytes if writing this data would fill buffer or cause it to overflow.
+    if ((buffer_tail_ + total_write_bytes) >= buffer_.size()) {
+      Flush(); 
+    }
+
+    ORT_RETURN_IF(buffer_.size() - buffer_tail_ < total_write_bytes, "Not enough room to write values into buffer");
+
+    // Copy data value into private buffer in little-endian byte order.
+    utils::WriteLittleEndian(data, buffer_.subspan(buffer_tail_, total_write_bytes));
+    buffer_tail_ += total_write_bytes;
+
+    return common::Status::OK();
+  }
+
+  common::Status WriteString(std::string_view str, bool write_null_char = false) {
+    const size_t str_size = str.size();
+    const size_t total_write_bytes = str_size + static_cast<size_t>(write_null_char);
+
+    if (total_write_bytes > buffer_.size()) {
+      ofs_.write(str.data(), str_size);
+      if (write_null_char) {
+        const char null_term = '\0';
+        ofs_.write(&null_term, 1);
+      }
+      return common::Status::OK();
+    }
+
+    if ((buffer_tail_ + total_write_bytes) >= buffer_.size()) {
+      Flush(); 
+    }
+
+    //ORT_RETURN_IF(buffer_.size() - buffer_tail_ < total_write_bytes, "Not enough room to write string into buffer");
+
+    std::memcpy(&buffer_[buffer_tail_], str.data(), str_size);
+    buffer_tail_ += str_size;
+
+    if (write_null_char) {
+      buffer_[buffer_tail_++] = '\0';
+    }
+
+    return common::Status::OK();
+  }
+
+ private:
+  std::ofstream ofs_;
+  std::unique_ptr<unsigned char[]> backing_heap_data_;
+  gsl::span<unsigned char> buffer_;
+  size_t buffer_tail_ = 0;
 };
 
 }  // namespace utils
