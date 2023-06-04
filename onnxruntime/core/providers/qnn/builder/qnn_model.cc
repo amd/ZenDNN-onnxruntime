@@ -156,6 +156,8 @@ Status QnnModel::ComposeGraph(const GraphViewer& graph_viewer,
     } else {
       LOGS(logger_, WARNING) << "Could not open JSON graph file: " << debug_json_graph_path;
     }
+
+    qnn_model_wrapper.GetWeightsFileWriter().Flush();
   }
 
   rt = GetGraphInfoFromModel(qnn_model_wrapper);
