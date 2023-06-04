@@ -252,7 +252,7 @@ bool QnnModelWrapper::ComposeQnnGraph(bool build_debug_json_graph) {
     }
 
     if (build_debug_json_graph) {
-      debug_json_graph_.AddOp(op_config_wrapper);
+      debug_json_graph_.AddOp(op_config_wrapper, debug_weights_writer_);
     }
   }
 

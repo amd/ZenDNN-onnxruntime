@@ -110,6 +110,10 @@ class QnnModelWrapper {
     return debug_json_graph_.Finalize();
   }
 
+  utils::LittleEndianFileWriter& GetWeightsFileWriter() {
+    return debug_weights_writer_;
+  }
+
   Status AddTransposeNode(NodeIndex node_index,
                           const std::string& input_name,
                           const std::string& output_name,
@@ -194,6 +198,7 @@ class QnnModelWrapper {
   Qnn_GraphHandle_t graph_ = nullptr;
   std::string graph_name_ = "";
   utils::QnnJSONGraph debug_json_graph_;
+  utils::LittleEndianFileWriter debug_weights_writer_;
 
   std::vector<std::string> model_input_names_;
   std::vector<std::string> model_output_names_;

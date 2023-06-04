@@ -137,6 +137,13 @@ Status QnnModel::ComposeGraph(const GraphViewer& graph_viewer,
   }
 
   const bool build_debug_json_graph = !debug_json_graph_path.empty();
+
+  if (build_debug_json_graph) {
+    auto& weights_writer = qnn_model_wrapper.GetWeightsFileWriter();
+
+    ORT_RETURN_IF_ERROR(weights_writer.Open("model.bin"));  // TODO: Don't hardcode. Set from fused_node name.
+  }
+
   ORT_RETURN_IF_NOT(qnn_model_wrapper.ComposeQnnGraph(build_debug_json_graph), "Failed to compose Qnn graph.");
 
   if (build_debug_json_graph) {

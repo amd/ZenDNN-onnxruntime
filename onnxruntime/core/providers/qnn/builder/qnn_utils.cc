@@ -483,15 +483,17 @@ static nlohmann::json GetQnnClientBufJSON(const Qnn_ClientBuffer_t& buf, Qnn_Dat
 //     "axis_format" : "NOT_YET_DEFINED",
 //     "src_axis_format" : "NOT_YET_DEFINED",
 // }
-static nlohmann::json GetQnnTensorJSON(const Qnn_Tensor_t& tensor, bool include_static_data = false) {
+static nlohmann::json GetQnnTensorJSON(const Qnn_Tensor_t& tensor, bool include_static_data,
+                                       LittleEndianFileWriter& weights_writer) {
   using json = nlohmann::json;
   json tensor_json = json::object();
   const Qnn_TensorType_t tensor_type = GetQnnTensorType(tensor);
+  const Qnn_DataType_t elem_data_type = GetQnnTensorDataType(tensor);
 
   tensor_json["id"] = GetQnnTensorID(tensor);
   tensor_json["type"] = tensor_type;
   tensor_json["dataFormat"] = GetQnnTensorDataFormat(tensor);
-  tensor_json["data_type"] = GetQnnTensorDataType(tensor);
+  tensor_json["data_type"] = elem_data_type;
   tensor_json["src_axis_format"] = "NOT_YET_DEFINED";
   tensor_json["axis_format"] = "NOT_YET_DEFINED";
 
@@ -505,12 +507,33 @@ static nlohmann::json GetQnnTensorJSON(const Qnn_Tensor_t& tensor, bool include_
   tensor_json["dims"] = JSONFromSpan(dims);
 
   if (tensor_type == Qnn_TensorType_t::QNN_TENSOR_TYPE_STATIC) {
+    const Qnn_ClientBuffer_t& qnn_buf = GetQnnTensorClientBuf(tensor);
+
     if (include_static_data) {
-      tensor_json["data"] = GetQnnClientBufJSON(GetQnnTensorClientBuf(tensor), GetQnnTensorDataType(tensor), dims);
+      tensor_json["data"] = GetQnnClientBufJSON(qnn_buf, elem_data_type, dims);
     } else {
       std::stringstream ss;
       ss << CalcQnnTensorNumElems(tensor);
       tensor_json["params_count"] = ss.str();
+      tensor_json["weight_file_offset"] = weights_writer.GetFilePosition();
+
+      std::string_view tensor_name = GetQnnTensorName(tensor);
+
+      // TODO: Handle errors.
+      // Write tensor name
+      (void)weights_writer.WriteValue<uint32_t>(gsl::narrow_cast<uint32_t>(tensor_name.size()));  // name length
+      (void)weights_writer.WriteString(tensor_name);  // name string
+
+      // Write element type.
+      (void)weights_writer.WriteValue<uint32_t>(elem_data_type);
+
+      // Write shape.
+      (void)weights_writer.WriteValue<uint32_t>(gsl::narrow_cast<uint32_t>(dims.size()));  // rank
+      (void)weights_writer.WriteValues<uint32_t>(dims);  // dim values
+
+      // Write binary weight data.
+      (void)weights_writer.WriteString({reinterpret_cast<const char*>(qnn_buf.data),
+                                        qnn_buf.dataSize});
     }
   }
 
@@ -577,7 +600,7 @@ static nlohmann::json GetQnnTensorNamesJSON(gsl::span<const Qnn_Tensor_t> tensor
 //     "tensor_params": { "stride": {...} },
 //     "macs_per_inference": ""
 // }
-static nlohmann::json GetQnnOpJSON(const QnnOpConfigWrapper& op_config) {
+static nlohmann::json GetQnnOpJSON(const QnnOpConfigWrapper& op_config, LittleEndianFileWriter& weights_writer) {
   using json = nlohmann::json;
   json op_json = json::object();
   op_json["package"] = op_config.GetPackageName();
@@ -591,7 +614,7 @@ static nlohmann::json GetQnnOpJSON(const QnnOpConfigWrapper& op_config) {
     if (param.paramType == QNN_PARAMTYPE_SCALAR) {
       scalar_params_json[param.name] = GetQnnScalarParamJSON(param.scalarParam);
     } else if (param.paramType == QNN_PARAMTYPE_TENSOR) {
-      tensor_params_json[param.name][GetQnnTensorName(param.tensorParam)] = GetQnnTensorJSON(param.tensorParam, true);
+      tensor_params_json[param.name][GetQnnTensorName(param.tensorParam)] = GetQnnTensorJSON(param.tensorParam, true, weights_writer);
     }
   }
 
@@ -622,10 +645,10 @@ QnnJSONGraph::QnnJSONGraph() {
       {"graph", {{"tensors", json::object()}, {"nodes", json::object()}}}};
 }
 
-void QnnJSONGraph::AddOp(const QnnOpConfigWrapper& op_conf_wrapper) {
+void QnnJSONGraph::AddOp(const QnnOpConfigWrapper& op_conf_wrapper, LittleEndianFileWriter& weights_writer) {
   // Serialize inputs and outputs.
-  AddOpTensors({op_conf_wrapper.GetInputTensors(), op_conf_wrapper.GetInputsNum()});
-  AddOpTensors({op_conf_wrapper.GetOutputTensors(), op_conf_wrapper.GetOutputsNum()});
+  AddOpTensors({op_conf_wrapper.GetInputTensors(), op_conf_wrapper.GetInputsNum()}, weights_writer);
+  AddOpTensors({op_conf_wrapper.GetOutputTensors(), op_conf_wrapper.GetOutputsNum()}, weights_writer);
 
   // Track unique op types (serialized in Finalize()).
   const std::string& op_type = op_conf_wrapper.GetTypeName();
@@ -634,14 +657,14 @@ void QnnJSONGraph::AddOp(const QnnOpConfigWrapper& op_conf_wrapper) {
   }
 
   // Serialize op
-  json_["graph"]["nodes"][op_conf_wrapper.GetOpName()] = GetQnnOpJSON(op_conf_wrapper);
+  json_["graph"]["nodes"][op_conf_wrapper.GetOpName()] = GetQnnOpJSON(op_conf_wrapper, weights_writer);
 }
 
-void QnnJSONGraph::AddOpTensors(gsl::span<const Qnn_Tensor_t> tensors) {
+void QnnJSONGraph::AddOpTensors(gsl::span<const Qnn_Tensor_t> tensors, LittleEndianFileWriter& weights_writer) {
   for (const auto& tensor : tensors) {
     std::string name = GetQnnTensorName(tensor);  // Copies name into std::string, which is moved into seen_tensors_.
     if (seen_tensors_.count(name) == 0) {
-      json_["graph"]["tensors"][name] = GetQnnTensorJSON(tensor);
+      json_["graph"]["tensors"][name] = GetQnnTensorJSON(tensor, false, weights_writer);
       seen_tensors_.insert(std::move(name));
     }
   }
