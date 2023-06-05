@@ -139,7 +139,7 @@ class LittleEndianFileWriter {
       Flush();
     }
 
-    assert(buffer_.size() - buffer_tail_ < total_write_bytes);
+    assert(buffer_.size() - buffer_tail_ >= total_write_bytes);
 
     std::memcpy(&buffer_[buffer_tail_], str.data(), str_size);
     buffer_tail_ += str_size;
