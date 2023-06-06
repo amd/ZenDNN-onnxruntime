@@ -74,8 +74,10 @@ bool QnnModelWrapper::AddTensorWrapper(QnnTensorWrapper&& tensor_wrapper) {
   // input and output tensors for populating GraphInfo for caller
   if (qnn_tensor_type == QNN_TENSOR_TYPE_APP_WRITE) {
     model_input_names_.push_back(tensor_name);
+    debug_json_graph_.AddGraphInput(tensor_name);
   } else if (qnn_tensor_type == QNN_TENSOR_TYPE_APP_READ) {
     model_output_names_.push_back(tensor_name);
+    debug_json_graph_.AddGraphOutput(tensor_name);
   }
 
   return true;

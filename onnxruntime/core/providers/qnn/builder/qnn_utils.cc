@@ -670,8 +670,18 @@ void QnnJSONGraph::AddOpTensors(gsl::span<const Qnn_Tensor_t> tensors, LittleEnd
   }
 }
 
+void QnnJSONGraph::AddGraphInput(const std::string& input_name) {
+  graph_input_names_.push_back(input_name);
+}
+
+void QnnJSONGraph::AddGraphOutput(const std::string& output_name) {
+  graph_output_names_.push_back(output_name);
+}
+
 const nlohmann::json& QnnJSONGraph::Finalize() {
   json_["op_types"] = seen_op_types_;
+  json_["inputs"] = graph_input_names_;
+  json_["outputs"] = graph_output_names_;
   return json_;
 }
 

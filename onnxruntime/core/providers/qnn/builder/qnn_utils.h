@@ -164,6 +164,9 @@ class QnnJSONGraph {
  public:
   QnnJSONGraph();
 
+  void AddGraphInput(const std::string& input_name);
+  void AddGraphOutput(const std::string& output_name);
+
   /**
    * Add QNN operator to JSON graph.
    *
@@ -185,6 +188,8 @@ class QnnJSONGraph {
   nlohmann::json json_;
   std::unordered_set<std::string> seen_tensors_;   // Tracks tensors already added to JSON graph.
   std::unordered_set<std::string> seen_op_types_;  // Tracks unique operator types.
+  std::vector<std::string> graph_input_names_;
+  std::vector<std::string> graph_output_names_;
 };
 
 }  // namespace utils
