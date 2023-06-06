@@ -205,6 +205,8 @@ static void RunModelTestWithPath(const ORTCHAR_T* ort_model_path, const char* gr
 
   // use to get model input shape
   Ort::SessionOptions so;
+  so.SetIntraOpNumThreads(1);
+  so.SetInterOpNumThreads(1);
   Ort::Session session(*ort_env, ort_model_path, so);
   auto input_shape = session.GetInputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
   input_shape[0] = 1;
