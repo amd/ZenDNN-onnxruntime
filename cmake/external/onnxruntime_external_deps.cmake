@@ -24,10 +24,17 @@ if(NOT onnxruntime_DISABLE_ABSEIL)
 endif()
 
 set(RE2_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+if(Patch_FOUND)
+  set(ONNXRUNTIME_RE2_PATCH_COMMAND ${Patch_EXECUTABLE} --binary --ignore-whitespace -p1 < ${PROJECT_SOURCE_DIR}/patches/re2/re2.patch)
+else()
+ set(ONNXRUNTIME_RE2_PATCH_COMMAND "")
+endif()
+
 FetchContent_Declare(
     re2
     URL ${DEP_URL_re2}
     URL_HASH SHA1=${DEP_SHA1_re2}
+    PATCH_COMMAND ${ONNXRUNTIME_RE2_PATCH_COMMAND}
     FIND_PACKAGE_ARGS NAMES re2
 )
 
@@ -328,7 +335,11 @@ FetchContent_Declare(
 # use fetch content rather than makeavailable because safeint only includes unconditional test targets
 FetchContent_Populate(safeint)
 # The next line will generate an error message "fatal: not a git repository", but it is ok. It is from flatbuffers
-onnxruntime_fetchcontent_makeavailable(utf8_range Protobuf nlohmann_json mp11 re2 GSL flatbuffers)
+onnxruntime_fetchcontent_makeavailable(utf8_range)
+# protobuf's cmake/utf8_range.cmake has the following line
+include_directories(${utf8_range_SOURCE_DIR})
+
+onnxruntime_fetchcontent_makeavailable(Protobuf nlohmann_json mp11 re2 GSL flatbuffers)
 if(NOT flatbuffers_FOUND)
   if(NOT TARGET flatbuffers::flatbuffers)
     add_library(flatbuffers::flatbuffers ALIAS flatbuffers)
