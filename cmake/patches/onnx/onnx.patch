@@ -142,10 +142,10 @@ index 4dd56b6e..4ff00851 100644
  if(ONNX_BUILD_TESTS)
    include(${ONNX_ROOT}/cmake/unittest.cmake)
 diff --git a/onnx/defs/schema.h b/onnx/defs/schema.h
-index fffaf3b7..ff573012 100644
+index b529c999..6906de5d 100644
 --- a/onnx/defs/schema.h
 +++ b/onnx/defs/schema.h
-@@ -18,6 +18,7 @@
+@@ -19,6 +19,7 @@
  #include <unordered_map>
  #include <unordered_set>
  #include <vector>
@@ -154,10 +154,10 @@ index fffaf3b7..ff573012 100644
  #include "onnx/common/common.h"
  #include "onnx/common/constants.h"
 diff --git a/onnx/onnx_pb.h b/onnx/onnx_pb.h
-index 0aab3e26..36f07f85 100644
+index 0aab3e26..a732c894 100644
 --- a/onnx/onnx_pb.h
 +++ b/onnx/onnx_pb.h
-@@ -47,10 +47,30 @@
+@@ -47,10 +47,40 @@
  #define ONNX_API ONNX_IMPORT
  #endif
  
@@ -166,6 +166,16 @@ index 0aab3e26..36f07f85 100644
 +#if defined(__GNUC__)
 +#pragma GCC diagnostic push
 +#pragma GCC diagnostic ignored "-Wunused-parameter"
++
++// In file included from onnx/onnx-ml.pb.h:30:
++// In file included from google/protobuf/extension_set.h:53:
++// google/protobuf/parse_context.h:328:47: error: implicit conversion loses integer precision: 'long' to 'int' [-Werror,-Wshorten-64-to-32]
++#if defined(__has_warning)
++#if __has_warning("-Wshorten-64-to-32")
++#pragma GCC diagnostic ignored "-Wshorten-64-to-32"
++#endif
++#endif  // defined(__has_warning)
++
 +#elif defined(_MSC_VER)
 +#pragma warning(push)
 +// include\google/protobuf/port.h(96,68): warning C4100: 'context': unreferenced formal parameter
