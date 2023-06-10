@@ -126,6 +126,7 @@ class LittleEndianFileWriter {
     // If the string length is >= the buffer's size, then just
     // write it to the output file stream directly.
     if (total_write_bytes >= buffer_.size()) {
+      Flush();
       ofs_.write(str.data(), str_size);
       if (write_null_char) {
         const char null_term = '\0';
