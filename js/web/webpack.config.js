@@ -12,7 +12,7 @@ const minimist = require('minimist');
 
 // commandline args
 const args = minimist(process.argv);
-const bundleMode = args['bundle-mode'] || 'prod';  // 'prod'|'dev'|'perf'|'node'|undefined;
+const bundleMode = args['bundle-mode'] || 'prod';  // 'prod'|'dev'|'perf'|'node'|'jsep-initonly'|undefined;
 const useAnalyzer = !!args.a || !!args['use-analyzer'];  // -a, --use-analyzer
 const filter = args.f || args.filter;
 
@@ -281,10 +281,66 @@ function buildTestRunnerConfig({
   return config;
 }
 
+function buildJsepInitOnlyConfig({
+  target = 'es2017',
+  build_defs = DEFAULT_BUILD_DEFS
+}) {
+  const config = {
+    target: ['web', target],
+    entry: path.resolve(__dirname, 'lib/wasm/jsep/init-only.ts'),
+    output: {
+      path: path.resolve(__dirname, 'test'),
+      filename: `ort.jsep.initonly.js`,
+      library: {
+        name: 'Module',
+        type: 'assign-properties'
+      }
+    },
+    resolve: {
+      extensions: ['.ts', '.js'],
+      alias: {
+        'onnxruntime-common$': 'onnxruntime-common/dist/ort-common.js',
+      },
+    },
+    plugins: [
+      new webpack.DefinePlugin({ BUILD_DEFS: build_defs }),
+      new webpack.WatchIgnorePlugin({ paths: [/\.js$/, /\.d\.ts$/] }),
+      new NodePolyfillPlugin({
+        excludeAliases: ["console", "Buffer"]
+      }),
+    ],
+    module: {
+      rules: [{
+        test: /\.ts$/,
+        use: [
+          {
+            loader: 'ts-loader',
+            options: {
+              compilerOptions: { target }
+            }
+          }
+        ]
+      }]
+    },
+    mode: 'development',
+    node: false,
+    devtool: 'inline-source-map'
+  };
+  return config;
+}
+
 module.exports = () => {
   const builds = [];
 
   switch (bundleMode) {
+    case 'jsep-initonly':
+      builds.push(buildJsepInitOnlyConfig({
+        suffix: '.perf', build_defs: {
+          ...DEFAULT_BUILD_DEFS,
+          DISABLE_WEBGPU: false,
+        }
+      }));
+      break;
     case 'prod':
       builds.push(
         // ort.min.js

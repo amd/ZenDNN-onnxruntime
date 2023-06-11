@@ -56,4 +56,22 @@
         onTestComplete(exitCode);
     };
 
+    (Module["preInit"] = Module["preInit"] || []).push(function() {
+        if (typeof Module["jsepInitOnly"] !== "undefined") {
+            Module["addRunDependency"]("jsepInitOnly");
+
+            const env = Module["ortEnv"] || {};
+            env.wasm.simd = true;
+            env.wasm.numThreads = args.includes('--wasm-threads') ? Math.max(2, navigator.hardwareConcurrency) : 1;
+            env.debug = true;
+            env.logLevel = 'verbose';
+
+            Module["jsepInitOnly"](Module, env).then(function() {
+                Module["removeRunDependency"]("jsepInitOnly");
+            }, function(err) {
+                onTestComplete(1);
+                abort(err);
+            });
+        }
+    });
 })();

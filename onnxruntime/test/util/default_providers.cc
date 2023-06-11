@@ -253,6 +253,14 @@ std::unique_ptr<IExecutionProvider> DefaultXnnpackExecutionProvider() {
 #endif
 }
 
+std::unique_ptr<IExecutionProvider> DefaultJsExecutionProvider() {
+#ifdef USE_JSEP
+  return JsProviderFactoryCreator::Create(ProviderOptions())->CreateProvider();
+#else
+  return nullptr;
+#endif
+}
+
 std::unique_ptr<IExecutionProvider> DefaultCannExecutionProvider() {
 #ifdef USE_CANN
   OrtCANNProviderOptions provider_options{};

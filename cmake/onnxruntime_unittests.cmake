@@ -13,6 +13,16 @@ if (onnxruntime_USE_TVM)
   list(APPEND TEST_INC_DIR ${TVM_INCLUDES})
 endif()
 
+if (CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  # We might have already executed the following "find_program" code when we build ORT nodejs binding.
+  # Then the program is found the result is stored in the variable and the search will not be repeated.
+  find_program(NPM_CLI
+    NAMES "npm.cmd" "npm"
+    DOC "NPM command line client"
+    REQUIRED
+  )
+endif()
+
 set(disabled_warnings)
 function(AddTest)
   cmake_parse_arguments(_UT "DYN" "TARGET" "LIBS;SOURCES;DEPENDS;TEST_ARGS" ${ARGN})
@@ -163,14 +173,6 @@ function(AddTest)
     xctest_add_test(xctest.${_UT_TARGET} ${_UT_TARGET}_xc)
   else()
     if (CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
-      # We might have already executed the following "find_program" code when we build ORT nodejs binding.
-      # Then the program is found the result is stored in the variable and the search will not be repeated.
-      find_program(NPM_CLI
-         NAMES "npm.cmd" "npm"
-         DOC "NPM command line client"
-         REQUIRED
-      )
-
       if (onnxruntime_WEBASSEMBLY_RUN_TESTS_IN_BROWSER)
         add_custom_command(TARGET ${_UT_TARGET} POST_BUILD
           COMMAND ${CMAKE_COMMAND} -E copy_if_different ${TEST_SRC_DIR}/wasm/package.json $<TARGET_FILE_DIR:${_UT_TARGET}>
@@ -189,6 +191,9 @@ function(AddTest)
           WORKING_DIRECTORY $<TARGET_FILE_DIR:${_UT_TARGET}>
         )
       else()
+        if (onnxruntime_USE_JSEP)
+          message(FATAL_ERROR "onnxruntime_test_all cannot run in Node.js when built with JSEP.")
+        endif()
         set(TEST_NODE_FLAGS)
         if (onnxruntime_ENABLE_WEBASSEMBLY_THREADS)
           list(APPEND TEST_NODE_FLAGS "--experimental-wasm-threads")
@@ -851,13 +856,55 @@ if (onnxruntime_ENABLE_TRAINING_TORCH_INTEROP)
   target_link_libraries(onnxruntime_test_all PRIVATE Python::Python)
 endif()
 if (CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
-  set_target_properties(onnxruntime_test_all PROPERTIES LINK_DEPENDS ${TEST_SRC_DIR}/wasm/onnxruntime_test_all_adapter.js)
-  set_target_properties(onnxruntime_test_all PROPERTIES LINK_FLAGS "-s STACK_SIZE=5242880 -s ALLOW_MEMORY_GROWTH=1 --pre-js \"${TEST_SRC_DIR}/wasm/onnxruntime_test_all_adapter.js\" -s \"EXPORTED_RUNTIME_METHODS=['FS']\" --preload-file ${CMAKE_CURRENT_BINARY_DIR}/testdata@/testdata -s EXIT_RUNTIME=1 -s DEMANGLE_SUPPORT=1")
+  if (onnxruntime_ENABLE_STATIC_ANALYSIS)
+    message(FATAL_ERROR "building onnxruntime_test_all with static analysis is not supported for WebAssembly.")
+  endif()
+
+  set(SRC_PREJS_ADAPTER "${TEST_SRC_DIR}/wasm/onnxruntime_test_all_adapter.js")
+
+  # if (onnxruntime_USE_JSEP)
+  #   set(EXPORTED_FUNCTIONS "_malloc,_free")
+  #   set(EXPORTED_RUNTIME_METHODS "FS")
+  #   # set(EXPORTED_FUNCTIONS "_malloc,_free,_JsepOutput")
+  #   # set(EXPORTED_RUNTIME_METHODS "FS,stackAlloc,stackRestore,stackSave,UTF8ToString,stringToUTF8,lengthBytesUTF8")
+  # else()
+  #   set(EXPORTED_FUNCTIONS "_malloc,_free")
+  #   set(EXPORTED_RUNTIME_METHODS "FS")
+  # endif()
+  set_target_properties(onnxruntime_test_all PROPERTIES LINK_DEPENDS ${SRC_PREJS_ADAPTER})
+  set_target_properties(onnxruntime_test_all PROPERTIES LINK_FLAGS "-s STACK_SIZE=5242880 -s ALLOW_MEMORY_GROWTH=1 --pre-js \"${SRC_PREJS_ADAPTER}\" -s \"EXPORTED_RUNTIME_METHODS=['FS']\" --preload-file ${CMAKE_CURRENT_BINARY_DIR}/testdata@/testdata -s EXIT_RUNTIME=1 -s DEMANGLE_SUPPORT=1")
   if (onnxruntime_ENABLE_WEBASSEMBLY_THREADS)
-    set_property(TARGET onnxruntime_test_all APPEND_STRING PROPERTY LINK_FLAGS " -s DEFAULT_PTHREAD_STACK_SIZE=131072 -s PROXY_TO_PTHREAD=1")
+  set_property(TARGET onnxruntime_test_all APPEND_STRING PROPERTY LINK_FLAGS " -s DEFAULT_PTHREAD_STACK_SIZE=131072 -s PROXY_TO_PTHREAD=1")
   endif()
   if (onnxruntime_USE_JSEP)
-    set_property(TARGET onnxruntime_test_all APPEND_STRING PROPERTY LINK_FLAGS " --pre-js \"${ONNXRUNTIME_ROOT}/wasm/js_internal_api.js\"")
+    set(SRC_PREJS_INTERNAL_API "${ONNXRUNTIME_ROOT}/wasm/js_internal_api.js")
+    set(SRC_PREJS_JSEP_INITONLY "${REPO_ROOT}/js/web/test/ort.jsep.initonly.js")
+
+    # add custom target
+    add_custom_target(js_npm_ci ALL
+        COMMAND ${NPM_CLI} ci
+        WORKING_DIRECTORY ${REPO_ROOT}/js
+        COMMENT "NPM install on /js")
+
+    add_custom_target(js_common_npm_ci ALL
+        COMMAND ${NPM_CLI} ci
+        WORKING_DIRECTORY ${REPO_ROOT}/js/common
+        COMMENT "NPM install on /js/common")
+
+    add_custom_target(js_web_build_jsep_initonly ALL
+        COMMAND ${NPM_CLI} ci
+        COMMAND ${NPM_CLI} run build:jsep-initonly
+        WORKING_DIRECTORY ${REPO_ROOT}/js/web
+        COMMENT "Build JSEP initonly")
+
+    add_dependencies(js_common_npm_ci js_npm_ci)
+    add_dependencies(js_web_build_jsep_initonly js_common_npm_ci)
+    add_dependencies(onnxruntime_test_all js_web_build_jsep_initonly)
+
+    set_property(TARGET onnxruntime_test_all APPEND_STRING PROPERTY LINK_DEPENDS ";${SRC_PREJS_INTERNAL_API}")
+
+    set_property(TARGET onnxruntime_test_all APPEND_STRING PROPERTY LINK_FLAGS
+      " --pre-js \"${SRC_PREJS_INTERNAL_API}\" --pre-js \"${SRC_PREJS_JSEP_INITONLY}\" -s ASYNCIFY=1 -s ASYNCIFY_STACK_SIZE=65536")
   endif()
 
   ###

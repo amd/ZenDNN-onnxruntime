@@ -56,6 +56,7 @@ std::unique_ptr<IExecutionProvider> DefaultSnpeExecutionProvider();
 std::unique_ptr<IExecutionProvider> DefaultQnnExecutionProvider();
 std::unique_ptr<IExecutionProvider> QnnExecutionProviderWithOptions(const ProviderOptions& options);
 std::unique_ptr<IExecutionProvider> DefaultXnnpackExecutionProvider();
+std::unique_ptr<IExecutionProvider> DefaultJsExecutionProvider();
 std::unique_ptr<IExecutionProvider> DefaultCannExecutionProvider();
 std::unique_ptr<IExecutionProvider> DefaultDmlExecutionProvider();
 

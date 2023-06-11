@@ -24,6 +24,7 @@
     "pull:wasm": "node ./script/pull-prebuilt-wasm-artifacts",
     "test:e2e": "node ./test/e2e/run",
     "build": "node ./script/build",
+    "build:jsep-initonly": "webpack --env --bundle-mode=jsep-initonly",
     "test": "tsc --build ../scripts && node ../scripts/prepare-onnx-node-tests && node ./script/test-runner-cli",
     "prepack": "node ./script/build && node ./script/prepack"
   },

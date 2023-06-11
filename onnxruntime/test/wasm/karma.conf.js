@@ -32,11 +32,17 @@ if (files.length === 0) {
 // gtest reporter writes the test results to the file specified by the --gtest_output flag.
 const gtestReporter = {'reporter:gtest': ['type', function() {
   this.onBrowserComplete = function(browser, result) {
-    if (result.file) {
+    if (result.file && result.data) {
       require('fs').writeFileSync(result.file, result.data);
     }
   };
 }]};
+
+// Pass the gtest flags to the test runner
+const karmaArgs = process.argv.filter(arg => arg.startsWith('--gtest_'));
+if (THREADS) {
+  karmaArgs.push('--wasm-threads');
+}
 
 module.exports = function(config) {
     config.set({
@@ -54,8 +60,7 @@ module.exports = function(config) {
       reporters: ['progress', 'gtest'],
       client: {
         captureConsole: true,
-        // Pass the gtest flags to the test runner
-        args: process.argv.filter(arg => arg.startsWith('--gtest_'))
+        args: karmaArgs
       },
       browserDisconnectTimeout: 600000,
       // allow running tests for 30 minutes

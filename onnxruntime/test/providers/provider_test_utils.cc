@@ -1227,6 +1227,7 @@ void OpTester::RunWithConfig(size_t* number_of_pre_packed_weights_counter,
           kQnnExecutionProvider,
           kSnpeExecutionProvider,
           kXnnpackExecutionProvider,
+          kJsExecutionProvider,
       };
 #endif
 
@@ -1267,6 +1268,8 @@ void OpTester::RunWithConfig(size_t* number_of_pre_packed_weights_counter,
           execution_provider = DefaultQnnExecutionProvider();
         else if (provider_type == onnxruntime::kXnnpackExecutionProvider)
           execution_provider = DefaultXnnpackExecutionProvider();
+        else if (provider_type == onnxruntime::kJsExecutionProvider)
+          execution_provider = DefaultJsExecutionProvider();
         else if (provider_type == onnxruntime::kDmlExecutionProvider)
           execution_provider = DefaultDmlExecutionProvider();
 
