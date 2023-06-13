@@ -35,6 +35,7 @@ jobs:
     buildArch: x64
     CommonBuildArgs: '--parallel --config ${{ parameters.BuildConfig }} --skip_submodule_sync --cmake_generator "Ninja" --build_wasm --use_xnnpack --emsdk_version releases-7c905cfc1ca6699f6ccb288ae174902cfbdcf0a2-64bit ${{ parameters.ExtraBuildArgs }}'
     runCodesignValidationInjection: false
+    EDGE_BIN: /usr/bin/msedgedriver
   timeoutInMinutes: ${{ parameters.TimeoutInMinutes }}
   workspace:
     clean: all
@@ -76,21 +77,29 @@ jobs:
       workingDirectory: $(Build.BinariesDirectory)
 
   - task: PythonScript@0
+    displayName: 'Build and test (node)'
+    inputs:
+      scriptPath: '$(Build.SourcesDirectory)/tools/ci_build/build.py'
+      arguments: '$(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm'
+      workingDirectory: '$(Build.BinariesDirectory)'
+  - task: PythonScript@0
+    displayName: 'Build and test (node) (threads)'
+    inputs:
+      scriptPath: '$(Build.SourcesDirectory)/tools/ci_build/build.py'
+      arguments: '$(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_threads --enable_wasm_threads'
+      workingDirectory: '$(Build.BinariesDirectory)'
+  - task: PythonScript@0
     displayName: 'Build and test (browser) (simd + threads)'
     inputs:
       scriptPath: '$(Build.SourcesDirectory)/tools/ci_build/build.py'
       arguments: '$(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --wasm_run_tests_in_browser'
       workingDirectory: '$(Build.BinariesDirectory)'
-    envs:
-      EDGE_BIN: /usr/bin/msedgedriver
   - task: PythonScript@0
     displayName: 'Build and test (node) (simd)'
     inputs:
       scriptPath: '$(Build.SourcesDirectory)/tools/ci_build/build.py'
       arguments: '$(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd --enable_wasm_simd'
       workingDirectory: '$(Build.BinariesDirectory)'
-    envs:
-      EDGE_BIN: /usr/bin/msedgedriver
 
   - ${{ if eq(parameters.BuildJsep, true) }}:
     - task: PythonScript@0
