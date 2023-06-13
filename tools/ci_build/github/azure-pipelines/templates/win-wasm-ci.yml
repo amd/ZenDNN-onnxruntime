@@ -76,29 +76,22 @@ jobs:
       workingDirectory: $(Build.BinariesDirectory)
 
   - task: PythonScript@0
-    displayName: 'Build and test (node)'
-    inputs:
-      scriptPath: '$(Build.SourcesDirectory)/tools/ci_build/build.py'
-      arguments: '$(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm'
-      workingDirectory: '$(Build.BinariesDirectory)'
-  - task: PythonScript@0
-    displayName: 'Build and test (node) (threads)'
-    inputs:
-      scriptPath: '$(Build.SourcesDirectory)/tools/ci_build/build.py'
-      arguments: '$(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_threads --enable_wasm_threads'
-      workingDirectory: '$(Build.BinariesDirectory)'
-  - task: PythonScript@0
     displayName: 'Build and test (browser) (simd + threads)'
     inputs:
       scriptPath: '$(Build.SourcesDirectory)/tools/ci_build/build.py'
       arguments: '$(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --wasm_run_tests_in_browser'
       workingDirectory: '$(Build.BinariesDirectory)'
+    envs:
+      EDGE_BIN: /usr/bin/msedgedriver
   - task: PythonScript@0
     displayName: 'Build and test (node) (simd)'
     inputs:
       scriptPath: '$(Build.SourcesDirectory)/tools/ci_build/build.py'
       arguments: '$(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd --enable_wasm_simd'
       workingDirectory: '$(Build.BinariesDirectory)'
+    envs:
+      EDGE_BIN: /usr/bin/msedgedriver
+
   - ${{ if eq(parameters.BuildJsep, true) }}:
     - task: PythonScript@0
       displayName: 'Build (simd + JSEP)'
