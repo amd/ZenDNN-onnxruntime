@@ -47,9 +47,9 @@ jobs:
     displayName: 'Get commit SHA'
     condition: eq('${{ parameters.CommitOverride }}', 'true')
   - script: |
-     set /p __commit__=<$(Pipeline.Workspace)/__commit.txt
-     git fetch origin +%__commit__%:refs/remotes/origin/%__commit__%
-     git checkout --force %__commit__%
+     export __commit__=<$(Pipeline.Workspace)/__commit.txt
+     git fetch origin +$__commit__:refs/remotes/origin/$__commit__
+     git checkout --force $__commit__
     workingDirectory: '$(Build.SourcesDirectory)'
     displayName: 'Read commit SHA and checkout'
     condition: eq('${{ parameters.CommitOverride }}', 'true')
