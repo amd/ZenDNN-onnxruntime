@@ -33,7 +33,7 @@ stages:
 - stage: Extract_commit
   jobs:
   - job: Extract_commit
-    pool: onnxruntime-Ubuntu2004-AMD-CPU
+    pool: ${{ parameters.PoolName }}
     variables:
       runCodesignValidationInjection: false
     timeoutInMinutes: 30
