@@ -90,6 +90,7 @@ jobs:
       # mtime of this file is checked by ccache, we set it to avoid cache misses.
       export EM_CONFIG="$(Build.SourcesDirectory)/cmake/external/emsdk/.emscripten"
       which ccache && ccache -s && ccache --version
+      ln -s $(Build.SourcesDirectory)/cmake/external/emsdk/ccache/git-emscripten_64bit/bin/ccache /usr/local/bin/ccache
     displayName: 'Set CCache'
 
   - task: PythonScript@0
