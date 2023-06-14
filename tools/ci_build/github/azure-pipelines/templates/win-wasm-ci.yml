@@ -82,14 +82,15 @@ jobs:
       ./emsdk activate  3.1.37 ccache-git-emscripten-64bit
       export PATH=$(Build.SourcesDirectory)/cmake/external/emsdk/:$(PATH)
       export PATH=$(Build.SourcesDirectory)/cmake/external/emsdk/ccache/git-emscripten_64bit/bin:$(PATH)
+      ln -s $(Build.SourcesDirectory)/cmake/external/emsdk/ccache/git-emscripten_64bit/bin/ccache /usr/local/bin/ccache
       source ./emsdk_env.sh
+      echo $PATH
       emcc --clear-cache
       ccache -z
       export _EMCC_CCACHE=1
       # mtime of this file is checked by ccache, we set it to avoid cache misses.
       export EM_CONFIG="$(Build.SourcesDirectory)/cmake/external/emsdk/.emscripten"
       which ccache && ccache -s && ccache --version
-      ln -s $(Build.SourcesDirectory)/cmake/external/emsdk/ccache/git-emscripten_64bit/bin/ccache /usr/local/bin/ccache
       echo "##vso[task.setvariable variable=PATH;]$PATH"
       pushd '$(Build.BinariesDirectory)'
       python3 '$(Build.SourcesDirectory)/tools/ci_build/build.py' $(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --skip_test
