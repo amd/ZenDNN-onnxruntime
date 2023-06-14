@@ -86,9 +86,9 @@ jobs:
       export _EM_CCACHE=1
       emcc --clear-cache
       find $(Build.SourcesDirectory) -name ccache
-      export PATH=$(Build.SourcesDirectory)/cmake/external/emsdk/ccache/git-emscripten-64bit/bin:$(PATH)
+      export PATH=$(Build.SourcesDirectory)/cmake/external/emsdk/ccache/git-emscripten_64bit/bin:$(PATH)
       # mtime of this file is checked by ccache, we set it to avoid cache misses.
-      ls -l $(Build.SourcesDirectory)/cmake/external/emsdk/ccache/git-emscripten-64bit/bin
+      ls -l $(Build.SourcesDirectory)/cmake/external/emsdk/ccache/git-emscripten_64bit/bin
       export EM_CONFIG="$(Build.SourcesDirectory)/cmake/external/emsdk/.emscripten"
       which ccache && ccache -sv
     displayName: 'Set CCache'
