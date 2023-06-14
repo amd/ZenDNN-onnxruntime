@@ -75,6 +75,18 @@ jobs:
       arguments: --new_dir $(Build.BinariesDirectory)/deps
       workingDirectory: $(Build.BinariesDirectory)
 
+  - script: |
+      cd $(Build.SourcesDirectory)/cmake/external/emsdk
+      ./emsdk install latest
+      ./emsdk activate latest
+      ./emsdk install 3.1.40 ccache-git-emscripten-64bit
+      ./emsdk activate  3.1.40 ccache-git-emscripten-64bit
+      source ./emsdk_env.sh
+      export _EM_CCACHE=1
+      export PATH=$(Build.SourcesDirectory)/cmake/external/emsdk/ccache/git-emscripten-64bit:$(PATH)
+      ccache -sv
+    displayName: 'Set CCache'
+
   - task: PythonScript@0
     displayName: 'Build and test (browser) (simd + threads)'
     inputs:
@@ -82,20 +94,24 @@ jobs:
       arguments: '$(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --skip_test'
       workingDirectory: '$(Build.BinariesDirectory)'
 
+  - script: |
+      ccache -sv
+    displayName: 'CCache Stats'
+
   - ${{ if eq(parameters.SkipPublish, false) }}:
     - script: |
-        copy $(Build.BinariesDirectory)/wasm/${{ parameters.BuildConfig }}/ort-wasm*.* $(Build.ArtifactStagingDirectory)
-        copy $(Build.BinariesDirectory)/wasm_threads/${{ parameters.BuildConfig }}/ort-wasm*.* $(Build.ArtifactStagingDirectory)
-        copy $(Build.BinariesDirectory)/wasm_simd_threads/${{ parameters.BuildConfig }}/ort-wasm*.* $(Build.ArtifactStagingDirectory)
-        copy $(Build.BinariesDirectory)/wasm_simd/${{ parameters.BuildConfig }}/ort-wasm*.* $(Build.ArtifactStagingDirectory)
+        cp $(Build.BinariesDirectory)/wasm/${{ parameters.BuildConfig }}/ort-wasm*.* $(Build.ArtifactStagingDirectory)
+        cp $(Build.BinariesDirectory)/wasm_threads/${{ parameters.BuildConfig }}/ort-wasm*.* $(Build.ArtifactStagingDirectory)
+        cp $(Build.BinariesDirectory)/wasm_simd_threads/${{ parameters.BuildConfig }}/ort-wasm*.* $(Build.ArtifactStagingDirectory)
+        cp $(Build.BinariesDirectory)/wasm_simd/${{ parameters.BuildConfig }}/ort-wasm*.* $(Build.ArtifactStagingDirectory)
         if exist $(Build.BinariesDirectory)/wasm_simd_jsep (
-          copy $(Build.BinariesDirectory)/wasm_simd_jsep/${{ parameters.BuildConfig }}/ort-wasm-simd.wasm $(Build.ArtifactStagingDirectory)/ort-wasm-simd.jsep.wasm
-          copy $(Build.BinariesDirectory)/wasm_simd_jsep/${{ parameters.BuildConfig }}/ort-wasm-simd.js $(Build.ArtifactStagingDirectory)/ort-wasm-simd.jsep.js
+          cp $(Build.BinariesDirectory)/wasm_simd_jsep/${{ parameters.BuildConfig }}/ort-wasm-simd.wasm $(Build.ArtifactStagingDirectory)/ort-wasm-simd.jsep.wasm
+          cp $(Build.BinariesDirectory)/wasm_simd_jsep/${{ parameters.BuildConfig }}/ort-wasm-simd.js $(Build.ArtifactStagingDirectory)/ort-wasm-simd.jsep.js
         )
         if exist $(Build.BinariesDirectory)/wasm_simd_threads_jsep (
-          copy $(Build.BinariesDirectory)/wasm_simd_threads_jsep/${{ parameters.BuildConfig }}/ort-wasm-simd-threaded.wasm $(Build.ArtifactStagingDirectory)/ort-wasm-simd-threaded.jsep.wasm
-          copy $(Build.BinariesDirectory)/wasm_simd_threads_jsep/${{ parameters.BuildConfig }}/ort-wasm-simd-threaded.js $(Build.ArtifactStagingDirectory)/ort-wasm-simd-threaded.jsep.js
-          copy $(Build.BinariesDirectory)/wasm_simd_threads_jsep/${{ parameters.BuildConfig }}/ort-wasm-simd-threaded.worker.js $(Build.ArtifactStagingDirectory)/ort-wasm-simd-threaded.jsep.worker.js
+          cp $(Build.BinariesDirectory)/wasm_simd_threads_jsep/${{ parameters.BuildConfig }}/ort-wasm-simd-threaded.wasm $(Build.ArtifactStagingDirectory)/ort-wasm-simd-threaded.jsep.wasm
+          cp $(Build.BinariesDirectory)/wasm_simd_threads_jsep/${{ parameters.BuildConfig }}/ort-wasm-simd-threaded.js $(Build.ArtifactStagingDirectory)/ort-wasm-simd-threaded.jsep.js
+          cp $(Build.BinariesDirectory)/wasm_simd_threads_jsep/${{ parameters.BuildConfig }}/ort-wasm-simd-threaded.worker.js $(Build.ArtifactStagingDirectory)/ort-wasm-simd-threaded.jsep.worker.js
         )
       displayName: 'Create Artifacts'
   - ${{ if eq(parameters.SkipPublish, false) }}:
