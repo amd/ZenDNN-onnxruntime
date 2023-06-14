@@ -79,15 +79,18 @@ jobs:
       set -ex
       cd $(Build.SourcesDirectory)/cmake/external/emsdk
       ./emsdk install 3.1.37 ccache-git-emscripten-64bit
-      ./emsdk activate  3.1.37 ccache-git-emscripten-64bit
-      export PATH=$(Build.SourcesDirectory)/cmake/external/emsdk/:$(PATH)
-      export PATH=$(Build.SourcesDirectory)/cmake/external/emsdk/ccache/git-emscripten_64bit/bin:$(PATH)
-      ln -s $(Build.SourcesDirectory)/cmake/external/emsdk/ccache/git-emscripten_64bit/bin/ccache /usr/local/bin/ccache
+      ./emsdk activate 3.1.37 ccache-git-emscripten-64bit
+      export PATH=$(Build.SourcesDirectory)/cmake/external/emsdk/:$PATH
+      export PATH=$(Build.SourcesDirectory)/cmake/external/emsdk/ccache/git-emscripten_64bit/bin:$PATH
+      #ln -s $(Build.SourcesDirectory)/cmake/external/emsdk/ccache/git-emscripten_64bit/bin/ccache /usr/local/bin/ccache
       source ./emsdk_env.sh
       echo $PATH
-      emcc --clear-cache
+      ccache -s
       ccache -z
       export _EMCC_CCACHE=1
+      export EM_COMPILER_WRAPPER=ccache
+      export EM_DIR=$(Build.SourcesDirectory)/cmake/external/emsdk/upstream/emscripten
+      ls $EM_DIR
       # mtime of this file is checked by ccache, we set it to avoid cache misses.
       export EM_CONFIG="$(Build.SourcesDirectory)/cmake/external/emsdk/.emscripten"
       which ccache && ccache -s && ccache --version
