@@ -76,14 +76,19 @@ jobs:
       workingDirectory: $(Build.BinariesDirectory)
 
   - script: |
+      set -ex
       cd $(Build.SourcesDirectory)/cmake/external/emsdk
       ./emsdk install latest
       ./emsdk activate latest
-      ./emsdk install 3.1.40 ccache-git-emscripten-64bit
-      ./emsdk activate  3.1.40 ccache-git-emscripten-64bit
+      ./emsdk install 2.0.16 ccache-git-emscripten-64bit
+      ./emsdk activate  2.0.16 ccache-git-emscripten-64bit
       source ./emsdk_env.sh
       export _EM_CCACHE=1
       export PATH=$(Build.SourcesDirectory)/cmake/external/emsdk/ccache/git-emscripten-64bit:$(PATH)
+      # mtime of this file is checked by ccache, we set it to avoid cache misses.
+      export EM_CONFIG="$(Build.SourcesDirectory)/cmake/external/emsdk/.emscripten"
+      ./emsdk install latest-upstream
+      ./emsdk activate latest-upstream
       ccache -sv
     displayName: 'Set CCache'
 
