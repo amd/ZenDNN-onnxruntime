@@ -17,7 +17,10 @@ stages:
         skipComponentGovernanceDetection: true
         ORT_CACHE_DIR: $(Agent.TempDirectory)/ort_ccache
         TODAY: $[format('{0:dd}{0:MM}{0:yyyy}', pipeline.startTime)]
-      pool: onnxruntime-Ubuntu2004-AMD-CPU
+      pool:
+        name: onnxruntime-Ubuntu2004-AMD-CPU
+        demands:
+          - ImageVersionOverride -equals 1.0.318321
       steps:
       - task: mspremier.PostBuildCleanup.PostBuildCleanup-task.PostBuildCleanup@3
         displayName: 'Clean Agent Directories'
