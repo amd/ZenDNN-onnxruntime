@@ -82,14 +82,14 @@ jobs:
       ./emsdk activate latest
       ./emsdk install 3.1.37 ccache-git-emscripten-64bit
       ./emsdk activate  3.1.37 ccache-git-emscripten-64bit
+      source ./emsdk_env.sh
+      export _EM_CCACHE=1
+      emcc --clear-cache
+      find $(Build.SourcesDirectory) -name ccache
       export PATH=$(Build.SourcesDirectory)/cmake/external/emsdk/ccache/git-emscripten-64bit/bin:$(PATH)
       # mtime of this file is checked by ccache, we set it to avoid cache misses.
       ls -l $(Build.SourcesDirectory)/cmake/external/emsdk/ccache/git-emscripten-64bit/bin
       export EM_CONFIG="$(Build.SourcesDirectory)/cmake/external/emsdk/.emscripten"
-      ./emsdk install latest-upstream
-      ./emsdk activate latest-upstream
-      source ./emsdk_env.sh
-      export _EM_CCACHE=1
       which ccache && ccache -sv
     displayName: 'Set CCache'
 
