@@ -91,7 +91,12 @@ jobs:
       export EM_CONFIG="$(Build.SourcesDirectory)/cmake/external/emsdk/.emscripten"
       which ccache && ccache -s && ccache --version
       ln -s $(Build.SourcesDirectory)/cmake/external/emsdk/ccache/git-emscripten_64bit/bin/ccache /usr/local/bin/ccache
+      echo "##vso[task.setvariable variable=PATH;]${PATH}"
     displayName: 'Set CCache'
+
+  - script: |
+      echo $PATH
+    displayName: 'Print PATH'
 
   - task: PythonScript@0
     displayName: 'Build and test (browser) (simd + threads)'
@@ -101,7 +106,7 @@ jobs:
       workingDirectory: '$(Build.BinariesDirectory)'
 
   - script: |
-      ccache -sv
+      ccache -s
     displayName: 'CCache Stats'
 
   - ${{ if eq(parameters.SkipPublish, false) }}:
