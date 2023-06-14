@@ -92,6 +92,10 @@ jobs:
       echo "##vso[task.setvariable variable=PATH;]$PATH"
       pushd '$(Build.BinariesDirectory)'
       python3 '$(Build.SourcesDirectory)/tools/ci_build/build.py' $(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --skip_test
+      ccache -s
+      ccache -z
+      python3 '$(Build.SourcesDirectory)/tools/ci_build/build.py' $(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --skip_test
+      rm -rf '$(Build.BinariesDirectory)/Linux'
       popd
     displayName: 'Set CCache'
 
