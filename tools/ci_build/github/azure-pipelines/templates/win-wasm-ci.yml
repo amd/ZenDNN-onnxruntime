@@ -93,7 +93,7 @@ jobs:
       ln -s $(Build.SourcesDirectory)/cmake/external/emsdk/ccache/git-emscripten_64bit/bin/ccache /usr/local/bin/ccache
       echo "##vso[task.setvariable variable=PATH;]$PATH"
       pushd '$(Build.BinariesDirectory)'
-      python '$(Build.SourcesDirectory)/tools/ci_build/build.py' $(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --skip_test
+      python3 '$(Build.SourcesDirectory)/tools/ci_build/build.py' $(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --skip_test
       popd
     displayName: 'Set CCache'
 
