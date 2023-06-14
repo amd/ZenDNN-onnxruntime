@@ -92,19 +92,21 @@ jobs:
       which ccache && ccache -s && ccache --version
       ln -s $(Build.SourcesDirectory)/cmake/external/emsdk/ccache/git-emscripten_64bit/bin/ccache /usr/local/bin/ccache
       echo "##vso[task.setvariable variable=PATH;]$PATH"
-      echo $PATH
+      pushd $(Build.BinariesDirectory)'
+      python '$(Build.SourcesDirectory)/tools/ci_build/build.py' $(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --skip_test'
+      popd
     displayName: 'Set CCache'
 
   - script: |
       echo $PATH
     displayName: 'Print PATH'
 
-  - task: PythonScript@0
-    displayName: 'Build and test (browser) (simd + threads)'
-    inputs:
-      scriptPath: '$(Build.SourcesDirectory)/tools/ci_build/build.py'
-      arguments: '$(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --skip_test'
-      workingDirectory: '$(Build.BinariesDirectory)'
+  #- task: PythonScript@0
+  #  displayName: 'Build and test (browser) (simd + threads)'
+  #  inputs:
+  #    scriptPath: '$(Build.SourcesDirectory)/tools/ci_build/build.py'
+  #    arguments: '$(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --skip_test'
+  #    workingDirectory: '$(Build.BinariesDirectory)'
 
   - script: |
       ccache -s
