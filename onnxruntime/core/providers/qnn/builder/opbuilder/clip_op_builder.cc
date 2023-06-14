@@ -33,20 +33,23 @@ class ClipOpBuilder : public BaseOpBuilder {
                                      bool do_op_validation) const override ORT_MUST_USE_RESULT;
 
  private:
-  Status ExplictOpCheck(QnnModelWrapper& qnn_model_wrapper, const NodeUnit& node_unit) const;
+  Status ExplictOpCheck(QnnModelWrapper& qnn_model_wrapper, const NodeUnit& node_unit, bool is_quantized_model) const;
   mutable float min_value_ = std::numeric_limits<float>::lowest();
   mutable float max_value_ = std::numeric_limits<float>::max();
 };
 
-Status ClipOpBuilder::ExplictOpCheck(QnnModelWrapper& qnn_model_wrapper, const NodeUnit& node_unit) const {
-  if (node_unit.Inputs().size() > 1) {
-    const auto& min_input_name = node_unit.Inputs()[1].node_arg.Name();
+Status ClipOpBuilder::ExplictOpCheck(QnnModelWrapper& qnn_model_wrapper, const NodeUnit& node_unit, bool is_quantized_model) const {
+  const auto& inputs = node_unit.Inputs();
+  if (inputs.size() > 1) {
+    //const auto& min_input_name = node_unit.Inputs()[1].node_arg.Name();
+    const std::string min_input_name = qnn_model_wrapper.GetQnnInputName(inputs[1].node_arg.Name(), is_quantized_model);
     if (!min_input_name.empty() && !qnn_model_wrapper.IsInitializerInput(min_input_name)) {
       return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "QNN desn't support dynamic min/max.");
     }
   }
-  if (node_unit.Inputs().size() > 2) {
-    const auto& max_input_name = node_unit.Inputs()[2].node_arg.Name();
+  if (inputs.size() > 2) {
+    //const auto& max_input_name = node_unit.Inputs()[2].node_arg.Name();
+    const std::string max_input_name = qnn_model_wrapper.GetQnnInputName(inputs[2].node_arg.Name(), is_quantized_model);
     if (!max_input_name.empty() && !qnn_model_wrapper.IsInitializerInput(max_input_name)) {
       return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "QNN desn't support dynamic min/max.");
     }
@@ -61,7 +64,7 @@ Status ClipOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
                                     std::vector<std::string>& input_names,
                                     bool do_op_validation) const {
   if (do_op_validation) {
-    ORT_RETURN_IF_ERROR(ExplictOpCheck(qnn_model_wrapper, node_unit));
+    ORT_RETURN_IF_ERROR(ExplictOpCheck(qnn_model_wrapper, node_unit, is_quantized_model));
   }
   Qnn_QuantizeParams_t quantize_param = QNN_QUANTIZE_PARAMS_INIT;
   InitializeQuantizeParam(quantize_param, is_quantized_model);
@@ -69,7 +72,9 @@ Status ClipOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
 
   auto inputs = node_unit.Inputs();
   for (size_t input_i = 0; input_i < inputs.size(); ++input_i) {
-    auto& input_name = inputs[input_i].node_arg.Name();
+    //auto& input_name = inputs[input_i].node_arg.Name();
+    const std::string input_name = qnn_model_wrapper.GetQnnInputName(inputs[input_i].node_arg.Name(),
+                                                                     is_quantized_model);
     if (input_name.empty()) {
       // Ignore unspecified/unused optional input
       continue;
@@ -81,7 +86,7 @@ Status ClipOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
     }
 
     const auto* type_proto = inputs[input_i].node_arg.TypeAsProto();
-    ORT_RETURN_IF_ERROR(GetQnnDataType(is_quantized_model, type_proto, qnn_data_type));
+    ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(input_name, is_quantized_model, type_proto, qnn_data_type));
 
     std::vector<uint32_t> input_shape;
     ORT_RETURN_IF_NOT(qnn_model_wrapper.GetOnnxShape(inputs[input_i].node_arg, input_shape), "Cannot get shape");

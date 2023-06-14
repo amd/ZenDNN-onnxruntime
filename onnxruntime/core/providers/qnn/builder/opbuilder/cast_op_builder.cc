@@ -46,7 +46,8 @@ Status CastOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
   ORT_ENFORCE(inputs.size() == 1, "QNN Cast node must have a single input.");
   const auto& input = inputs[0];
 
-  const auto& input_name = input.node_arg.Name();
+  //const auto& input_name = input.node_arg.Name();
+  const std::string input_name = qnn_model_wrapper.GetQnnInputName(input.node_arg.Name(), is_quantized_model);
 
   if (qnn_model_wrapper.IsQnnTensorWrapperExist(input_name)) {
     LOGS(logger, VERBOSE) << "Tensor already added, skip it: " << input_name;
@@ -69,9 +70,9 @@ Status CastOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
   Qnn_DataType_t qnn_data_type = QNN_DATATYPE_UNDEFINED;
   const auto* type_proto = input.node_arg.TypeAsProto();
 
-  ORT_RETURN_IF_ERROR(GetQnnDataType(false,  // Do not try to get the quantized type. HTP cast supports normal types.
-                                     type_proto,
-                                     qnn_data_type));
+  ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(input_name, false,  // Do not try to get the quantized type. HTP cast supports normal types.
+                                                       type_proto,
+                                                       qnn_data_type));
 
   QnnTensorWrapper input_tensorwrapper(input_name, tensor_type, qnn_data_type, QNN_QUANTIZE_PARAMS_INIT,
                                        std::move(input_shape), std::move(unpacked_tensor));
@@ -94,13 +95,14 @@ Status CastOpBuilder::ProcessAttributesAndOutputs(QnnModelWrapper& qnn_model_wra
   const auto& outputs = node_unit.Outputs();
   ORT_ENFORCE(outputs.size() == 1, "QNN Cast node must have a single output.");
   const auto& output = outputs[0];
-  const auto& output_name = output.node_arg.Name();
+  //const auto& output_name = output.node_arg.Name();
+  const std::string output_name = qnn_model_wrapper.GetQnnOutputName(output.node_arg.Name(), is_quantized_model);
 
   const auto* type_proto = output.node_arg.TypeAsProto();
   Qnn_DataType_t qnn_data_type = QNN_DATATYPE_UNDEFINED;
-  ORT_RETURN_IF_ERROR(GetQnnDataType(false,  // Do not try to get the quantized type. HTP cast supports normal types.
-                                     type_proto,
-                                     qnn_data_type));
+  ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(output_name, false,  // Do not try to get the quantized type. HTP cast supports normal types.
+                                                       type_proto,
+                                                       qnn_data_type));
 
   std::vector<uint32_t> output_shape;
   ORT_RETURN_IF_NOT(qnn_model_wrapper.GetOnnxShape(output.node_arg, output_shape),

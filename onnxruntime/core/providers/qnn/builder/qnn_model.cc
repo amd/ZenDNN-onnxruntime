@@ -88,7 +88,8 @@ const NodeUnit& QnnModel::GetNodeUnit(const Node* node,
 
 Status QnnModel::ComposeGraph(const GraphViewer& graph_viewer,
                               const onnxruntime::Node& fused_node,
-                              const std::string& debug_json_graph_path) {
+                              const std::string& debug_json_graph_path,
+                              const std::string& tensor_encodings_filepath) {
   LOGS(logger_, VERBOSE) << "ComposeGraph Graph name: " << graph_viewer.Name();
 
   // Holder for the NodeUnits in the graph, this will guarantee the NodeUnits is
@@ -100,12 +101,20 @@ Status QnnModel::ComposeGraph(const GraphViewer& graph_viewer,
   const auto& graph_name = graph_viewer.Name();
   ORT_RETURN_IF_ERROR(SetGraphInputOutputInfo(graph_viewer, fused_node));
 
+  nlohmann::json tensor_encodings;
+
+  if (!tensor_encodings_filepath.empty()) {
+    std::ifstream f(tensor_encodings_filepath);
+    tensor_encodings = nlohmann::json::parse(f);
+  }
+
   QnnModelWrapper qnn_model_wrapper = QnnModelWrapper(graph_viewer, logger_,
                                                       qnn_backend_manager_->GetQnnInterface(),
                                                       qnn_backend_manager_->GetQnnBackendHandle(),
                                                       model_input_index_map_,
                                                       model_output_index_map_,
-                                                      initializer_inputs_);
+                                                      initializer_inputs_,
+                                                      tensor_encodings);
   bool rt = true;
   rt = qnn_model_wrapper.CreateQnnGraph(qnn_backend_manager_->GetQnnContext(), graph_name);
   if (!rt) {

@@ -43,7 +43,8 @@ Status TileOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
   const auto& inputs = node_unit.Inputs();
   // QNN Tile only support 1 input, the 2nd input need to be initialier and set as Qnn node parameter
   if (do_op_validation) {
-    auto& repeats_input_name = inputs[1].node_arg.Name();
+    //auto& repeats_input_name = inputs[1].node_arg.Name();
+    const std::string repeats_input_name = qnn_model_wrapper.GetQnnInputName(inputs[1].node_arg.Name(), is_quantized_model);
     ORT_RETURN_IF_NOT(qnn_model_wrapper.IsInitializerInput(repeats_input_name),
                       "Qnn doesn't support dynamic repeats input");
   }
@@ -61,7 +62,9 @@ Status TileOpBuilder::ProcessAttributesAndOutputs(QnnModelWrapper& qnn_model_wra
                                                   bool do_op_validation) const {
   std::vector<std::string> param_tensor_names;
   // Already confirmed repeats input is initailizer in ProcessInputs()
-  const auto& repeats_input_name = node_unit.Inputs()[1].node_arg.Name();
+  //const auto& repeats_input_name = node_unit.Inputs()[1].node_arg.Name();
+  const std::string repeats_input_name = qnn_model_wrapper.GetQnnInputName(node_unit.Inputs()[1].node_arg.Name(),
+                                                                           is_quantized_model);
 
   std::vector<uint8_t> unpacked_tensor;
   const auto& input_tensor = qnn_model_wrapper.GetInitializerTensors().at(repeats_input_name);

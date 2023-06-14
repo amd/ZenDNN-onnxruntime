@@ -158,7 +158,8 @@ Status SimpleOpBuilder::HandleSingleTransposeNode(QnnModelWrapper& qnn_model_wra
   const auto& outputs = node_unit.Outputs();
   ORT_ENFORCE(outputs.size() == 1, "QNN Transpose node must have a single output.");
   const auto& output = outputs[0];
-  auto& output_name = output.node_arg.Name();
+  //auto& output_name = output.node_arg.Name();
+  const std::string output_name = qnn_model_wrapper.GetQnnOutputName(output.node_arg.Name(), is_quantized_model);
 
   const bool is_graph_output = qnn_model_wrapper.IsGraphOutput(output_name);
 
@@ -167,7 +168,7 @@ Status SimpleOpBuilder::HandleSingleTransposeNode(QnnModelWrapper& qnn_model_wra
   if (is_graph_output) {
     const auto* type_proto = output.node_arg.TypeAsProto();
     Qnn_DataType_t qnn_data_type = QNN_DATATYPE_UNDEFINED;
-    ORT_RETURN_IF_ERROR(GetQnnDataType(is_quantized_model, type_proto, qnn_data_type));
+    ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(output_name, is_quantized_model, type_proto, qnn_data_type));
 
     Qnn_QuantizeParams_t quantize_param = QNN_QUANTIZE_PARAMS_INIT;
     std::vector<uint32_t> output_shape;

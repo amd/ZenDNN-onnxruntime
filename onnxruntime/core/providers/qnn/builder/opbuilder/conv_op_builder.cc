@@ -134,10 +134,12 @@ Status ConvOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
   auto inputs = node_unit.Inputs();
 
   for (size_t input_i = 0; input_i < inputs.size(); ++input_i) {
-    const auto& input_name = inputs[input_i].node_arg.Name();
+    //const auto& input_name = inputs[input_i].node_arg.Name();
+    const std::string input_name = qnn_model_wrapper.GetQnnInputName(inputs[input_i].node_arg.Name(),
+                                                                     is_quantized_model);
 
     const auto* type_proto = inputs[input_i].node_arg.TypeAsProto();
-    ORT_RETURN_IF_ERROR(GetQnnDataType(is_quantized_model, type_proto, qnn_data_type));
+    ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(input_name, is_quantized_model, type_proto, qnn_data_type));
 
     std::vector<uint32_t> input_shape;
     ORT_RETURN_IF_NOT(qnn_model_wrapper.GetOnnxShape(inputs[input_i].node_arg, input_shape), "Cannot get shape");
@@ -277,7 +279,8 @@ Status ConvOpBuilder::ProcessAttributesAndOutputs(QnnModelWrapper& qnn_model_wra
   }
   // Conv/ConvTranspose output
   const auto& outputs = node_unit.Outputs();
-  const auto& output_name = outputs[0].node_arg.Name();
+  //const auto& output_name = outputs[0].node_arg.Name();
+  const std::string output_name = qnn_model_wrapper.GetQnnOutputName(outputs[0].node_arg.Name(), is_quantized_model);
 
   std::vector<uint32_t> output_shape;
   ORT_RETURN_IF_NOT(qnn_model_wrapper.GetOnnxShape(outputs[0].node_arg, output_shape), "Cannot get shape");
@@ -356,7 +359,7 @@ Status ConvOpBuilder::ProcessAttributesAndOutputs(QnnModelWrapper& qnn_model_wra
 
   const auto* type_proto = outputs[0].node_arg.TypeAsProto();
   Qnn_DataType_t qnn_data_type = QNN_DATATYPE_FLOAT_32;
-  ORT_RETURN_IF_ERROR(GetQnnDataType(is_quantized_model, type_proto, qnn_data_type));
+  ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(output_name, is_quantized_model, type_proto, qnn_data_type));
   ORT_RETURN_IF_NOT(qnn_model_wrapper.ProcessQuantizationParameter(outputs[0].quant_param,
                                                                    output_quantize_param.scaleOffsetEncoding.scale,
                                                                    output_quantize_param.scaleOffsetEncoding.offset),

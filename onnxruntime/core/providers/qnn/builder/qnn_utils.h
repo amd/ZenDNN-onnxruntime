@@ -24,6 +24,12 @@ namespace qnn {
 class QnnOpConfigWrapper;
 
 namespace utils {
+
+Status GetQnnDataType(const bool is_quantized_node, const ONNX_NAMESPACE::TypeProto* type_proto,
+                      Qnn_DataType_t& tensor_data_type);
+
+bool OnnxDataTypeToQnnDataType(const int32_t data_type, Qnn_DataType_t& qnn_data_type, bool is_quantized = false);
+
 size_t GetElementSizeByType(const Qnn_DataType_t& data_type);
 
 size_t GetElementSizeByType(ONNXTensorElementDataType elem_type);

@@ -33,7 +33,7 @@ class SliceOpBuilder : public BaseOpBuilder {
                                      bool do_op_validation) const override ORT_MUST_USE_RESULT;
 
  private:
-  Status ExplictOpCheck(QnnModelWrapper& qnn_model_wrapper, const NodeUnit& node_unit) const;
+  Status ExplictOpCheck(QnnModelWrapper& qnn_model_wrapper, const NodeUnit& node_unit, bool is_quantized_model) const;
   void GetDataFromAttribute(const NodeUnit& node_unit,
                             TensorShapeVector& raw_starts,
                             TensorShapeVector& raw_ends,
@@ -44,14 +44,16 @@ class SliceOpBuilder : public BaseOpBuilder {
   mutable std::vector<Range> ranges_;
 };
 
-Status SliceOpBuilder::ExplictOpCheck(QnnModelWrapper& qnn_model_wrapper, const NodeUnit& node_unit) const {
-  size_t input_count = node_unit.Inputs().size();
+Status SliceOpBuilder::ExplictOpCheck(QnnModelWrapper& qnn_model_wrapper, const NodeUnit& node_unit, bool is_quantized_model) const {
+  const auto& inputs = node_unit.Inputs();
+  const size_t input_count = inputs.size();
   // Op set 9 only has 1 input with starts, ends, axes attribute
   // Op set > 9, starts, ends, axes are from node input
   if (input_count > 1) {
     // Skip the first input. All other input need to be initializer
     for (size_t i = 1; i < input_count; i++) {
-      const auto& next_input = node_unit.Inputs()[i].node_arg.Name();
+      //const auto& next_input = node_unit.Inputs()[i].node_arg.Name();
+      const std::string next_input = qnn_model_wrapper.GetQnnInputName(inputs[i].node_arg.Name(), is_quantized_model);
       if (!qnn_model_wrapper.IsInitializerInput(next_input)) {
         return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "QNN desn't support dynamic slice.");
       }
@@ -84,7 +86,7 @@ Status SliceOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
                                      std::vector<std::string>& input_names,
                                      bool do_op_validation) const {
   if (do_op_validation) {
-    ORT_RETURN_IF_ERROR(ExplictOpCheck(qnn_model_wrapper, node_unit));
+    ORT_RETURN_IF_ERROR(ExplictOpCheck(qnn_model_wrapper, node_unit, is_quantized_model));
   }
   Qnn_QuantizeParams_t quantize_param = QNN_QUANTIZE_PARAMS_INIT;
   InitializeQuantizeParam(quantize_param, is_quantized_model);
@@ -103,7 +105,9 @@ Status SliceOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
   }
 
   for (size_t input_i = 0; input_i < input_count; ++input_i) {
-    auto& input_name = inputs[input_i].node_arg.Name();
+    //auto& input_name = inputs[input_i].node_arg.Name();
+    const std::string input_name = qnn_model_wrapper.GetQnnInputName(inputs[input_i].node_arg.Name(),
+                                                                     is_quantized_model);
     if (input_name.empty()) {
       // Ignore unspecified/unused optional input
       continue;
@@ -116,7 +120,7 @@ Status SliceOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
     }
 
     const auto* type_proto = inputs[input_i].node_arg.TypeAsProto();
-    ORT_RETURN_IF_ERROR(GetQnnDataType(is_quantized_model, type_proto, qnn_data_type));
+    ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(input_name, is_quantized_model, type_proto, qnn_data_type));
 
     std::vector<uint32_t> input_shape;
     ORT_RETURN_IF_NOT(qnn_model_wrapper.GetOnnxShape(inputs[input_i].node_arg, input_shape), "Cannot get shape");

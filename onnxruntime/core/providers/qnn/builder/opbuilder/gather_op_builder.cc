@@ -47,7 +47,8 @@ Status GatherOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
   ORT_RETURN_IF_ERROR(ProcessInput(qnn_model_wrapper, inputs[0], logger, is_quantized_model, input_names));
 
   // Process indices
-  const auto& input_name = inputs[1].node_arg.Name();
+  //const auto& input_name = inputs[1].node_arg.Name();
+  const std::string input_name = qnn_model_wrapper.GetQnnInputName(inputs[1].node_arg.Name(), is_quantized_model);
   if (qnn_model_wrapper.IsQnnTensorWrapperExist(input_name)) {
     LOGS(logger, VERBOSE) << "Tensor already added, skip it: " << input_name;
     input_names.push_back(input_name);
@@ -57,7 +58,7 @@ Status GatherOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
   std::string indices_input_name(input_name);
   Qnn_DataType_t qnn_data_type = QNN_DATATYPE_INT_32;
   const auto* type_proto = inputs[1].node_arg.TypeAsProto();
-  ORT_RETURN_IF_ERROR(GetQnnDataType(false, type_proto, qnn_data_type));
+  ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(input_name, false, type_proto, qnn_data_type));
 
   std::vector<uint8_t> unpacked_tensor;
   std::vector<uint8_t> gather_indices;
@@ -159,14 +160,15 @@ Status GatherOpBuilder::ProcessAttributesAndOutputs(QnnModelWrapper& qnn_model_w
             std::back_inserter(qnn_output_shape));
 
   const auto& gather_output = node_unit.Outputs()[0];
-  const auto& output_name = gather_output.node_arg.Name();
+  //const auto& output_name = gather_output.node_arg.Name();
+  const std::string output_name = qnn_model_wrapper.GetQnnOutputName(gather_output.node_arg.Name(), is_quantized_model);
 
   Qnn_QuantizeParams_t quantize_param = QNN_QUANTIZE_PARAMS_INIT;
   InitializeQuantizeParam(quantize_param, is_quantized_model);
 
   const auto* type_proto = gather_output.node_arg.TypeAsProto();
   Qnn_DataType_t qnn_data_type = QNN_DATATYPE_FLOAT_32;
-  ORT_RETURN_IF_ERROR(GetQnnDataType(is_quantized_model, type_proto, qnn_data_type));
+  ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(output_name, is_quantized_model, type_proto, qnn_data_type));
   ORT_RETURN_IF_NOT(qnn_model_wrapper.ProcessQuantizationParameter(gather_output.quant_param,
                                                                    quantize_param.scaleOffsetEncoding.scale,
                                                                    quantize_param.scaleOffsetEncoding.offset),

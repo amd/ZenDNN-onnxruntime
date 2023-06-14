@@ -38,15 +38,17 @@ class TopKOpBuilder : public BaseOpBuilder {
                                      bool do_op_validation) const override ORT_MUST_USE_RESULT;
 
  private:
-  Status ExplictOpCheck(QnnModelWrapper& qnn_model_wrapper, const NodeUnit& node_unit) const;
+  Status ExplictOpCheck(QnnModelWrapper& qnn_model_wrapper, const NodeUnit& node_unit, bool is_quantized_model) const;
 };
 
-Status TopKOpBuilder::ExplictOpCheck(QnnModelWrapper& qnn_model_wrapper, const NodeUnit& node_unit) const {
-  size_t input_count = node_unit.Inputs().size();
+Status TopKOpBuilder::ExplictOpCheck(QnnModelWrapper& qnn_model_wrapper, const NodeUnit& node_unit, bool is_quantized_model) const {
+  const auto& inputs = node_unit.Inputs();
+  const size_t input_count = inputs.size();
   ORT_RETURN_IF_NOT(input_count >= TOPK_MIN_INPUT && input_count <= TOPK_MAX_INPUT,
                     "For ONNX TopK operation the expected number of inputs is 2.");
   // Skip the first input. The second input needs to be an initializer.
-  const auto& input_1 = node_unit.Inputs()[1].node_arg.Name();
+  //const auto& input_1 = node_unit.Inputs()[1].node_arg.Name();
+  const std::string input_1 = qnn_model_wrapper.GetQnnInputName(inputs[1].node_arg.Name(), is_quantized_model);
   if (!qnn_model_wrapper.IsInitializerInput(input_1)) {
     return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "The number of top elements to retrieve must be specified as constant input.");
   }
@@ -78,7 +80,7 @@ Status TopKOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
                                     std::vector<std::string>& input_names,
                                     bool do_op_validation) const {
   if (do_op_validation) {
-    ORT_RETURN_IF_ERROR(ExplictOpCheck(qnn_model_wrapper, node_unit));
+    ORT_RETURN_IF_ERROR(ExplictOpCheck(qnn_model_wrapper, node_unit, is_quantized_model));
   }
 
   const auto& inputs = node_unit.Inputs();
@@ -93,7 +95,9 @@ Status TopKOpBuilder::ProcessAttributesAndOutputs(QnnModelWrapper& qnn_model_wra
                                                   const logging::Logger& logger,
                                                   bool is_quantized_model,
                                                   bool do_op_validation) const {
-  auto& input_name = node_unit.Inputs()[1].node_arg.Name();
+  //auto& input_name = node_unit.Inputs()[1].node_arg.Name();
+  const std::string input_name = qnn_model_wrapper.GetQnnInputName(node_unit.Inputs()[1].node_arg.Name(),
+                                                                   is_quantized_model);
   uint32_t k = 0;  // The number of elements to extract from the input tensor at each position.
   bool is_initializer_input = qnn_model_wrapper.IsInitializerInput(input_name);
   if (is_initializer_input) {

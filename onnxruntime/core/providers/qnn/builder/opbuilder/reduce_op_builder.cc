@@ -76,7 +76,7 @@ class ReduceOpBuilder : public BaseOpBuilder {
   using AxesQnnIntType = uint32_t;
 
   Status GetAxesSet(QnnModelWrapper& qnn_model_wrapper, const NodeUnit& node_unit,
-                    InlinedHashSet<AxesOnnxIntType>& axes_set) const;
+                    InlinedHashSet<AxesOnnxIntType>& axes_set, bool is_quantized_model) const;
 
   // Maps an operator type to the opset in which "axes" became an input instead of an attribute.
   static const std::array<int, REDUCE_OP_TYPE_COUNT> opset_with_axes_as_input;
@@ -91,7 +91,7 @@ const std::array<int, REDUCE_OP_TYPE_COUNT> ReduceOpBuilder::opset_with_axes_as_
 };
 
 Status ReduceOpBuilder::GetAxesSet(QnnModelWrapper& qnn_model_wrapper, const NodeUnit& node_unit,
-                                   InlinedHashSet<AxesOnnxIntType>& axes_set) const {
+                                   InlinedHashSet<AxesOnnxIntType>& axes_set, bool is_quantized_model) const {
   ReduceOpType reduce_op_type = GetReduceOpType(node_unit.OpType());
   if (reduce_op_type == ReduceOpType::REDUCE_OP_TYPE_UNKNOWN) {
     return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "QNN EP: Unknown reduce operator ", node_unit.OpType());
@@ -131,7 +131,9 @@ Status ReduceOpBuilder::GetAxesSet(QnnModelWrapper& qnn_model_wrapper, const Nod
 
     // Empty axes means to use default axes (when noop_with_empty_axes is 0).
     if (axes_shape[0] > 0) {
-      const std::string& axes_input_name = inputs[1].node_arg.Name();
+      //const std::string& axes_input_name = inputs[1].node_arg.Name();
+      const std::string axes_input_name = qnn_model_wrapper.GetQnnInputName(inputs[1].node_arg.Name(),
+                                                                            is_quantized_model);
 
       // Check that the axes input is an initializer.
       if (!qnn_model_wrapper.IsInitializerInput(axes_input_name)) {
@@ -224,7 +226,7 @@ Status ReduceOpBuilder::ProcessAttributesAndOutputs(QnnModelWrapper& qnn_model_w
   // Handle axes param.
   //
   InlinedHashSet<AxesOnnxIntType> axes_set;
-  ORT_RETURN_IF_ERROR(GetAxesSet(qnn_model_wrapper, node_unit, axes_set));
+  ORT_RETURN_IF_ERROR(GetAxesSet(qnn_model_wrapper, node_unit, axes_set, is_quantized_model));
   const size_t num_axes = axes_set.size();
 
   // Truncate int64 ONNX axes values to QNN's required type (uint32_t).

@@ -65,8 +65,10 @@ Status SplitOpBuilder::ProcessAttributesAndOutputs(QnnModelWrapper& qnn_model_wr
   qnn_model_wrapper.AddParamWrapper(std::move(axis_param));
 
   std::vector<uint32_t> split_index;
-  if (node_unit.Inputs().size() > 1) {
-    auto& input_name = node_unit.Inputs()[1].node_arg.Name();
+  const auto& inputs = node_unit.Inputs();
+  if (inputs.size() > 1) {
+    //auto& input_name = node_unit.Inputs()[1].node_arg.Name();
+    const std::string input_name = qnn_model_wrapper.GetQnnInputName(inputs[1].node_arg.Name(), is_quantized_model);
     bool is_initializer_input = qnn_model_wrapper.IsInitializerInput(input_name);
     if (is_initializer_input) {
       std::vector<uint8_t> unpacked_tensor;

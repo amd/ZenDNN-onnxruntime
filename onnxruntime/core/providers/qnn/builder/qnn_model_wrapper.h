@@ -27,14 +27,16 @@ class QnnModelWrapper {
                   const Qnn_BackendHandle_t& backend_handle,
                   const std::unordered_map<std::string, size_t>& input_index_map,
                   const std::unordered_map<std::string, size_t>& output_index_map,
-                  const std::unordered_set<std::string>& initializer_lookup)
+                  const std::unordered_set<std::string>& initializer_lookup,
+                  nlohmann::json tensor_encodings)
       : graph_viewer_(graph_viewer),
         logger_(logger),
         qnn_interface_(qnn_interface),
         backend_handle_(backend_handle),
         input_index_map_(input_index_map),
         output_index_map_(output_index_map),
-        initializer_lookup_(initializer_lookup) {
+        initializer_lookup_(initializer_lookup),
+        tensor_encodings_(std::move(tensor_encodings)) {
   }
   ORT_DISALLOW_COPY_ASSIGNMENT_AND_MOVE(QnnModelWrapper);
 
@@ -43,6 +45,12 @@ class QnnModelWrapper {
   bool CreateQnnGraph(const Qnn_ContextHandle_t& context,
                       const std::string& graph_name,
                       const QnnGraph_Config_t** graph_configs = nullptr);
+
+  std::string GetQnnInputName(const std::string& ort_name, bool is_quantized_model);
+  std::string GetQnnOutputName(const std::string& ort_name, bool is_quantized_model);
+
+  Status GetQnnDataType(const std::string& tensor_name, bool is_quantized_model, const ONNX_NAMESPACE::TypeProto* type_proto,
+                        Qnn_DataType_t& tensor_data_type) const;
 
   // Add to internal tensor wrapper table
   bool AddTensorWrapper(QnnTensorWrapper&& tensor_wrapper);
@@ -220,6 +228,9 @@ class QnnModelWrapper {
   const std::unordered_set<std::string>& initializer_lookup_;
   const std::vector<uint32_t> nchw2hwcn_perm_{2, 3, 1, 0};
   const std::vector<uint32_t> cnhw2hwcn_perm_{2, 3, 0, 1};
+
+  nlohmann::json tensor_encodings_;
+  std::unordered_map<std::string, std::string> quant_io_to_orig_;
 };  // QnnModelWrapper
 
 }  // namespace qnn

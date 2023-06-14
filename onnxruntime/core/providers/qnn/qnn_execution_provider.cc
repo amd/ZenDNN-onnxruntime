@@ -152,6 +152,14 @@ QNNExecutionProvider::QNNExecutionProvider(const ProviderOptions& provider_optio
     }
   }
 
+  static const std::string TENSOR_ENCODINGS_FILEPATH = "tensor_encodings_filepath";
+  auto tensor_enc_filepath_pos = runtime_options_.find(TENSOR_ENCODINGS_FILEPATH);
+
+  if (tensor_enc_filepath_pos != runtime_options_.end()) {
+    tensor_encodings_filepath_ = tensor_enc_filepath_pos->second; 
+    LOGS_DEFAULT(INFO) << "Tensor encodings filepath: " << tensor_encodings_filepath_;
+  }
+
   qnn_backend_manager_ = std::make_unique<qnn::QnnBackendManager>(backend_path_,
                                                                   profiling_level_,
                                                                   rpc_control_latency_,
@@ -253,6 +261,9 @@ QNNExecutionProvider::GetSupportedNodes(const GraphViewer& graph_viewer,
     initializer_input_lookup.emplace(graph_ini.first);
   }
 
+  std::ifstream f(tensor_encodings_filepath_);
+  nlohmann::json tensor_encodings = nlohmann::json::parse(f);
+
   std::unordered_map<std::string, size_t> model_input_index_map;
   std::unordered_map<std::string, size_t> model_output_index_map;
   std::unordered_map<std::string, qnn::OnnxTensorInfo> inputs_info;
@@ -262,7 +273,8 @@ QNNExecutionProvider::GetSupportedNodes(const GraphViewer& graph_viewer,
                                                 qnn_backend_manager_->GetQnnBackendHandle(),
                                                 model_input_index_map,
                                                 model_output_index_map,
-                                                initializer_input_lookup);
+                                                initializer_input_lookup,
+                                                tensor_encodings);
 
   for (const auto& node : graph_viewer.Nodes()) {
     const NodeUnit* node_unit = node_unit_map.at(&node);
@@ -462,7 +474,8 @@ Status QNNExecutionProvider::CompileFromOrtGraph(const std::vector<FusedNodeAndG
       json_graph_filepath = path.string();
     }
 
-    ORT_RETURN_IF_ERROR(qnn_model->ComposeGraph(graph_viewer, fused_node, json_graph_filepath));
+    ORT_RETURN_IF_ERROR(qnn_model->ComposeGraph(graph_viewer, fused_node, json_graph_filepath,
+                                                tensor_encodings_filepath_));
     ORT_RETURN_IF_ERROR(qnn_model->FinalizeGraphs());
     ORT_RETURN_IF_ERROR(qnn_model->SetupQnnInputOutput());
 

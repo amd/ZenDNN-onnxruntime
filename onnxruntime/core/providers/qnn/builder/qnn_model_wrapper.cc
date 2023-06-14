@@ -46,6 +46,102 @@ bool QnnModelWrapper::CreateQnnGraph(const Qnn_ContextHandle_t& context,
   return true;
 }
 
+std::string QnnModelWrapper::GetQnnInputName(const std::string& ort_name, bool is_quantized_model) {
+  if (!is_quantized_model || !IsGraphInput(ort_name)) {
+    return ort_name; 
+  }
+
+  if (!tensor_encodings_.contains("activation_encodings")) {
+    LOGS(logger_, ERROR) << "Invalid tensor encodings file is missing 'activation_encodings' field.";
+    return ort_name;
+  }
+
+  const auto& activation_encodings = tensor_encodings_["activation_encodings"];
+  if (!activation_encodings.contains(ort_name)) {
+    LOGS(logger_, ERROR) << "Invalid tensor encodings file is missing tensor '" << ort_name << "'";
+    return ort_name;
+  }
+
+  const auto& encoding_info = activation_encodings[ort_name][0];
+  const int bitwidth = encoding_info["bitwidth"].template get<int>();
+
+  if (bitwidth == 32) {
+    return ort_name;  // This is not a quantized tensor.
+  }
+
+  std::string new_name = ort_name + "_qnn_ep_quant";
+  quant_io_to_orig_[new_name] = ort_name;
+  return new_name;  // TODO: Make sure this is unique in model
+}
+
+std::string QnnModelWrapper::GetQnnOutputName(const std::string& ort_name, bool is_quantized_model) {
+  if (!is_quantized_model || !IsGraphOutput(ort_name)) {
+    return ort_name; 
+  }
+
+  if (!tensor_encodings_.contains("activation_encodings")) {
+    LOGS(logger_, ERROR) << "Invalid tensor encodings file is missing 'activation_encodings' field.";
+    return ort_name;
+  }
+
+  const auto& activation_encodings = tensor_encodings_["activation_encodings"];
+  if (!activation_encodings.contains(ort_name)) {
+    LOGS(logger_, ERROR) << "Invalid tensor encodings file is missing tensor '" << ort_name << "'";
+    return ort_name;
+  }
+
+  const auto& encoding_info = activation_encodings[ort_name][0];
+  const int bitwidth = encoding_info["bitwidth"].template get<int>();
+
+  if (bitwidth == 32) {
+    return ort_name;  // This is not a quantized tensor.
+  }
+
+  std::string new_name = ort_name + "_qnn_ep_quant";
+  quant_io_to_orig_[new_name] = ort_name;
+  return new_name;  // TODO: Make sure this is unique in model
+}
+
+Status QnnModelWrapper::GetQnnDataType(const std::string& tensor_name, bool is_quantized_model, const ONNX_NAMESPACE::TypeProto* type_proto,
+                                       Qnn_DataType_t& tensor_data_type) const {
+  if (!is_quantized_model) {
+    return utils::GetQnnDataType(is_quantized_model, type_proto, tensor_data_type);
+  }
+
+  ORT_RETURN_IF_NOT(tensor_encodings_.contains("activation_encodings"),
+                    "Invalid tensor encodings file is missing 'activation_encodings' key.");
+
+  const auto& activation_encodings = tensor_encodings_["activation_encodings"];
+  if (activation_encodings.contains(tensor_name)) {
+    tensor_data_type = activation_encodings[tensor_name][0]["data_type"].template get<Qnn_DataType_t>();
+    return Status::OK();
+  }
+
+  ORT_RETURN_IF_NOT(tensor_encodings_.contains("param_encodings"),
+                    "Invalid tensor encodings file is missing 'param_encodings' key.");
+
+  const auto& param_encodings = tensor_encodings_["param_encodings"];
+  if (param_encodings.contains(tensor_name)) {
+    tensor_data_type = param_encodings[tensor_name][0]["data_type"].template get<Qnn_DataType_t>();
+    return Status::OK();
+  }
+
+  const auto it = quant_io_to_orig_.find(tensor_name);
+  if (it != quant_io_to_orig_.end()) {
+	if (activation_encodings.contains(it->second)) {
+      tensor_data_type = activation_encodings[it->second][0]["data_type"].template get<Qnn_DataType_t>();
+      return Status::OK();
+    }
+
+	if (param_encodings.contains(it->second)) {
+      tensor_data_type = param_encodings[it->second][0]["data_type"].template get<Qnn_DataType_t>();
+      return Status::OK();
+    }
+  }
+
+  return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "Tensor '", tensor_name.c_str(), "' is not in encodings file.");
+}
+
 bool QnnModelWrapper::IsQnnTensorWrapperExist(const std::string& name) const {
   return model_tensors_map_.find(name) != model_tensors_map_.end();
 }
