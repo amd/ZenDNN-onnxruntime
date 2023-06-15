@@ -11,6 +11,7 @@
 #include "core/framework/tensorprotoutils.h"
 #include "core/providers/shared/utils/utils.h"
 #include "core/providers/qnn/builder/qnn_utils.h"
+#include "core/util/qmath.h"
 
 namespace onnxruntime {
 namespace qnn {
@@ -46,24 +47,54 @@ bool QnnModelWrapper::CreateQnnGraph(const Qnn_ContextHandle_t& context,
   return true;
 }
 
+bool GetActivationEncodingInfo(const std::string& tensor_name, const nlohmann::json& tensor_encodings,
+                               const nlohmann::json** info) {
+  if (!tensor_encodings.contains("activation_encodings")) {
+    return false;
+  }
+
+  const auto& activation_encodings = tensor_encodings["activation_encodings"];
+  if (!activation_encodings.contains(tensor_name)) {
+    return false;
+  }
+
+  *info = &activation_encodings[tensor_name][0];
+  return true;
+}
+
+bool GetWeightEncodingInfo(const std::string& tensor_name, const nlohmann::json& tensor_encodings,
+                           const nlohmann::json** info) {
+  if (!tensor_encodings.contains("param_encodings")) {
+    return false;
+  }
+
+  const auto& param_encodings = tensor_encodings["param_encodings"];
+  if (!param_encodings.contains(tensor_name)) {
+    return false;
+  }
+
+  *info = &param_encodings[tensor_name][0];
+  return true;
+}
+
+bool GetTensorEncodingInfo(const std::string& tensor_name, const nlohmann::json& tensor_encodings,
+                           const nlohmann::json** info) {
+  return GetActivationEncodingInfo(tensor_name, tensor_encodings, info) ||
+         GetWeightEncodingInfo(tensor_name, tensor_encodings, info);
+}
+
 std::string QnnModelWrapper::GetQnnInputName(const std::string& ort_name, bool is_quantized_model) {
   if (!is_quantized_model || !IsGraphInput(ort_name)) {
     return ort_name; 
   }
 
-  if (!tensor_encodings_.contains("activation_encodings")) {
-    LOGS(logger_, ERROR) << "Invalid tensor encodings file is missing 'activation_encodings' field.";
-    return ort_name;
-  }
-
-  const auto& activation_encodings = tensor_encodings_["activation_encodings"];
-  if (!activation_encodings.contains(ort_name)) {
+  const nlohmann::json* encoding_info = nullptr;
+  if (!GetActivationEncodingInfo(ort_name, tensor_encodings_, &encoding_info)) {
     LOGS(logger_, ERROR) << "Invalid tensor encodings file is missing tensor '" << ort_name << "'";
     return ort_name;
   }
 
-  const auto& encoding_info = activation_encodings[ort_name][0];
-  const int bitwidth = encoding_info["bitwidth"].template get<int>();
+  const int bitwidth = (*encoding_info)["bitwidth"].template get<int>();
 
   if (bitwidth == 32) {
     return ort_name;  // This is not a quantized tensor.
@@ -79,19 +110,13 @@ std::string QnnModelWrapper::GetQnnOutputName(const std::string& ort_name, bool 
     return ort_name; 
   }
 
-  if (!tensor_encodings_.contains("activation_encodings")) {
-    LOGS(logger_, ERROR) << "Invalid tensor encodings file is missing 'activation_encodings' field.";
-    return ort_name;
-  }
-
-  const auto& activation_encodings = tensor_encodings_["activation_encodings"];
-  if (!activation_encodings.contains(ort_name)) {
+  const nlohmann::json* encoding_info = nullptr;
+  if (!GetActivationEncodingInfo(ort_name, tensor_encodings_, &encoding_info)) {
     LOGS(logger_, ERROR) << "Invalid tensor encodings file is missing tensor '" << ort_name << "'";
     return ort_name;
   }
 
-  const auto& encoding_info = activation_encodings[ort_name][0];
-  const int bitwidth = encoding_info["bitwidth"].template get<int>();
+  const int bitwidth = (*encoding_info)["bitwidth"].template get<int>();
 
   if (bitwidth == 32) {
     return ort_name;  // This is not a quantized tensor.
@@ -102,44 +127,45 @@ std::string QnnModelWrapper::GetQnnOutputName(const std::string& ort_name, bool 
   return new_name;  // TODO: Make sure this is unique in model
 }
 
-Status QnnModelWrapper::GetQnnDataType(const std::string& tensor_name, bool is_quantized_model, const ONNX_NAMESPACE::TypeProto* type_proto,
+Status QnnModelWrapper::GetQnnDataType(const std::string& tensor_name, bool is_quantized_model,
+                                       bool do_op_validation,
+                                       const ONNX_NAMESPACE::TypeProto* type_proto,
                                        Qnn_DataType_t& tensor_data_type) const {
   if (!is_quantized_model) {
     return utils::GetQnnDataType(is_quantized_model, type_proto, tensor_data_type);
   }
 
-  ORT_RETURN_IF_NOT(tensor_encodings_.contains("activation_encodings"),
-                    "Invalid tensor encodings file is missing 'activation_encodings' key.");
+  const nlohmann::json* encoding_info = nullptr;
+  if (!GetTensorEncodingInfo(tensor_name, tensor_encodings_, &encoding_info)) {
+    // Try looking for input/output.
+    const auto it = quant_io_to_orig_.find(tensor_name);
 
-  const auto& activation_encodings = tensor_encodings_["activation_encodings"];
-  if (activation_encodings.contains(tensor_name)) {
-    tensor_data_type = activation_encodings[tensor_name][0]["data_type"].template get<Qnn_DataType_t>();
-    return Status::OK();
-  }
-
-  ORT_RETURN_IF_NOT(tensor_encodings_.contains("param_encodings"),
-                    "Invalid tensor encodings file is missing 'param_encodings' key.");
-
-  const auto& param_encodings = tensor_encodings_["param_encodings"];
-  if (param_encodings.contains(tensor_name)) {
-    tensor_data_type = param_encodings[tensor_name][0]["data_type"].template get<Qnn_DataType_t>();
-    return Status::OK();
-  }
-
-  const auto it = quant_io_to_orig_.find(tensor_name);
-  if (it != quant_io_to_orig_.end()) {
-	if (activation_encodings.contains(it->second)) {
-      tensor_data_type = activation_encodings[it->second][0]["data_type"].template get<Qnn_DataType_t>();
-      return Status::OK();
+    if (it == quant_io_to_orig_.end()) {
+      if (do_op_validation) {
+        ORT_RETURN_IF_ERROR(utils::GetQnnDataType(is_quantized_model, type_proto, tensor_data_type));
+        if (tensor_data_type == QNN_DATATYPE_FLOAT_32) {
+          tensor_data_type = QNN_DATATYPE_UFIXED_POINT_8;
+        }
+        return Status::OK();
+      }
+      return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "Tensor '", tensor_name.c_str(), "' is not in encodings file.");
     }
 
-	if (param_encodings.contains(it->second)) {
-      tensor_data_type = param_encodings[it->second][0]["data_type"].template get<Qnn_DataType_t>();
-      return Status::OK();
+    if (!GetTensorEncodingInfo(it->second, tensor_encodings_, &encoding_info)) {
+      if (do_op_validation) {
+        ORT_RETURN_IF_ERROR(utils::GetQnnDataType(is_quantized_model, type_proto, tensor_data_type));
+        if (tensor_data_type == QNN_DATATYPE_FLOAT_32) {
+          tensor_data_type = QNN_DATATYPE_UFIXED_POINT_8;
+        }
+        return Status::OK();
+      }
+      return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "Tensor '", tensor_name.c_str(), "' is not in encodings file.");
     }
   }
 
-  return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "Tensor '", tensor_name.c_str(), "' is not in encodings file.");
+  tensor_data_type = (*encoding_info)["data_type"].template get<Qnn_DataType_t>();
+
+  return Status::OK();
 }
 
 bool QnnModelWrapper::IsQnnTensorWrapperExist(const std::string& name) const {
@@ -378,6 +404,7 @@ bool QnnModelWrapper::GetOnnxShape(const NodeArg& node_arg, std::vector<uint32_t
   return true;
 }
 
+/*
 bool QnnModelWrapper::ProcessOffset(const std::string& offset_name,
                                     int32_t& offset_value) const {
   const auto& graph_initializers = GetInitializerTensors();
@@ -437,23 +464,32 @@ bool QnnModelWrapper::ProcessScale(const std::string& scale_name,
   scale_value = scale_data[0];
   return true;
 }
+*/
 
-bool QnnModelWrapper::ProcessQuantizationParameter(const std::optional<NodeUnitIODef::QuantParam>& quant_param,
+bool QnnModelWrapper::ProcessQuantizationParameter(const std::string& tensor_name,
                                                    float& scale_value,
-                                                   int32_t& offset_value) const {
-  if (quant_param.has_value()) {
-    // Parse scale & zero_point
-    const auto& scale_name = quant_param->scale.Name();
-    bool rt = ProcessScale(scale_name, scale_value);
-    if (!rt) {
-      return rt;
+                                                   int32_t& offset_value, bool do_op_validation) const {
+  const nlohmann::json* encoding_info = nullptr;
+  if (!GetTensorEncodingInfo(tensor_name, tensor_encodings_, &encoding_info)) {
+    // Try looking for input/output.
+    const auto it = quant_io_to_orig_.find(tensor_name);
+
+    if (it == quant_io_to_orig_.end()) {
+      offset_value = 0;
+      scale_value = 0.0f;
+      return do_op_validation;
     }
 
-    if (quant_param->zero_point) {
-      const auto& zero_point_name = quant_param->zero_point->Name();
-      return ProcessOffset(zero_point_name, offset_value);
+    if (!GetTensorEncodingInfo(it->second, tensor_encodings_, &encoding_info)) {
+      offset_value = 0;
+      scale_value = 0.0f;
+      return do_op_validation;
     }
   }
+
+  scale_value = (*encoding_info)["scale"].template get<float>();
+  offset_value = (*encoding_info)["offset"].template get<int32_t>();
+
   return true;
 }
 
@@ -526,7 +562,34 @@ void QnnModelWrapper::GetGraphInputOutputTensorWrapper(const std::vector<std::st
 }
 
 Status QnnModelWrapper::UnpackInitializerData(const ONNX_NAMESPACE::TensorProto& initializer,
-                                              std::vector<uint8_t>& unpacked_tensor) const {
+                                              std::vector<uint8_t>& unpacked_tensor, bool is_quantized_model,
+                                              const std::string& initializer_name) const {
+  // Quantized model: manually quantize weights.
+  // TODO: Read quantized weights from a binary file.
+  if (is_quantized_model && initializer.data_type() == ONNX_NAMESPACE::TensorProto_DataType_FLOAT) {
+    const nlohmann::json* encoding_info = nullptr;
+    ORT_RETURN_IF_NOT(GetWeightEncodingInfo(initializer_name, tensor_encodings_, &encoding_info),
+                      "Cannot get encoding for weight '", initializer_name.c_str(), "'");
+
+    const float scale = (*encoding_info)["scale"].template get<float>();
+    const int8_t offset = -((*encoding_info)["offset"].template get<int8_t>());  // Negate offset from QNN.
+    size_t size_bytes = 0;
+    ORT_RETURN_IF_ERROR(onnxruntime::utils::GetSizeInBytesFromTensorProto<0>(initializer, &size_bytes));
+    const size_t num_elements =  size_bytes / sizeof(float);
+    concurrency::ThreadPool* thread_pool = nullptr;
+    std::vector<float> float_weights;
+    float_weights.resize(num_elements);
+    unpacked_tensor.resize(num_elements);
+
+    ORT_RETURN_IF_ERROR(onnxruntime::utils::UnpackTensor<float>(initializer, graph_viewer_.ModelPath(),
+                                                                float_weights.data(), num_elements));
+
+    ParQuantizeLinearStd(float_weights.data(),
+                         unpacked_tensor.data(), num_elements, scale, static_cast<uint8_t>(offset), thread_pool);
+	return Status::OK();
+  }
+
+  // Float32 model.
   if (initializer.data_location() == onnx::TensorProto_DataLocation_EXTERNAL) {
     return onnxruntime::utils::UnpackInitializerData(initializer, graph_viewer_.ModelPath(), unpacked_tensor);
   }

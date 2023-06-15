@@ -40,12 +40,11 @@ Status SplitOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
                                      bool is_quantized_model,
                                      std::vector<std::string>& input_names,
                                      bool do_op_validation) const {
-  ORT_UNUSED_PARAMETER(do_op_validation);
-
   // Only support 1 input, Onnx Opset version < 11, or input 2 is initializer
   // doesn't support input 2 (split data) from dynamic input
   const auto& inputs = node_unit.Inputs();
-  ORT_RETURN_IF_ERROR(ProcessInput(qnn_model_wrapper, inputs[0], logger, is_quantized_model, input_names));
+  ORT_RETURN_IF_ERROR(ProcessInput(qnn_model_wrapper, inputs[0], logger, is_quantized_model, do_op_validation,
+                                   input_names));
 
   return Status::OK();
 }
@@ -67,13 +66,14 @@ Status SplitOpBuilder::ProcessAttributesAndOutputs(QnnModelWrapper& qnn_model_wr
   std::vector<uint32_t> split_index;
   const auto& inputs = node_unit.Inputs();
   if (inputs.size() > 1) {
-    //auto& input_name = node_unit.Inputs()[1].node_arg.Name();
+    // auto& input_name = node_unit.Inputs()[1].node_arg.Name();
     const std::string input_name = qnn_model_wrapper.GetQnnInputName(inputs[1].node_arg.Name(), is_quantized_model);
     bool is_initializer_input = qnn_model_wrapper.IsInitializerInput(input_name);
     if (is_initializer_input) {
       std::vector<uint8_t> unpacked_tensor;
       const auto& input_tensor = qnn_model_wrapper.GetInitializerTensors().at(input_name);
-      ORT_RETURN_IF_ERROR(qnn_model_wrapper.UnpackInitializerData(*input_tensor, unpacked_tensor));
+      ORT_RETURN_IF_ERROR(qnn_model_wrapper.UnpackInitializerData(*input_tensor, unpacked_tensor, is_quantized_model,
+                                                                  input_name));
       const int64_t* tensor_data = reinterpret_cast<const int64_t*>(unpacked_tensor.data());
       size_t tensor_byte_size = unpacked_tensor.size();
       size_t size = tensor_byte_size / sizeof(int64_t);

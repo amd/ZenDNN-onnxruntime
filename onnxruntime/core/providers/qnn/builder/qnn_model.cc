@@ -121,6 +121,68 @@ Status QnnModel::ComposeGraph(const GraphViewer& graph_viewer,
     return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "Failed to initialize qnn_model_wrapper.");
   }
 
+  // Add quantize nodes for graph inputs.
+  if (is_quantized_model_) {
+    for (const auto& [name, input] : inputs_info_) {
+      if (input.data_type_ != ONNX_NAMESPACE::TensorProto_DataType_FLOAT) {
+        continue;
+      }
+
+      std::vector<std::string> quant_op_in_names;
+      std::vector<std::string> quant_op_out_names;
+
+	  std::vector<uint32_t> shape;
+	  shape.resize(input.shape_.size());
+	  std::transform(input.shape_.begin(), input.shape_.end(), shape.begin(),
+				     [](int64_t item) -> uint32_t { return SafeInt<uint32_t>(item); });
+
+      // Add input tensor.
+      {
+        Qnn_QuantizeParams_t quantize_param = QNN_QUANTIZE_PARAMS_INIT;
+        quantize_param.encodingDefinition = QNN_DEFINITION_DEFINED;  // TODO: Needed????
+        quantize_param.quantizationEncoding = QNN_QUANTIZATION_ENCODING_SCALE_OFFSET;
+
+        std::vector<uint32_t> input_shape = shape;
+        QnnTensorWrapper tensor(name, QNN_TENSOR_TYPE_APP_WRITE, QNN_DATATYPE_FLOAT_32, quantize_param,
+                                std::move(input_shape));
+
+        ORT_RETURN_IF_NOT(qnn_model_wrapper.AddTensorWrapper(std::move(tensor)), "Failed to add input tensor.");
+        quant_op_in_names.push_back(name);
+      }
+
+      // Add Quantize op's output tensor.
+      {
+        std::string output_name = name + "_qnn_ep_quant";
+        const nlohmann::json* encoding_info = nullptr;
+        ORT_RETURN_IF_NOT(GetActivationEncodingInfo(name, tensor_encodings, &encoding_info));
+
+        Qnn_QuantizeParams_t quantize_param = QNN_QUANTIZE_PARAMS_INIT;
+        quantize_param.encodingDefinition = QNN_DEFINITION_DEFINED;
+        quantize_param.quantizationEncoding = QNN_QUANTIZATION_ENCODING_SCALE_OFFSET;
+        quantize_param.scaleOffsetEncoding.scale = (*encoding_info)["scale"].template get<float>();
+        quantize_param.scaleOffsetEncoding.offset = (*encoding_info)["offset"].template get<int32_t>();
+
+        Qnn_DataType_t qnn_data_type = (*encoding_info)["data_type"].template get<Qnn_DataType_t>();
+        std::vector<uint32_t> output_shape = shape;
+        QnnTensorWrapper tensor(output_name, QNN_TENSOR_TYPE_NATIVE, qnn_data_type, quantize_param,
+                                std::move(output_shape));
+
+        ORT_RETURN_IF_NOT(qnn_model_wrapper.AddTensorWrapper(std::move(tensor)),
+                          "Failed to add quantized input tensor.");
+        quant_op_out_names.push_back(std::move(output_name));
+      }
+
+      ORT_RETURN_IF_NOT(qnn_model_wrapper.CreateQnnNode(name + "_qnn_ep_quantizer",
+                                                        qnn_def::package_name,
+                                                        QNN_OP_QUANTIZE,
+                                                        std::move(quant_op_in_names),
+                                                        std::move(quant_op_out_names),
+                                                        {},
+                                                        false),
+                        "Failed to add input Quantize node.");
+    }
+  }
+
   // Op builer
   const auto& node_indices = graph_viewer.GetNodesInTopologicalOrder();
   for (size_t i = 0; i < node_indices.size(); i++) {
@@ -142,6 +204,49 @@ Status QnnModel::ComposeGraph(const GraphViewer& graph_viewer,
     if (const auto* op_builder = GetOpBuilder(node->OpType())) {
       ORT_RETURN_IF_ERROR(op_builder->AddToModelBuilder(qnn_model_wrapper, node_unit, logger_,
                                                         is_quantized_model_));
+    }
+  }
+
+  // Add dequantize nodes for graph outputs.
+  if (is_quantized_model_) {
+    for (const auto& [name, output] : outputs_info_) {
+      if (output.data_type_ != ONNX_NAMESPACE::TensorProto_DataType_FLOAT) {
+        continue;
+      }
+
+      std::vector<std::string> dequant_op_in_names;
+      std::vector<std::string> dequant_op_out_names;
+
+	  std::vector<uint32_t> shape;
+	  shape.resize(output.shape_.size());
+	  std::transform(output.shape_.begin(), output.shape_.end(), shape.begin(),
+				     [](int64_t item) -> uint32_t { return SafeInt<uint32_t>(item); });
+
+      dequant_op_in_names.push_back(name + "_qnn_ep_quant");
+
+      // Add Dequantize op's output tensor, which is also the graph's float32 output
+      {
+        Qnn_QuantizeParams_t quantize_param = QNN_QUANTIZE_PARAMS_INIT;
+        quantize_param.encodingDefinition = QNN_DEFINITION_DEFINED;
+        quantize_param.quantizationEncoding = QNN_QUANTIZATION_ENCODING_SCALE_OFFSET;
+
+        std::vector<uint32_t> output_shape = shape;
+        QnnTensorWrapper tensor(name, QNN_TENSOR_TYPE_APP_READ, QNN_DATATYPE_FLOAT_32, quantize_param,
+                                std::move(output_shape));
+
+        ORT_RETURN_IF_NOT(qnn_model_wrapper.AddTensorWrapper(std::move(tensor)),
+                          "Failed to add dequantized output tensor.");
+        dequant_op_out_names.push_back(std::move(name));
+      }
+
+      ORT_RETURN_IF_NOT(qnn_model_wrapper.CreateQnnNode(name + "_qnn_ep_dequantizer",
+                                                        qnn_def::package_name,
+                                                        QNN_OP_DEQUANTIZE,
+                                                        std::move(dequant_op_in_names),
+                                                        std::move(dequant_op_out_names),
+                                                        {},
+                                                        false),
+                        "Failed to add output Dequantize node.");
     }
   }
 

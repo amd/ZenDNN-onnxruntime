@@ -49,8 +49,9 @@ Status BaseOpBuilder::ProcessInput(QnnModelWrapper& qnn_model_wrapper,
                                    const NodeUnitIODef& input,
                                    const logging::Logger& logger,
                                    bool is_quantized_model,
+                                   bool do_op_validation,
                                    std::vector<std::string>& input_names) const {
-  //const auto& input_name = input.node_arg.Name();
+  // const auto& input_name = input.node_arg.Name();
 
   const std::string input_name = qnn_model_wrapper.GetQnnInputName(input.node_arg.Name(), is_quantized_model);
 
@@ -64,9 +65,10 @@ Status BaseOpBuilder::ProcessInput(QnnModelWrapper& qnn_model_wrapper,
   InitializeQuantizeParam(quantize_param, is_quantized_model);
 
   if (is_quantized_model) {
-    ORT_RETURN_IF_NOT(qnn_model_wrapper.ProcessQuantizationParameter(input.quant_param,
+    ORT_RETURN_IF_NOT(qnn_model_wrapper.ProcessQuantizationParameter(input_name,
                                                                      quantize_param.scaleOffsetEncoding.scale,
-                                                                     quantize_param.scaleOffsetEncoding.offset),
+                                                                     quantize_param.scaleOffsetEncoding.offset,
+                                                                     do_op_validation),
                       "Cannot get quantization parameter");
   }
 
@@ -74,7 +76,8 @@ Status BaseOpBuilder::ProcessInput(QnnModelWrapper& qnn_model_wrapper,
   bool is_initializer_input = qnn_model_wrapper.IsInitializerInput(input_name);
   if (is_initializer_input) {
     const auto& input_tensor = qnn_model_wrapper.GetInitializerTensors().at(input_name);
-    ORT_RETURN_IF_ERROR(qnn_model_wrapper.UnpackInitializerData(*input_tensor, unpacked_tensor));
+    ORT_RETURN_IF_ERROR(qnn_model_wrapper.UnpackInitializerData(*input_tensor, unpacked_tensor, is_quantized_model,
+                                                                input_name));
   }
 
   Qnn_TensorType_t tensor_type = GetInputTensorType(qnn_model_wrapper, input_name);
@@ -82,8 +85,9 @@ Status BaseOpBuilder::ProcessInput(QnnModelWrapper& qnn_model_wrapper,
   ORT_RETURN_IF_NOT(qnn_model_wrapper.GetOnnxShape(input.node_arg, input_shape), "Cannot get shape");
   Qnn_DataType_t qnn_data_type = QNN_DATATYPE_FLOAT_32;
   const auto* type_proto = input.node_arg.TypeAsProto();
-  ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(input_name, is_quantized_model, type_proto, qnn_data_type));
-  //ORT_RETURN_IF_ERROR(GetQnnDataType(is_quantized_model, type_proto, qnn_data_type));
+  ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(input_name, is_quantized_model, do_op_validation,
+                                                       type_proto, qnn_data_type));
+  // ORT_RETURN_IF_ERROR(GetQnnDataType(is_quantized_model, type_proto, qnn_data_type));
   QnnTensorWrapper input_tensorwrapper(input_name, tensor_type, qnn_data_type, quantize_param,
                                        std::move(input_shape), std::move(unpacked_tensor));
   ORT_RETURN_IF_NOT(qnn_model_wrapper.AddTensorWrapper(std::move(input_tensorwrapper)), "Failed to add tensor.");
@@ -98,12 +102,11 @@ Status BaseOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
                                     bool is_quantized_model,
                                     std::vector<std::string>& input_names,
                                     bool do_op_validation) const {
-  ORT_UNUSED_PARAMETER(do_op_validation);
-
   const auto& inputs = node_unit.Inputs();
   const auto input_count = GetInputCountQnnRequired(node_unit);
   for (size_t input_i = 0; input_i < input_count; ++input_i) {
-    ORT_RETURN_IF_ERROR(ProcessInput(qnn_model_wrapper, inputs[input_i], logger, is_quantized_model, input_names));
+    ORT_RETURN_IF_ERROR(ProcessInput(qnn_model_wrapper, inputs[input_i], logger, is_quantized_model, do_op_validation,
+                                     input_names));
   }
 
   return Status::OK();
@@ -147,7 +150,7 @@ Status BaseOpBuilder::ProcessOutputs(QnnModelWrapper& qnn_model_wrapper,
 
   const auto output_count = GetOutputCountQnnRequired(node_unit);
   for (size_t output_i = 0; output_i < output_count; ++output_i) {
-    //const auto& output_name = outputs[output_i].node_arg.Name();
+    // const auto& output_name = outputs[output_i].node_arg.Name();
     const std::string output_name = qnn_model_wrapper.GetQnnOutputName(outputs[output_i].node_arg.Name(),
                                                                        is_quantized_model);
 
@@ -156,12 +159,17 @@ Status BaseOpBuilder::ProcessOutputs(QnnModelWrapper& qnn_model_wrapper,
 
     const auto* type_proto = outputs[output_i].node_arg.TypeAsProto();
     Qnn_DataType_t qnn_data_type = QNN_DATATYPE_UNDEFINED;
-    //ORT_RETURN_IF_ERROR(GetQnnDataType(is_quantized_model, type_proto, qnn_data_type));
-	ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(output_name, is_quantized_model, type_proto, qnn_data_type));
-    ORT_RETURN_IF_NOT(qnn_model_wrapper.ProcessQuantizationParameter(outputs[output_i].quant_param,
-                                                                     quantize_param.scaleOffsetEncoding.scale,
-                                                                     quantize_param.scaleOffsetEncoding.offset),
-                      "Cannot get quantization parameter");
+    // ORT_RETURN_IF_ERROR(GetQnnDataType(is_quantized_model, type_proto, qnn_data_type));
+    ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(output_name, is_quantized_model, do_op_validation,
+                                                         type_proto, qnn_data_type));
+
+    if (is_quantized_model) {
+      ORT_RETURN_IF_NOT(qnn_model_wrapper.ProcessQuantizationParameter(output_name,
+                                                                       quantize_param.scaleOffsetEncoding.scale,
+                                                                       quantize_param.scaleOffsetEncoding.offset,
+                                                                       do_op_validation),
+                        "Cannot get quantization parameter");
+    }
     std::vector<uint32_t> output_shape;
     ORT_RETURN_IF_NOT(qnn_model_wrapper.GetOnnxShape(outputs[output_i].node_arg, output_shape),
                       "Cannot get shape");
@@ -216,7 +224,9 @@ Status BaseOpBuilder::ProcessOutputs(QnnModelWrapper& qnn_model_wrapper,
 Status BaseOpBuilder::TransposeInitializer(const QnnModelWrapper& qnn_model_wrapper,
                                            const onnx::TensorProto& initializer,
                                            const std::vector<size_t>& perm,
-                                           std::vector<uint8_t>& transposed_data) const {
+                                           std::vector<uint8_t>& transposed_data,
+                                           bool is_quantized_model,
+                                           const std::string& initializer_name) const {
   const DataTypeImpl* tensor_dtype = DataTypeImpl::TensorTypeFromONNXEnum(initializer.data_type())->GetElementType();
   const auto tensor_shape_dims = onnxruntime::utils::GetTensorShapeFromTensorProto(initializer);
   TensorShape tensor_shape{tensor_shape_dims};
@@ -238,7 +248,8 @@ Status BaseOpBuilder::TransposeInitializer(const QnnModelWrapper& qnn_model_wrap
   ORT_RETURN_IF_ERROR(onnxruntime::utils::TensorProtoToTensor(Env::Default(), nullptr, initializer, in_tensor));
   ORT_RETURN_IF_ERROR(Transpose::DoTranspose(permutations, in_tensor, out_tensor));
   onnx::TensorProto new_tensor_proto = onnxruntime::utils::TensorToTensorProto(out_tensor, "test");
-  ORT_RETURN_IF_ERROR(qnn_model_wrapper.UnpackInitializerData(new_tensor_proto, transposed_data));
+  ORT_RETURN_IF_ERROR(qnn_model_wrapper.UnpackInitializerData(new_tensor_proto, transposed_data, is_quantized_model,
+                                                              initializer_name));
 
   return Status::OK();
 }

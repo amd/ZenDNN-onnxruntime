@@ -52,7 +52,7 @@ Status SliceOpBuilder::ExplictOpCheck(QnnModelWrapper& qnn_model_wrapper, const 
   if (input_count > 1) {
     // Skip the first input. All other input need to be initializer
     for (size_t i = 1; i < input_count; i++) {
-      //const auto& next_input = node_unit.Inputs()[i].node_arg.Name();
+      // const auto& next_input = node_unit.Inputs()[i].node_arg.Name();
       const std::string next_input = qnn_model_wrapper.GetQnnInputName(inputs[i].node_arg.Name(), is_quantized_model);
       if (!qnn_model_wrapper.IsInitializerInput(next_input)) {
         return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "QNN desn't support dynamic slice.");
@@ -105,13 +105,14 @@ Status SliceOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
   }
 
   for (size_t input_i = 0; input_i < input_count; ++input_i) {
-    //auto& input_name = inputs[input_i].node_arg.Name();
-    const std::string input_name = qnn_model_wrapper.GetQnnInputName(inputs[input_i].node_arg.Name(),
-                                                                     is_quantized_model);
-    if (input_name.empty()) {
+    // auto& input_name = inputs[input_i].node_arg.Name();
+    if (inputs[input_i].node_arg.Name().empty()) {
       // Ignore unspecified/unused optional input
       continue;
     }
+
+    const std::string input_name = qnn_model_wrapper.GetQnnInputName(inputs[input_i].node_arg.Name(),
+                                                                     is_quantized_model);
     if (qnn_model_wrapper.IsQnnTensorWrapperExist(input_name)) {
       LOGS(logger, VERBOSE) << "Tensor already added or the input is not named, skip it: " << input_name;
       input_names.push_back(input_name);
@@ -120,21 +121,26 @@ Status SliceOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
     }
 
     const auto* type_proto = inputs[input_i].node_arg.TypeAsProto();
-    ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(input_name, is_quantized_model, type_proto, qnn_data_type));
+    ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(input_name, is_quantized_model,
+                                                         do_op_validation, type_proto, qnn_data_type));
 
     std::vector<uint32_t> input_shape;
     ORT_RETURN_IF_NOT(qnn_model_wrapper.GetOnnxShape(inputs[input_i].node_arg, input_shape), "Cannot get shape");
 
-    ORT_RETURN_IF_NOT(qnn_model_wrapper.ProcessQuantizationParameter(inputs[input_i].quant_param,
-                                                                     quantize_param.scaleOffsetEncoding.scale,
-                                                                     quantize_param.scaleOffsetEncoding.offset),
-                      "Cannot get quantization parameter");
+    if (is_quantized_model) {
+      ORT_RETURN_IF_NOT(qnn_model_wrapper.ProcessQuantizationParameter(input_name,
+                                                                       quantize_param.scaleOffsetEncoding.scale,
+                                                                       quantize_param.scaleOffsetEncoding.offset,
+                                                                       do_op_validation),
+                        "Cannot get quantization parameter");
+    }
 
     std::vector<uint8_t> unpacked_tensor;
     bool is_initializer_input = qnn_model_wrapper.IsInitializerInput(input_name);
     if (is_initializer_input) {
       const auto& input_tensor = qnn_model_wrapper.GetInitializerTensors().at(input_name);
-      ORT_RETURN_IF_ERROR(qnn_model_wrapper.UnpackInitializerData(*input_tensor, unpacked_tensor));
+      ORT_RETURN_IF_ERROR(qnn_model_wrapper.UnpackInitializerData(*input_tensor, unpacked_tensor, is_quantized_model,
+                                                                  input_name));
       size_t tensor_byte_size = unpacked_tensor.size();
       const auto data_type = input_tensor->data_type();
       TensorShapeVector data;

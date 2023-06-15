@@ -43,7 +43,8 @@ class SimpleOpBuilder : public BaseOpBuilder {
   Status HandleSingleTransposeNode(QnnModelWrapper& qnn_model_wrapper,
                                    const NodeUnit& node_unit,
                                    std::vector<std::string>&& input_names,
-                                   bool is_quantized_model) const;
+                                   bool is_quantized_model,
+                                   bool do_op_validation) const;
 };
 
 Status SimpleOpBuilder::ExplictOpCheck(const QnnModelWrapper& qnn_model_wrapper, const NodeUnit& node_unit) const {
@@ -152,13 +153,14 @@ Status SimpleOpBuilder::ProcessAlphaAttributeAsInput(QnnModelWrapper& qnn_model_
 Status SimpleOpBuilder::HandleSingleTransposeNode(QnnModelWrapper& qnn_model_wrapper,
                                                   const NodeUnit& node_unit,
                                                   std::vector<std::string>&& input_names,
-                                                  bool is_quantized_model) const {
+                                                  bool is_quantized_model,
+                                                  bool do_op_validation) const {
   std::vector<std::string> param_tensor_names;
   ORT_RETURN_IF_ERROR(ProcessPermAttribute(qnn_model_wrapper, node_unit, param_tensor_names));
   const auto& outputs = node_unit.Outputs();
   ORT_ENFORCE(outputs.size() == 1, "QNN Transpose node must have a single output.");
   const auto& output = outputs[0];
-  //auto& output_name = output.node_arg.Name();
+  // auto& output_name = output.node_arg.Name();
   const std::string output_name = qnn_model_wrapper.GetQnnOutputName(output.node_arg.Name(), is_quantized_model);
 
   const bool is_graph_output = qnn_model_wrapper.IsGraphOutput(output_name);
@@ -168,7 +170,8 @@ Status SimpleOpBuilder::HandleSingleTransposeNode(QnnModelWrapper& qnn_model_wra
   if (is_graph_output) {
     const auto* type_proto = output.node_arg.TypeAsProto();
     Qnn_DataType_t qnn_data_type = QNN_DATATYPE_UNDEFINED;
-    ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(output_name, is_quantized_model, type_proto, qnn_data_type));
+    ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(output_name, is_quantized_model, do_op_validation,
+                                                         type_proto, qnn_data_type));
 
     Qnn_QuantizeParams_t quantize_param = QNN_QUANTIZE_PARAMS_INIT;
     std::vector<uint32_t> output_shape;
@@ -211,7 +214,8 @@ Status SimpleOpBuilder::ProcessAttributesAndOutputs(QnnModelWrapper& qnn_model_w
   } else if (is_quantized_model && NodeUnit::Type::SingleNode == node_unit.UnitType() &&
              op_type == "Transpose") {
     LOGS(logger, VERBOSE) << "Add single Transpose node: " << node_unit.Name();
-    return HandleSingleTransposeNode(qnn_model_wrapper, node_unit, std::move(input_names), is_quantized_model);
+    return HandleSingleTransposeNode(qnn_model_wrapper, node_unit, std::move(input_names), is_quantized_model,
+                                     do_op_validation);
   }
 
   std::vector<std::string> param_tensor_names;

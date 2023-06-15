@@ -47,7 +47,7 @@ Status TopKOpBuilder::ExplictOpCheck(QnnModelWrapper& qnn_model_wrapper, const N
   ORT_RETURN_IF_NOT(input_count >= TOPK_MIN_INPUT && input_count <= TOPK_MAX_INPUT,
                     "For ONNX TopK operation the expected number of inputs is 2.");
   // Skip the first input. The second input needs to be an initializer.
-  //const auto& input_1 = node_unit.Inputs()[1].node_arg.Name();
+  // const auto& input_1 = node_unit.Inputs()[1].node_arg.Name();
   const std::string input_1 = qnn_model_wrapper.GetQnnInputName(inputs[1].node_arg.Name(), is_quantized_model);
   if (!qnn_model_wrapper.IsInitializerInput(input_1)) {
     return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "The number of top elements to retrieve must be specified as constant input.");
@@ -84,7 +84,8 @@ Status TopKOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
   }
 
   const auto& inputs = node_unit.Inputs();
-  ORT_RETURN_IF_ERROR(ProcessInput(qnn_model_wrapper, inputs[0], logger, is_quantized_model, input_names));
+  ORT_RETURN_IF_ERROR(ProcessInput(qnn_model_wrapper, inputs[0], logger, is_quantized_model, do_op_validation,
+                                   input_names));
 
   return Status::OK();
 }
@@ -95,7 +96,7 @@ Status TopKOpBuilder::ProcessAttributesAndOutputs(QnnModelWrapper& qnn_model_wra
                                                   const logging::Logger& logger,
                                                   bool is_quantized_model,
                                                   bool do_op_validation) const {
-  //auto& input_name = node_unit.Inputs()[1].node_arg.Name();
+  // auto& input_name = node_unit.Inputs()[1].node_arg.Name();
   const std::string input_name = qnn_model_wrapper.GetQnnInputName(node_unit.Inputs()[1].node_arg.Name(),
                                                                    is_quantized_model);
   uint32_t k = 0;  // The number of elements to extract from the input tensor at each position.
@@ -103,7 +104,8 @@ Status TopKOpBuilder::ProcessAttributesAndOutputs(QnnModelWrapper& qnn_model_wra
   if (is_initializer_input) {
     std::vector<uint8_t> unpacked_tensor;
     const auto& input_tensor = qnn_model_wrapper.GetInitializerTensors().at(input_name);
-    ORT_RETURN_IF_ERROR(qnn_model_wrapper.UnpackInitializerData(*input_tensor, unpacked_tensor));
+    ORT_RETURN_IF_ERROR(qnn_model_wrapper.UnpackInitializerData(*input_tensor, unpacked_tensor, is_quantized_model,
+                                                                input_name));
     const int64_t* tensor_data = reinterpret_cast<const int64_t*>(unpacked_tensor.data());
     k = static_cast<uint32_t>(*tensor_data);
   } else {

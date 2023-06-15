@@ -91,7 +91,7 @@ Status GemmOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
 
   const auto& inputs = node_unit.Inputs();
   for (size_t input_i = 0; input_i < inputs.size(); ++input_i) {
-    //const auto& input_name = inputs[input_i].node_arg.Name();
+    // const auto& input_name = inputs[input_i].node_arg.Name();
     const std::string input_name = qnn_model_wrapper.GetQnnInputName(inputs[input_i].node_arg.Name(),
                                                                      is_quantized_model);
     if (qnn_model_wrapper.IsQnnTensorWrapperExist(input_name)) {
@@ -101,15 +101,19 @@ Status GemmOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
     }
 
     const auto* type_proto = inputs[input_i].node_arg.TypeAsProto();
-    ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(input_name, is_quantized_model, type_proto, qnn_data_type));
+    ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(input_name, is_quantized_model,
+                                                         do_op_validation, type_proto, qnn_data_type));
 
     std::vector<uint32_t> input_shape;
     ORT_RETURN_IF_NOT(qnn_model_wrapper.GetOnnxShape(inputs[input_i].node_arg, input_shape), "Cannot get shape");
 
-    ORT_RETURN_IF_NOT(qnn_model_wrapper.ProcessQuantizationParameter(inputs[input_i].quant_param,
-                                                                     quantize_param.scaleOffsetEncoding.scale,
-                                                                     quantize_param.scaleOffsetEncoding.offset),
-                      "Cannot get quantization parameter");
+    if (is_quantized_model) {
+      ORT_RETURN_IF_NOT(qnn_model_wrapper.ProcessQuantizationParameter(input_name,
+                                                                       quantize_param.scaleOffsetEncoding.scale,
+                                                                       quantize_param.scaleOffsetEncoding.offset,
+                                                                       do_op_validation),
+                        "Cannot get quantization parameter");
+    }
 
     std::vector<uint8_t> unpacked_tensor;
     bool is_initializer_input = qnn_model_wrapper.IsInitializerInput(input_name);
@@ -119,9 +123,12 @@ Status GemmOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
         ORT_RETURN_IF_ERROR(TwoDimensionTranspose(qnn_model_wrapper,
                                                   input_shape,
                                                   *input_tensor,
-                                                  unpacked_tensor));
+                                                  unpacked_tensor,
+                                                  is_quantized_model,
+                                                  input_name));
       } else {
-        ORT_RETURN_IF_ERROR(qnn_model_wrapper.UnpackInitializerData(*input_tensor, unpacked_tensor));
+        ORT_RETURN_IF_ERROR(qnn_model_wrapper.UnpackInitializerData(*input_tensor, unpacked_tensor, is_quantized_model,
+                                                                    input_name));
       }
     }
 

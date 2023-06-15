@@ -46,7 +46,7 @@ Status CastOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
   ORT_ENFORCE(inputs.size() == 1, "QNN Cast node must have a single input.");
   const auto& input = inputs[0];
 
-  //const auto& input_name = input.node_arg.Name();
+  // const auto& input_name = input.node_arg.Name();
   const std::string input_name = qnn_model_wrapper.GetQnnInputName(input.node_arg.Name(), is_quantized_model);
 
   if (qnn_model_wrapper.IsQnnTensorWrapperExist(input_name)) {
@@ -59,7 +59,8 @@ Status CastOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
   bool is_initializer_input = qnn_model_wrapper.IsInitializerInput(input_name);
   if (is_initializer_input) {
     const auto& input_tensor = qnn_model_wrapper.GetInitializerTensors().at(input_name);
-    ORT_RETURN_IF_ERROR(qnn_model_wrapper.UnpackInitializerData(*input_tensor, unpacked_tensor));
+    ORT_RETURN_IF_ERROR(qnn_model_wrapper.UnpackInitializerData(*input_tensor, unpacked_tensor, is_quantized_model,
+                                                                input_name));
   }
 
   Qnn_TensorType_t tensor_type = GetInputTensorType(qnn_model_wrapper, input_name);
@@ -71,6 +72,7 @@ Status CastOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
   const auto* type_proto = input.node_arg.TypeAsProto();
 
   ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(input_name, false,  // Do not try to get the quantized type. HTP cast supports normal types.
+                                                       do_op_validation,
                                                        type_proto,
                                                        qnn_data_type));
 
@@ -95,12 +97,13 @@ Status CastOpBuilder::ProcessAttributesAndOutputs(QnnModelWrapper& qnn_model_wra
   const auto& outputs = node_unit.Outputs();
   ORT_ENFORCE(outputs.size() == 1, "QNN Cast node must have a single output.");
   const auto& output = outputs[0];
-  //const auto& output_name = output.node_arg.Name();
+  // const auto& output_name = output.node_arg.Name();
   const std::string output_name = qnn_model_wrapper.GetQnnOutputName(output.node_arg.Name(), is_quantized_model);
 
   const auto* type_proto = output.node_arg.TypeAsProto();
   Qnn_DataType_t qnn_data_type = QNN_DATATYPE_UNDEFINED;
   ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(output_name, false,  // Do not try to get the quantized type. HTP cast supports normal types.
+                                                       do_op_validation,
                                                        type_proto,
                                                        qnn_data_type));
 

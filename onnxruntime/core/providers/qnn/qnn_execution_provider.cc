@@ -188,6 +188,7 @@ bool QNNExecutionProvider::IsNodeSupported(qnn::QnnModelWrapper& qnn_model_wrapp
     // Q/DQ nodes -- supported
     // Transpose nodes -- supported
     // Cast nodes -- need to call CastOpBuilder::IsOpSupported
+    /*
     if (is_npu_backend && NodeUnit::Type::SingleNode == node_unit.UnitType()) {
       if (IsQdqNode(node_unit)) {  // Qnn has Quantize & Dequantize Op
         LOGS(logger, VERBOSE) << "Single Q/DQ node is supported for NPU backend. Node name: " << node_unit.Name();
@@ -208,6 +209,7 @@ bool QNNExecutionProvider::IsNodeSupported(qnn::QnnModelWrapper& qnn_model_wrapp
         return false;
       }
     }
+    */
 
     // Non-NPU backend, quantized model not supported, but a QDQ node encountered
     if (!is_npu_backend && IsQdqNode(node_unit)) {

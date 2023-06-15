@@ -44,10 +44,11 @@ Status GatherOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
   ORT_UNUSED_PARAMETER(do_op_validation);
   const auto& inputs = node_unit.Inputs();
   ORT_RETURN_IF(inputs.size() != 2, "Gather should has 2 inputs at least!");
-  ORT_RETURN_IF_ERROR(ProcessInput(qnn_model_wrapper, inputs[0], logger, is_quantized_model, input_names));
+  ORT_RETURN_IF_ERROR(ProcessInput(qnn_model_wrapper, inputs[0], logger, is_quantized_model, do_op_validation,
+                                   input_names));
 
   // Process indices
-  //const auto& input_name = inputs[1].node_arg.Name();
+  // const auto& input_name = inputs[1].node_arg.Name();
   const std::string input_name = qnn_model_wrapper.GetQnnInputName(inputs[1].node_arg.Name(), is_quantized_model);
   if (qnn_model_wrapper.IsQnnTensorWrapperExist(input_name)) {
     LOGS(logger, VERBOSE) << "Tensor already added, skip it: " << input_name;
@@ -58,7 +59,7 @@ Status GatherOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
   std::string indices_input_name(input_name);
   Qnn_DataType_t qnn_data_type = QNN_DATATYPE_INT_32;
   const auto* type_proto = inputs[1].node_arg.TypeAsProto();
-  ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(input_name, false, type_proto, qnn_data_type));
+  ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(input_name, false, do_op_validation, type_proto, qnn_data_type));
 
   std::vector<uint8_t> unpacked_tensor;
   std::vector<uint8_t> gather_indices;
@@ -69,7 +70,8 @@ Status GatherOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
 
   if (is_initializer_input) {
     const auto& input_tensor = qnn_model_wrapper.GetInitializerTensors().at(input_name);
-    ORT_RETURN_IF_ERROR(qnn_model_wrapper.UnpackInitializerData(*input_tensor, unpacked_tensor));
+    ORT_RETURN_IF_ERROR(qnn_model_wrapper.UnpackInitializerData(*input_tensor, unpacked_tensor, is_quantized_model,
+                                                                input_name));
     if (qnn_data_type == QNN_DATATYPE_INT_64) {
       // Convert initializer from int64 to int32
       size_t size = unpacked_tensor.size() / sizeof(int64_t);
@@ -160,7 +162,7 @@ Status GatherOpBuilder::ProcessAttributesAndOutputs(QnnModelWrapper& qnn_model_w
             std::back_inserter(qnn_output_shape));
 
   const auto& gather_output = node_unit.Outputs()[0];
-  //const auto& output_name = gather_output.node_arg.Name();
+  // const auto& output_name = gather_output.node_arg.Name();
   const std::string output_name = qnn_model_wrapper.GetQnnOutputName(gather_output.node_arg.Name(), is_quantized_model);
 
   Qnn_QuantizeParams_t quantize_param = QNN_QUANTIZE_PARAMS_INIT;
@@ -168,11 +170,15 @@ Status GatherOpBuilder::ProcessAttributesAndOutputs(QnnModelWrapper& qnn_model_w
 
   const auto* type_proto = gather_output.node_arg.TypeAsProto();
   Qnn_DataType_t qnn_data_type = QNN_DATATYPE_FLOAT_32;
-  ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(output_name, is_quantized_model, type_proto, qnn_data_type));
-  ORT_RETURN_IF_NOT(qnn_model_wrapper.ProcessQuantizationParameter(gather_output.quant_param,
-                                                                   quantize_param.scaleOffsetEncoding.scale,
-                                                                   quantize_param.scaleOffsetEncoding.offset),
-                    "Cannot get quantization parameter");
+  ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(output_name, is_quantized_model, do_op_validation,
+                                                       type_proto, qnn_data_type));
+  if (is_quantized_model) {
+    ORT_RETURN_IF_NOT(qnn_model_wrapper.ProcessQuantizationParameter(output_name,
+                                                                     quantize_param.scaleOffsetEncoding.scale,
+                                                                     quantize_param.scaleOffsetEncoding.offset,
+                                                                     do_op_validation),
+                      "Cannot get quantization parameter");
+  }
   std::vector<uint32_t> target_output_shape;
   ORT_RETURN_IF_NOT(qnn_model_wrapper.GetOnnxShape(gather_output.node_arg, target_output_shape),
                     "Cannot get shape");

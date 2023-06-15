@@ -131,7 +131,7 @@ Status ReduceOpBuilder::GetAxesSet(QnnModelWrapper& qnn_model_wrapper, const Nod
 
     // Empty axes means to use default axes (when noop_with_empty_axes is 0).
     if (axes_shape[0] > 0) {
-      //const std::string& axes_input_name = inputs[1].node_arg.Name();
+      // const std::string& axes_input_name = inputs[1].node_arg.Name();
       const std::string axes_input_name = qnn_model_wrapper.GetQnnInputName(inputs[1].node_arg.Name(),
                                                                             is_quantized_model);
 
@@ -144,7 +144,8 @@ Status ReduceOpBuilder::GetAxesSet(QnnModelWrapper& qnn_model_wrapper, const Nod
       const auto& axes_tensor = qnn_model_wrapper.GetInitializerTensors().at(axes_input_name);
       std::vector<uint8_t> axes_bytes;
 
-      ORT_RETURN_IF_ERROR(qnn_model_wrapper.UnpackInitializerData(*axes_tensor, axes_bytes));
+      ORT_RETURN_IF_ERROR(qnn_model_wrapper.UnpackInitializerData(*axes_tensor, axes_bytes, is_quantized_model,
+                                                                  axes_input_name));
       ORT_ENFORCE(input_rank * sizeof(AxesOnnxIntType) >= axes_bytes.size(),
                   "Expect QNN Reduce* operator to have at most rank(input[0]) axes elements.");
       reduce_axes.resize(axes_bytes.size() / sizeof(AxesOnnxIntType));
@@ -202,13 +203,12 @@ Status ReduceOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
                                       bool is_quantized_model,
                                       std::vector<std::string>& input_names,
                                       bool do_op_validation) const {
-  ORT_UNUSED_PARAMETER(do_op_validation);
-
   const auto& inputs = node_unit.Inputs();
 
   // Only need to process input[0]. In newer opset versions, input[1] corresponds to the reduce axes,
   // which needs to be set as a QNN parameter.
-  ORT_RETURN_IF_ERROR(ProcessInput(qnn_model_wrapper, inputs[0], logger, is_quantized_model, input_names));
+  ORT_RETURN_IF_ERROR(ProcessInput(qnn_model_wrapper, inputs[0], logger, is_quantized_model, do_op_validation,
+                                   input_names));
 
   return Status::OK();
 }

@@ -49,7 +49,8 @@ class QnnModelWrapper {
   std::string GetQnnInputName(const std::string& ort_name, bool is_quantized_model);
   std::string GetQnnOutputName(const std::string& ort_name, bool is_quantized_model);
 
-  Status GetQnnDataType(const std::string& tensor_name, bool is_quantized_model, const ONNX_NAMESPACE::TypeProto* type_proto,
+  Status GetQnnDataType(const std::string& tensor_name, bool is_quantized_model, bool do_op_validation,
+                        const ONNX_NAMESPACE::TypeProto* type_proto,
                         Qnn_DataType_t& tensor_data_type) const;
 
   // Add to internal tensor wrapper table
@@ -94,15 +95,18 @@ class QnnModelWrapper {
 
   static bool GetOnnxShape(const NodeArg& node_arg, std::vector<uint32_t>& shape);
 
+  /*
   bool ProcessOffset(const std::string& offset_name,
                      int32_t& offset_value) const;
 
   bool ProcessScale(const std::string& scale_name,
                     float& scale_value) const;
+  */
 
-  bool ProcessQuantizationParameter(const std::optional<NodeUnitIODef::QuantParam>& quant_param,
+  bool ProcessQuantizationParameter(const std::string& tensor_name,
                                     float& scale_value,
-                                    int32_t& offset_value) const;
+                                    int32_t& offset_value,
+                                    bool do_op_validation) const;
 
   bool IsQnnTensorWrapperExist(const std::string& tensor_name) const;
 
@@ -169,7 +173,8 @@ class QnnModelWrapper {
   }
 
   Status UnpackInitializerData(const ONNX_NAMESPACE::TensorProto& initializer,
-                               std::vector<uint8_t>& unpacked_tensor) const;
+                               std::vector<uint8_t>& unpacked_tensor,
+                               bool is_quantized_model, const std::string& initializer_name) const;
 
  private:
   bool CreateQnnInputOutputTensors(const std::string& qnn_node_name,
@@ -233,5 +238,11 @@ class QnnModelWrapper {
   std::unordered_map<std::string, std::string> quant_io_to_orig_;
 };  // QnnModelWrapper
 
+bool GetActivationEncodingInfo(const std::string& tensor_name, const nlohmann::json& tensor_encodings,
+                               const nlohmann::json** info);
+bool GetWeightEncodingInfo(const std::string& tensor_name, const nlohmann::json& tensor_encodings,
+                               const nlohmann::json** info);
+bool GetTensorEncodingInfo(const std::string& tensor_name, const nlohmann::json& tensor_encodings,
+                           const nlohmann::json** info);
 }  // namespace qnn
 }  // namespace onnxruntime

@@ -134,20 +134,24 @@ Status ConvOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
   auto inputs = node_unit.Inputs();
 
   for (size_t input_i = 0; input_i < inputs.size(); ++input_i) {
-    //const auto& input_name = inputs[input_i].node_arg.Name();
+    // const auto& input_name = inputs[input_i].node_arg.Name();
     const std::string input_name = qnn_model_wrapper.GetQnnInputName(inputs[input_i].node_arg.Name(),
                                                                      is_quantized_model);
 
     const auto* type_proto = inputs[input_i].node_arg.TypeAsProto();
-    ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(input_name, is_quantized_model, type_proto, qnn_data_type));
+    ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(input_name, is_quantized_model,
+                                                         do_op_validation, type_proto, qnn_data_type));
 
     std::vector<uint32_t> input_shape;
     ORT_RETURN_IF_NOT(qnn_model_wrapper.GetOnnxShape(inputs[input_i].node_arg, input_shape), "Cannot get shape");
 
-    ORT_RETURN_IF_NOT(qnn_model_wrapper.ProcessQuantizationParameter(inputs[input_i].quant_param,
-                                                                     quantize_param.scaleOffsetEncoding.scale,
-                                                                     quantize_param.scaleOffsetEncoding.offset),
-                      "Cannot get quantization parameter");
+    if (is_quantized_model) {
+      ORT_RETURN_IF_NOT(qnn_model_wrapper.ProcessQuantizationParameter(input_name,
+                                                                       quantize_param.scaleOffsetEncoding.scale,
+                                                                       quantize_param.scaleOffsetEncoding.offset,
+                                                                       do_op_validation),
+                        "Cannot get quantization parameter");
+    }
 
     std::vector<uint8_t> unpacked_tensor;
     bool is_initializer_input = qnn_model_wrapper.IsInitializerInput(input_name);
@@ -155,14 +159,17 @@ Status ConvOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
       const auto& input_tensor = qnn_model_wrapper.GetInitializerTensors().at(input_name);
       if (1 == input_i) {  // qnn Conv weight requires HWCN
         if (node_unit.OpType() == "Conv") {
-          ORT_RETURN_IF_ERROR(TransposeFromNchwToHwcn(qnn_model_wrapper, *input_tensor, unpacked_tensor));
+          ORT_RETURN_IF_ERROR(TransposeFromNchwToHwcn(qnn_model_wrapper, *input_tensor, unpacked_tensor,
+                                                      is_quantized_model, input_name));
         } else if (node_unit.OpType() == "ConvTranspose") {
-          ORT_RETURN_IF_ERROR(TransposeFromCnhwToHwcn(qnn_model_wrapper, *input_tensor, unpacked_tensor));
+          ORT_RETURN_IF_ERROR(TransposeFromCnhwToHwcn(qnn_model_wrapper, *input_tensor, unpacked_tensor,
+                                                      is_quantized_model, input_name));
         } else {
           ORT_THROW("Unexpected operator %s", node_unit.OpType());
         }
       } else {
-        ORT_RETURN_IF_ERROR(qnn_model_wrapper.UnpackInitializerData(*input_tensor, unpacked_tensor));
+        ORT_RETURN_IF_ERROR(qnn_model_wrapper.UnpackInitializerData(*input_tensor, unpacked_tensor, is_quantized_model,
+                                                                    input_name));
       }
     }
 
@@ -279,7 +286,7 @@ Status ConvOpBuilder::ProcessAttributesAndOutputs(QnnModelWrapper& qnn_model_wra
   }
   // Conv/ConvTranspose output
   const auto& outputs = node_unit.Outputs();
-  //const auto& output_name = outputs[0].node_arg.Name();
+  // const auto& output_name = outputs[0].node_arg.Name();
   const std::string output_name = qnn_model_wrapper.GetQnnOutputName(outputs[0].node_arg.Name(), is_quantized_model);
 
   std::vector<uint32_t> output_shape;
@@ -359,11 +366,15 @@ Status ConvOpBuilder::ProcessAttributesAndOutputs(QnnModelWrapper& qnn_model_wra
 
   const auto* type_proto = outputs[0].node_arg.TypeAsProto();
   Qnn_DataType_t qnn_data_type = QNN_DATATYPE_FLOAT_32;
-  ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(output_name, is_quantized_model, type_proto, qnn_data_type));
-  ORT_RETURN_IF_NOT(qnn_model_wrapper.ProcessQuantizationParameter(outputs[0].quant_param,
-                                                                   output_quantize_param.scaleOffsetEncoding.scale,
-                                                                   output_quantize_param.scaleOffsetEncoding.offset),
-                    "Cannot get quantization parameter");
+  ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(output_name, is_quantized_model, do_op_validation,
+                                                       type_proto, qnn_data_type));
+  if (is_quantized_model) {
+    ORT_RETURN_IF_NOT(qnn_model_wrapper.ProcessQuantizationParameter(output_name,
+                                                                     output_quantize_param.scaleOffsetEncoding.scale,
+                                                                     output_quantize_param.scaleOffsetEncoding.offset,
+                                                                     do_op_validation),
+                      "Cannot get quantization parameter");
+  }
 
   const uint32_t group = SafeInt<uint32_t>(node_helper.Get("group", static_cast<int64_t>(1)));
   uint32_t num_output = output_shape[3];
