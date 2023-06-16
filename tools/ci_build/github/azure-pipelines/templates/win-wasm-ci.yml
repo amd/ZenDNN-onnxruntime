@@ -80,8 +80,8 @@ jobs:
   - task: PythonScript@0
     displayName: 'Build and test (browser) (simd + threads)'
     inputs:
-      scriptPath: '$(Build.SourcesDirectory)\tools\ci_build\build.py'
-      arguments: '$(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)\wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --wasm_run_tests_in_browser'
+      scriptPath: '$(Build.SourcesDirectory)/tools/i_build/build.py'
+      arguments: '$(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --wasm_run_tests_in_browser'
       workingDirectory: '$(Build.BinariesDirectory)'
 
   - ${{ if eq(parameters.SkipPublish, false) }}:
