@@ -28,8 +28,10 @@ parameters:
 
 jobs:
 - job: build_WASM
-  pool: ${{ parameters.PoolName }}
-
+  pool:
+    name: ${{ parameters.PoolName }}
+    demands:
+      ImageVersionOverride -equals 1.0.318581
   variables:
     EnvSetupScript: setup_env.bat
     buildArch: x64
