@@ -160,6 +160,14 @@ QNNExecutionProvider::QNNExecutionProvider(const ProviderOptions& provider_optio
     LOGS_DEFAULT(INFO) << "Tensor encodings filepath: " << tensor_encodings_filepath_;
   }
 
+  static const std::string QUANT_WEIGHTS_FILEPATH = "quant_weights_filepath";
+  auto quant_weights_filepath_pos = runtime_options_.find(QUANT_WEIGHTS_FILEPATH);
+
+  if (quant_weights_filepath_pos != runtime_options_.end()) {
+    quant_weights_filepath_ = quant_weights_filepath_pos->second;
+    LOGS_DEFAULT(INFO) << "Quantized weights filepath: " << quant_weights_filepath_;
+  }
+
   qnn_backend_manager_ = std::make_unique<qnn::QnnBackendManager>(backend_path_,
                                                                   profiling_level_,
                                                                   rpc_control_latency_,
@@ -263,8 +271,27 @@ QNNExecutionProvider::GetSupportedNodes(const GraphViewer& graph_viewer,
     initializer_input_lookup.emplace(graph_ini.first);
   }
 
-  std::ifstream f(tensor_encodings_filepath_);
-  nlohmann::json tensor_encodings = nlohmann::json::parse(f);
+  nlohmann::json tensor_encodings;
+  std::unordered_map<std::string, qnn::utils::QuantInitializerInfo> quant_initializer_infos;
+
+  if (qnn_backend_manager_->IsNpuBackend() && !tensor_encodings_filepath_.empty()) {
+    std::ifstream f(tensor_encodings_filepath_);
+
+    if (!f.is_open()) {
+      LOGS(logger, ERROR) << "Failed to open tensor encodings file: " << tensor_encodings_filepath_;
+      return supported_nodes;
+    }
+
+    tensor_encodings = nlohmann::json::parse(f);
+
+    if (!quant_weights_filepath_.empty()) {
+      auto read_status = qnn::utils::ReadQuantizedInitializerInfos(quant_weights_filepath_, quant_initializer_infos);
+      if (!read_status.IsOK()) {
+        LOGS(logger, ERROR) << read_status.ErrorMessage();
+        return supported_nodes;
+      }
+    }
+  }
 
   std::unordered_map<std::string, size_t> model_input_index_map;
   std::unordered_map<std::string, size_t> model_output_index_map;
@@ -276,7 +303,8 @@ QNNExecutionProvider::GetSupportedNodes(const GraphViewer& graph_viewer,
                                                 model_input_index_map,
                                                 model_output_index_map,
                                                 initializer_input_lookup,
-                                                tensor_encodings);
+                                                tensor_encodings,
+                                                quant_initializer_infos);
 
   for (const auto& node : graph_viewer.Nodes()) {
     const NodeUnit* node_unit = node_unit_map.at(&node);

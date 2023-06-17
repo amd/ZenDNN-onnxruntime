@@ -29,7 +29,8 @@ class QnnModel {
   Status ComposeGraph(const GraphViewer& graph_viewer,
                       const onnxruntime::Node& fused_node,
                       const std::string& debug_json_graph_path = "",
-                      const std::string& tensor_encodings_filepath = "");
+                      const std::string& tensor_encodings_filepath = "",
+                      const std::string& quant_weights_filepath = "");
 
   Status FinalizeGraphs();
 

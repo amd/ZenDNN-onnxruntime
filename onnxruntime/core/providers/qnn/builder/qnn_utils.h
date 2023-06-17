@@ -39,6 +39,18 @@ std::ostream& operator<<(std::ostream& out, const Qnn_Param_t& qnn_param);
 std::ostream& operator<<(std::ostream& out, const Qnn_Tensor_t& tensor);
 std::ostream& operator<<(std::ostream& out, const QnnOpConfigWrapper& op_conf_wrapper);
 
+struct QuantInitializerInfo {
+  std::string name;
+  Qnn_DataType_t elem_type = QNN_DATATYPE_UNDEFINED;
+  std::vector<uint32_t> shape;
+
+  size_t file_offset;  // Where in the bin file are the weights.
+  size_t file_size;    // The total byte size (should be |shape| * sizeof(elem_type))
+};
+
+common::Status ReadQuantizedInitializerInfos(const std::string& filepath,
+                                             std::unordered_map<std::string, QuantInitializerInfo>& quant_initializer_infos);
+
 class LittleEndianFileWriter {
  public:
   static constexpr size_t DEFAULT_BUF_SIZE = 4096;

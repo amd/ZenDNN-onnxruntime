@@ -85,7 +85,7 @@ bool GetTensorEncodingInfo(const std::string& tensor_name, const nlohmann::json&
 
 std::string QnnModelWrapper::GetQnnInputName(const std::string& ort_name, bool is_quantized_model) {
   if (!is_quantized_model || !IsGraphInput(ort_name)) {
-    return ort_name; 
+    return ort_name;
   }
 
   const nlohmann::json* encoding_info = nullptr;
@@ -107,7 +107,7 @@ std::string QnnModelWrapper::GetQnnInputName(const std::string& ort_name, bool i
 
 std::string QnnModelWrapper::GetQnnOutputName(const std::string& ort_name, bool is_quantized_model) {
   if (!is_quantized_model || !IsGraphOutput(ort_name)) {
-    return ort_name; 
+    return ort_name;
   }
 
   const nlohmann::json* encoding_info = nullptr;
@@ -575,7 +575,7 @@ Status QnnModelWrapper::UnpackInitializerData(const ONNX_NAMESPACE::TensorProto&
     const int8_t offset = -((*encoding_info)["offset"].template get<int8_t>());  // Negate offset from QNN.
     size_t size_bytes = 0;
     ORT_RETURN_IF_ERROR(onnxruntime::utils::GetSizeInBytesFromTensorProto<0>(initializer, &size_bytes));
-    const size_t num_elements =  size_bytes / sizeof(float);
+    const size_t num_elements = size_bytes / sizeof(float);
     concurrency::ThreadPool* thread_pool = nullptr;
     std::vector<float> float_weights;
     float_weights.resize(num_elements);
@@ -586,7 +586,7 @@ Status QnnModelWrapper::UnpackInitializerData(const ONNX_NAMESPACE::TensorProto&
 
     ParQuantizeLinearStd(float_weights.data(),
                          unpacked_tensor.data(), num_elements, scale, static_cast<uint8_t>(offset), thread_pool);
-	return Status::OK();
+    return Status::OK();
   }
 
   // Float32 model.

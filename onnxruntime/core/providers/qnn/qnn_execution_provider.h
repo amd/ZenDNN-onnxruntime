@@ -73,6 +73,7 @@ class QNNExecutionProvider : public IExecutionProvider {
   bool enable_json_graphs_dump_ = false;
   std::string json_graphs_dir_ = "";
   std::string tensor_encodings_filepath_ = "";
+  std::string quant_weights_filepath_ = "";
 };
 
 }  // namespace onnxruntime

@@ -28,7 +28,8 @@ class QnnModelWrapper {
                   const std::unordered_map<std::string, size_t>& input_index_map,
                   const std::unordered_map<std::string, size_t>& output_index_map,
                   const std::unordered_set<std::string>& initializer_lookup,
-                  nlohmann::json tensor_encodings)
+                  nlohmann::json tensor_encodings,
+                  const std::unordered_map<std::string, utils::QuantInitializerInfo>& quant_initializer_infos)
       : graph_viewer_(graph_viewer),
         logger_(logger),
         qnn_interface_(qnn_interface),
@@ -36,7 +37,8 @@ class QnnModelWrapper {
         input_index_map_(input_index_map),
         output_index_map_(output_index_map),
         initializer_lookup_(initializer_lookup),
-        tensor_encodings_(std::move(tensor_encodings)) {
+        tensor_encodings_(std::move(tensor_encodings)),
+        quant_initializer_infos_(quant_initializer_infos) {
   }
   ORT_DISALLOW_COPY_ASSIGNMENT_AND_MOVE(QnnModelWrapper);
 
@@ -236,12 +238,13 @@ class QnnModelWrapper {
 
   nlohmann::json tensor_encodings_;
   std::unordered_map<std::string, std::string> quant_io_to_orig_;
+  const std::unordered_map<std::string, utils::QuantInitializerInfo>& quant_initializer_infos_;
 };  // QnnModelWrapper
 
 bool GetActivationEncodingInfo(const std::string& tensor_name, const nlohmann::json& tensor_encodings,
                                const nlohmann::json** info);
 bool GetWeightEncodingInfo(const std::string& tensor_name, const nlohmann::json& tensor_encodings,
-                               const nlohmann::json** info);
+                           const nlohmann::json** info);
 bool GetTensorEncodingInfo(const std::string& tensor_name, const nlohmann::json& tensor_encodings,
                            const nlohmann::json** info);
 }  // namespace qnn

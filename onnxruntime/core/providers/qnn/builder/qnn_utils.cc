@@ -17,18 +17,17 @@ namespace qnn {
 namespace utils {
 
 Status GetQnnDataType(const bool is_quantized_node, const ONNX_NAMESPACE::TypeProto* type_proto,
-					Qnn_DataType_t& tensor_data_type) {
-	if (!type_proto || !type_proto->tensor_type().has_elem_type()) {
-	  return ORT_MAKE_STATUS(ONNXRUNTIME, INVALID_ARGUMENT, "The tensor doesn't have elem_type.");
-	}
+                      Qnn_DataType_t& tensor_data_type) {
+  if (!type_proto || !type_proto->tensor_type().has_elem_type()) {
+    return ORT_MAKE_STATUS(ONNXRUNTIME, INVALID_ARGUMENT, "The tensor doesn't have elem_type.");
+  }
 
-	int32_t onnx_data_type = type_proto->tensor_type().elem_type();
-	ORT_RETURN_IF_NOT(OnnxDataTypeToQnnDataType(onnx_data_type, tensor_data_type, is_quantized_node),
-					  "Failed to map Onnx data type to Qnn data type!");
+  int32_t onnx_data_type = type_proto->tensor_type().elem_type();
+  ORT_RETURN_IF_NOT(OnnxDataTypeToQnnDataType(onnx_data_type, tensor_data_type, is_quantized_node),
+                    "Failed to map Onnx data type to Qnn data type!");
 
-	return Status::OK();
+  return Status::OK();
 }
-
 
 bool OnnxDataTypeToQnnDataType(const int32_t onnx_data_type, Qnn_DataType_t& qnn_data_type, bool is_quantized) {
   const std::unordered_map<int32_t, Qnn_DataType_t> onnx_to_qnn_data_type = {
@@ -583,14 +582,14 @@ static nlohmann::json GetQnnTensorJSON(const Qnn_Tensor_t& tensor, bool include_
       // TODO: Handle errors without exceptions
       // Write tensor name
       ORT_THROW_IF_ERROR(weights_writer.WriteValue<uint32_t>(gsl::narrow_cast<uint32_t>(tensor_name.size())));  // name length
-      ORT_THROW_IF_ERROR(weights_writer.WriteString(tensor_name));  // name string
+      ORT_THROW_IF_ERROR(weights_writer.WriteString(tensor_name));                                              // name string
 
       // Write element type.
       ORT_THROW_IF_ERROR(weights_writer.WriteValue<uint32_t>(elem_data_type));
 
       // Write shape.
       ORT_THROW_IF_ERROR(weights_writer.WriteValue<uint32_t>(gsl::narrow_cast<uint32_t>(dims.size())));  // rank
-      ORT_THROW_IF_ERROR(weights_writer.WriteValues<uint32_t>(dims));  // dim values
+      ORT_THROW_IF_ERROR(weights_writer.WriteValues<uint32_t>(dims));                                    // dim values
 
       // Write binary weight data.
       ORT_THROW_IF_ERROR(weights_writer.WriteString({reinterpret_cast<const char*>(qnn_buf.data),
@@ -744,6 +743,66 @@ const nlohmann::json& QnnJSONGraph::Finalize() {
   json_["inputs"] = graph_input_names_;
   json_["outputs"] = graph_output_names_;
   return json_;
+}
+
+common::Status ReadQuantizedInitializerInfos(const std::string& filepath,
+                                             std::unordered_map<std::string, QuantInitializerInfo>& quant_initializer_infos) {
+  std::ifstream q_fs(filepath, std::ifstream::binary);
+  ORT_RETURN_IF_NOT(q_fs.is_open(), "Failed to open quantized initializers binary file.");
+
+  // Get total file size.
+  q_fs.seekg(0, q_fs.end);
+  auto file_size = q_fs.tellg();
+  q_fs.seekg(0, q_fs.beg);  // Rewind
+
+  // TODO: Create utils to read in little-endian byte order.
+  while (q_fs.tellg() < file_size) {
+    assert(!q_fs.eof());
+    utils::QuantInitializerInfo quant_info = {};
+
+    // Read tensor name length.
+    uint32_t name_len = 0;
+    ORT_RETURN_IF_NOT(q_fs.read(reinterpret_cast<char*>(&name_len), sizeof(uint32_t)),
+                      "Failed to read quantized initializer's name length.");
+
+    // Read tensor name.
+    quant_info.name.resize(name_len);
+    ORT_RETURN_IF_NOT(q_fs.read(quant_info.name.data(), name_len),
+                      "Failed to read quantized initializer's name.");
+
+    // Read tensor element type.
+    ORT_RETURN_IF_NOT(q_fs.read(reinterpret_cast<char*>(&quant_info.elem_type), sizeof(Qnn_DataType_t)),
+                      "Failed to read quantized initializer's element type.");
+
+    // Read rank.
+    uint32_t rank = 0;
+    ORT_RETURN_IF_NOT(q_fs.read(reinterpret_cast<char*>(&rank), sizeof(uint32_t)),
+                      "Failed to read quantized initializer's rank.");
+
+    // Read shape
+    const size_t num_shape_bytes = rank * sizeof(uint32_t);
+    quant_info.shape.resize(rank);
+    ORT_RETURN_IF_NOT(q_fs.read(reinterpret_cast<char*>(quant_info.shape.data()), num_shape_bytes),
+                      "Failed to read quantized initializer's shape.");
+
+    // Calculate the byte size for weight data.
+    size_t num_weight_bytes = utils::GetElementSizeByType(quant_info.elem_type);
+    for (auto dim : quant_info.shape) {
+      num_weight_bytes *= dim;
+    }
+
+    // Record position in file where the actual data starts for this initializer.
+    quant_info.file_offset = q_fs.tellg();
+    quant_info.file_size = num_weight_bytes;
+
+    // Add information about this initializer to array.
+    quant_initializer_infos[quant_info.name] = quant_info;
+
+    // Skip the weight data.
+    q_fs.seekg(num_weight_bytes, q_fs.cur);
+  }
+
+  return common::Status::OK();
 }
 
 }  // namespace utils
