@@ -56,9 +56,17 @@ export function createNewWebGLContext(contextId?: 'webgl'|'webgl2'): WebGLContex
     failIfMajorPerformanceCaveat: false
   };
   let gl: WebGLRenderingContext|null;
+
+  // eslint-disable-next-line no-console
+  console.log(`DEBUG: contextID=${contextId}`);
+  // eslint-disable-next-line no-console
+  console.log(`DEBUG: canvas=${canvas}`);
+
   const ca = contextAttributes;
   if (!contextId || contextId === 'webgl2') {
     gl = canvas.getContext('webgl2', ca);
+    // eslint-disable-next-line no-console
+    console.log(`DEBUG: [webgl2] gl=${gl}`);
     if (gl) {
       try {
         return new WebGLContext(gl, 2);
@@ -69,6 +77,8 @@ export function createNewWebGLContext(contextId?: 'webgl'|'webgl2'): WebGLContex
   }
   if (!contextId || contextId === 'webgl') {
     gl = canvas.getContext('webgl', ca) || canvas.getContext('experimental-webgl', ca) as WebGLRenderingContext;
+    // eslint-disable-next-line no-console
+    console.log(`DEBUG: [webgl] gl=${gl}`);
     if (gl) {
       try {
         return new WebGLContext(gl, 1);
@@ -87,14 +97,16 @@ export function createNewWebGLContext(contextId?: 'webgl'|'webgl2'): WebGLContex
 declare let OffscreenCanvas: {new (width: number, height: number): HTMLCanvasElement};
 
 function createCanvas(): HTMLCanvasElement {
-  if (typeof document === 'undefined') {
-    if (typeof OffscreenCanvas === 'undefined') {
-      throw new TypeError('failed to create canvas: OffscreenCanvas is not supported');
-    }
+  if (typeof OffscreenCanvas !== 'undefined') {
     return new OffscreenCanvas(1, 1);
   }
-  const canvas: HTMLCanvasElement = document.createElement('canvas');
-  canvas.width = 1;
-  canvas.height = 1;
-  return canvas;
+
+  if (typeof document !== 'undefined') {
+    const canvas: HTMLCanvasElement = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    return canvas;
+  }
+
+  throw new TypeError('failed to create canvas: both OffscreenCanvas and document.createElement are not supported');
 }
