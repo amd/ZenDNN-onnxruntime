@@ -31,7 +31,6 @@ parameters:
 
 stages:
 - stage: Build_web_Debug
-  dependsOn: Build_wasm_Debug
   jobs:
   - template: win-web-ci.yml
     parameters:
