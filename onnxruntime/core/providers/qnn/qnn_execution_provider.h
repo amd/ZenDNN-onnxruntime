@@ -72,8 +72,9 @@ class QNNExecutionProvider : public IExecutionProvider {
   bool disable_cpu_ep_fallback_ = false;  // True if CPU EP fallback has been disabled for this session.
   bool enable_json_graphs_dump_ = false;
   std::string json_graphs_dir_ = "";
-  std::string tensor_encodings_filepath_ = "";
+  nlohmann::json tensor_encodings_;
   std::string quant_weights_filepath_ = "";
+  std::unordered_map<std::string, qnn::utils::QuantInitializerInfo> quant_initializer_infos_;
 };
 
 }  // namespace onnxruntime

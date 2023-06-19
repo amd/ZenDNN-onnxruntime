@@ -581,11 +581,30 @@ Status QnnModelWrapper::UnpackInitializerData(const ONNX_NAMESPACE::TensorProto&
     float_weights.resize(num_elements);
     unpacked_tensor.resize(num_elements);
 
+    std::vector<uint8_t> computed_unpacked_tensor;
+    computed_unpacked_tensor.resize(num_elements);
+
     ORT_RETURN_IF_ERROR(onnxruntime::utils::UnpackTensor<float>(initializer, graph_viewer_.ModelPath(),
                                                                 float_weights.data(), num_elements));
 
     ParQuantizeLinearStd(float_weights.data(),
-                         unpacked_tensor.data(), num_elements, scale, static_cast<uint8_t>(offset), thread_pool);
+                         computed_unpacked_tensor.data(), num_elements, scale, static_cast<uint8_t>(offset), thread_pool);
+
+    // Read quant weights from file and compare to computed values for sanity.
+    // TODO: CLEAN UP!
+    const auto& it = quant_initializer_infos_.find(initializer_name);
+    assert(it != quant_initializer_infos_.end());
+    const auto& initializer_info = it->second;
+
+    assert(initializer_info.file_size == num_elements);
+
+    quant_weights_ifstream_.seekg(initializer_info.file_offset, quant_weights_ifstream_.beg);
+    quant_weights_ifstream_.read(reinterpret_cast<char*>(unpacked_tensor.data()), initializer_info.file_size);
+
+    for (size_t i = 0; i < num_elements; i++) {
+      assert(unpacked_tensor[i] == computed_unpacked_tensor[i]);
+    }
+
     return Status::OK();
   }
 

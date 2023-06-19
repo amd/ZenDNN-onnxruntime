@@ -28,7 +28,8 @@ class QnnModelWrapper {
                   const std::unordered_map<std::string, size_t>& input_index_map,
                   const std::unordered_map<std::string, size_t>& output_index_map,
                   const std::unordered_set<std::string>& initializer_lookup,
-                  nlohmann::json tensor_encodings,
+                  const nlohmann::json& tensor_encodings,
+                  std::ifstream& quant_weights_ifstream,
                   const std::unordered_map<std::string, utils::QuantInitializerInfo>& quant_initializer_infos)
       : graph_viewer_(graph_viewer),
         logger_(logger),
@@ -37,7 +38,8 @@ class QnnModelWrapper {
         input_index_map_(input_index_map),
         output_index_map_(output_index_map),
         initializer_lookup_(initializer_lookup),
-        tensor_encodings_(std::move(tensor_encodings)),
+        tensor_encodings_(tensor_encodings),
+        quant_weights_ifstream_(quant_weights_ifstream),
         quant_initializer_infos_(quant_initializer_infos) {
   }
   ORT_DISALLOW_COPY_ASSIGNMENT_AND_MOVE(QnnModelWrapper);
@@ -236,8 +238,9 @@ class QnnModelWrapper {
   const std::vector<uint32_t> nchw2hwcn_perm_{2, 3, 1, 0};
   const std::vector<uint32_t> cnhw2hwcn_perm_{2, 3, 0, 1};
 
-  nlohmann::json tensor_encodings_;
+  const nlohmann::json& tensor_encodings_;
   std::unordered_map<std::string, std::string> quant_io_to_orig_;
+  std::ifstream& quant_weights_ifstream_;
   const std::unordered_map<std::string, utils::QuantInitializerInfo>& quant_initializer_infos_;
 };  // QnnModelWrapper
 

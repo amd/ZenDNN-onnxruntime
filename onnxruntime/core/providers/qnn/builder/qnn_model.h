@@ -17,9 +17,15 @@ class QnnModel {
  public:
   QnnModel(const logging::Logger& logger,
            QnnBackendManager* qnn_backend_manager,
+           const nlohmann::json& tensor_encodings,
+           std::ifstream& quant_weights_ifstream,
+           const std::unordered_map<std::string, qnn::utils::QuantInitializerInfo> quant_init_infos,
            bool is_quantized_model = true)
       : logger_(logger),
         qnn_backend_manager_(qnn_backend_manager),
+        tensor_encodings_(tensor_encodings),
+        quant_weights_ifstream_(quant_weights_ifstream),
+        quant_initializer_infos_(quant_init_infos),
         is_quantized_model_(is_quantized_model) {
   }
 
@@ -28,9 +34,7 @@ class QnnModel {
 
   Status ComposeGraph(const GraphViewer& graph_viewer,
                       const onnxruntime::Node& fused_node,
-                      const std::string& debug_json_graph_path = "",
-                      const std::string& tensor_encodings_filepath = "",
-                      const std::string& quant_weights_filepath = "");
+                      const std::string& debug_json_graph_path = "");
 
   Status FinalizeGraphs();
 
@@ -103,6 +107,9 @@ class QnnModel {
   std::unordered_map<std::string, size_t> model_output_index_map_;
   // TODO: remove initializer_inputs_, use QnnModelWrapper
   std::unordered_set<std::string> initializer_inputs_;
+  const nlohmann::json& tensor_encodings_;
+  std::ifstream& quant_weights_ifstream_;
+  const std::unordered_map<std::string, qnn::utils::QuantInitializerInfo> quant_initializer_infos_;
   bool is_quantized_model_ = false;
   std::unordered_map<std::string, OnnxTensorInfo> inputs_info_;
   std::unordered_map<std::string, OnnxTensorInfo> outputs_info_;

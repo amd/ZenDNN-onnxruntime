@@ -88,9 +88,7 @@ const NodeUnit& QnnModel::GetNodeUnit(const Node* node,
 
 Status QnnModel::ComposeGraph(const GraphViewer& graph_viewer,
                               const onnxruntime::Node& fused_node,
-                              const std::string& debug_json_graph_path,
-                              const std::string& tensor_encodings_filepath,
-                              const std::string& quant_weights_filepath) {
+                              const std::string& debug_json_graph_path) {
   LOGS(logger_, VERBOSE) << "ComposeGraph Graph name: " << graph_viewer.Name();
 
   // Holder for the NodeUnits in the graph, this will guarantee the NodeUnits is
@@ -102,22 +100,10 @@ Status QnnModel::ComposeGraph(const GraphViewer& graph_viewer,
   const auto& graph_name = graph_viewer.Name();
   ORT_RETURN_IF_ERROR(SetGraphInputOutputInfo(graph_viewer, fused_node));
 
-  nlohmann::json tensor_encodings;
-  std::unordered_map<std::string, utils::QuantInitializerInfo> quant_initializer_infos;
-
-  if (qnn_backend_manager_->IsNpuBackend() && !tensor_encodings_filepath.empty()) {
-    ORT_RETURN_IF(!initializer_inputs_.empty() && quant_weights_filepath.empty(),
-                  "Must provide a file with quantized initializers/weights.");
-
-    std::ifstream f(tensor_encodings_filepath);
-
-    ORT_RETURN_IF_NOT(f.is_open(), "Failed to open tensor encodings file: ", tensor_encodings_filepath.c_str());
-    tensor_encodings = nlohmann::json::parse(f);
-
-    if (!quant_weights_filepath.empty()) {
-      ORT_RETURN_IF_ERROR(utils::ReadQuantizedInitializerInfos(quant_weights_filepath, quant_initializer_infos));
-    }
-  }
+  ORT_RETURN_IF(qnn_backend_manager_->IsNpuBackend() &&
+                !initializer_inputs_.empty() &&
+                quant_initializer_infos_.empty(),
+                "Must provide a file with quantized initializers/weights.");
 
   QnnModelWrapper qnn_model_wrapper = QnnModelWrapper(graph_viewer, logger_,
                                                       qnn_backend_manager_->GetQnnInterface(),
@@ -125,8 +111,9 @@ Status QnnModel::ComposeGraph(const GraphViewer& graph_viewer,
                                                       model_input_index_map_,
                                                       model_output_index_map_,
                                                       initializer_inputs_,
-                                                      tensor_encodings,
-                                                      quant_initializer_infos);
+                                                      tensor_encodings_,
+                                                      quant_weights_ifstream_,
+                                                      quant_initializer_infos_);
   bool rt = true;
   rt = qnn_model_wrapper.CreateQnnGraph(qnn_backend_manager_->GetQnnContext(), graph_name);
   if (!rt) {
@@ -166,7 +153,7 @@ Status QnnModel::ComposeGraph(const GraphViewer& graph_viewer,
       {
         std::string output_name = name + "_qnn_ep_quant";
         const nlohmann::json* encoding_info = nullptr;
-        ORT_RETURN_IF_NOT(GetActivationEncodingInfo(name, tensor_encodings, &encoding_info));
+        ORT_RETURN_IF_NOT(GetActivationEncodingInfo(name, tensor_encodings_, &encoding_info));
 
         Qnn_QuantizeParams_t quantize_param = QNN_QUANTIZE_PARAMS_INIT;
         quantize_param.encodingDefinition = QNN_DEFINITION_DEFINED;
