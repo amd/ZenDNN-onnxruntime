@@ -62,7 +62,7 @@ module.exports = function(config) {
       browserNoActivityTimeout: 30 * 60 * 1000,
       customLaunchers: {
         ChromeTest: {
-          base: 'ChromeCanary',
+          base: 'Chrome',
           flags: chromeFlags
         },
         EdgeTest: {
