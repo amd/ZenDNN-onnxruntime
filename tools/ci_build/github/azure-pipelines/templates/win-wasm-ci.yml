@@ -89,13 +89,21 @@ jobs:
       ccache -z
       export _EMCC_CCACHE=1
       echo "##vso[task.setvariable variable=_EMCC_CACHE;]1"
-      export EM_COMPILER_WRAPPER=ccache
-      export EM_DIR=$(Build.SourcesDirectory)/cmake/external/emsdk/upstream/emscripten
-      ls $EM_DIR
+      echo "##vso[task.setvariable variable=EM_COMPILER_WRAPPER;]ccache"
+      echo "##vso[task.setvariable variable=EM_DIR;]$(Build.SourcesDirectory)/cmake/external/emsdk/upstream/emscripten"
       # mtime of this file is checked by ccache, we set it to avoid cache misses.
-      export EM_CONFIG="$(Build.SourcesDirectory)/cmake/external/emsdk/.emscripten"
+      echo "##vso[task.setvariable variable=EM_CONFIG;]$(Build.SourcesDirectory)/cmake/external/emsdk/.emscripten"
+
+      ls $EM_DIR
       which ccache && ccache -s && ccache --version
       echo "##vso[task.setvariable variable=PATH;]$PATH"
+    displayName: 'Set CCache'
+
+  - script: |
+      echo $PATH
+    displayName: 'Print PATH'
+
+  - script: |
       pushd '$(Build.BinariesDirectory)'
       python3 '$(Build.SourcesDirectory)/tools/ci_build/build.py' $(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --skip_test
       ccache -s
@@ -104,12 +112,7 @@ jobs:
       rm -rf '$(Build.BinariesDirectory)/Linux'
       python3 '$(Build.SourcesDirectory)/tools/ci_build/build.py' $(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --skip_test
       popd
-    displayName: 'Set CCache'
-
-  - script: |
-      echo $PATH
-      env | grep EM
-    displayName: 'Print PATH'
+    displayName: 'Build and test (browser) (simd + threads)'
 
   #- task: PythonScript@0
   #  displayName: 'Build and test (browser) (simd + threads)'
