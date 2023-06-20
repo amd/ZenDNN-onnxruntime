@@ -88,6 +88,7 @@ jobs:
     displayName: 'Print PATH'
 
   - script: |
+      mkdir -p '$(Build.BinariesDirectory)/ccache_debug'
       pushd '$(Build.SourcesDirectory)/cmake/external/emsdk'
       source ./emsdk_env.sh
       export PATH=$(Build.SourcesDirectory)/cmake/external/emsdk/:$PATH
@@ -119,6 +120,11 @@ jobs:
     env:
       CCACHE_DEBUG: 1
       CCACHE_DEBUGDIR: '$(Build.BinariesDirectory)/ccache_debug'
+      CCACHE_SLOPPINESS: include_file_ctime,include_file_mtime,time_macros
+
+  - script: |
+      ccache -s
+    displayName: 'CCache Stats'
 
   - task: PublishBuildArtifacts@1
     displayName: 'Publish Artifact'
@@ -132,10 +138,6 @@ jobs:
   #    scriptPath: '$(Build.SourcesDirectory)/tools/ci_build/build.py'
   #    arguments: '$(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --skip_test'
   #    workingDirectory: '$(Build.BinariesDirectory)'
-
-  - script: |
-      ccache -s
-    displayName: 'CCache Stats'
 
   - ${{ if eq(parameters.SkipPublish, false) }}:
     - script: |
