@@ -116,6 +116,15 @@ jobs:
       popd
       popd
     displayName: 'Build and test (browser) (simd + threads)'
+    env:
+      CCACHE_DEBUG: 1
+      CCACHE_DEBUGDIR: '$(Build.BinariesDirectory)/ccache_debug'
+
+  - task: PublishBuildArtifacts@1
+    displayName: 'Publish Artifact'
+    inputs:
+      PathtoPublish: '$(Build.BinariesDirectory)/ccache_debug'
+      ArtifactName: 'ccache_log'
 
   #- task: PythonScript@0
   #  displayName: 'Build and test (browser) (simd + threads)'
