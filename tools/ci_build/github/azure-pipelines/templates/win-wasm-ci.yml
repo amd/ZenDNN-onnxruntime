@@ -80,6 +80,15 @@ jobs:
       cd '$(Build.SourcesDirectory)/cmake/external/emsdk'
       ./emsdk install 3.1.37 ccache-git-emscripten-64bit
       ./emsdk activate 3.1.37 ccache-git-emscripten-64bit
+
+    displayName: 'Set CCache'
+
+  - script: |
+      echo $PATH
+    displayName: 'Print PATH'
+
+  - script: |
+      pushd '$(Build.SourcesDirectory)/cmake/external/emsdk'
       source ./emsdk_env.sh
       export PATH=$(Build.SourcesDirectory)/cmake/external/emsdk/:$PATH
       export PATH=$(Build.SourcesDirectory)/cmake/external/emsdk/ccache/git-emscripten_64bit/bin:$PATH
@@ -105,15 +114,6 @@ jobs:
       rm -rf '$(Build.BinariesDirectory)/Linux'
       python3 '$(Build.SourcesDirectory)/tools/ci_build/build.py' $(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --skip_test
       popd
-    displayName: 'Set CCache'
-
-  - script: |
-      echo $PATH
-    displayName: 'Print PATH'
-
-  - script: |
-      pushd '$(Build.SourcesDirectory)/cmake/external/emsdk'
-      source ./emsdk_env.sh
       popd
     displayName: 'Build and test (browser) (simd + threads)'
 
