@@ -564,31 +564,11 @@ void QnnModelWrapper::GetGraphInputOutputTensorWrapper(const std::vector<std::st
 Status QnnModelWrapper::UnpackInitializerData(const ONNX_NAMESPACE::TensorProto& initializer,
                                               std::vector<uint8_t>& unpacked_tensor, bool is_quantized_model,
                                               const std::string& initializer_name) const {
-  // Quantized model: manually quantize weights.
-  // TODO: Read quantized weights from a binary file.
+  // Quantized model: Get weights from bin file.
   if (is_quantized_model && initializer.data_type() == ONNX_NAMESPACE::TensorProto_DataType_FLOAT) {
-    const nlohmann::json* encoding_info = nullptr;
-    ORT_RETURN_IF_NOT(GetWeightEncodingInfo(initializer_name, tensor_encodings_, &encoding_info),
-                      "Cannot get encoding for weight '", initializer_name.c_str(), "'");
-
-    const float scale = (*encoding_info)["scale"].template get<float>();
-    const int8_t offset = -((*encoding_info)["offset"].template get<int8_t>());  // Negate offset from QNN.
     size_t size_bytes = 0;
     ORT_RETURN_IF_ERROR(onnxruntime::utils::GetSizeInBytesFromTensorProto<0>(initializer, &size_bytes));
     const size_t num_elements = size_bytes / sizeof(float);
-    concurrency::ThreadPool* thread_pool = nullptr;
-    std::vector<float> float_weights;
-    float_weights.resize(num_elements);
-    unpacked_tensor.resize(num_elements);
-
-    std::vector<uint8_t> computed_unpacked_tensor;
-    computed_unpacked_tensor.resize(num_elements);
-
-    ORT_RETURN_IF_ERROR(onnxruntime::utils::UnpackTensor<float>(initializer, graph_viewer_.ModelPath(),
-                                                                float_weights.data(), num_elements));
-
-    ParQuantizeLinearStd(float_weights.data(),
-                         computed_unpacked_tensor.data(), num_elements, scale, static_cast<uint8_t>(offset), thread_pool);
 
     // Read quant weights from file and compare to computed values for sanity.
     // TODO: CLEAN UP!
@@ -596,14 +576,12 @@ Status QnnModelWrapper::UnpackInitializerData(const ONNX_NAMESPACE::TensorProto&
     assert(it != quant_initializer_infos_.end());
     const auto& initializer_info = it->second;
 
-    assert(initializer_info.file_size == num_elements);
+    assert(initializer_info.file_size == num_elements * qnn::utils::GetElementSizeByType(initializer_info.elem_type));
 
+    unpacked_tensor.resize(initializer_info.file_size);
     quant_weights_ifstream_.seekg(initializer_info.file_offset, quant_weights_ifstream_.beg);
+    // TODO: Read in little-endian byte order.
     quant_weights_ifstream_.read(reinterpret_cast<char*>(unpacked_tensor.data()), initializer_info.file_size);
-
-    for (size_t i = 0; i < num_elements; i++) {
-      assert(unpacked_tensor[i] == computed_unpacked_tensor[i]);
-    }
 
     return Status::OK();
   }

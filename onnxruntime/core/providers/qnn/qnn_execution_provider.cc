@@ -294,10 +294,14 @@ QNNExecutionProvider::GetSupportedNodes(const GraphViewer& graph_viewer,
     return supported_nodes;
   }
 
-  std::ifstream q_fs(quant_weights_filepath_, std::ifstream::binary);
-  if (!q_fs.is_open()) {
-    LOGS(logger, ERROR) << "Failed to open file with quantized initializers/weights.";
-    return supported_nodes;
+  std::ifstream quant_weights_ifstream;
+
+  if (qnn_backend_manager_->IsNpuBackend() && !quant_initializer_infos_.empty()) {
+    quant_weights_ifstream.open(quant_weights_filepath_, std::ifstream::binary);
+    if (!quant_weights_ifstream.is_open()) {
+      LOGS(logger, ERROR) << "Failed to open file with quantized initializers/weights.";
+      return supported_nodes;
+    }
   }
 
   std::unordered_map<std::string, size_t> model_input_index_map;
@@ -311,7 +315,7 @@ QNNExecutionProvider::GetSupportedNodes(const GraphViewer& graph_viewer,
                                                 model_output_index_map,
                                                 initializer_input_lookup,
                                                 tensor_encodings_,
-                                                q_fs,
+                                                quant_weights_ifstream,
                                                 quant_initializer_infos_);
 
   for (const auto& node : graph_viewer.Nodes()) {
@@ -496,19 +500,24 @@ Status QNNExecutionProvider::CreateComputeFunc(std::vector<NodeComputeInfo>& nod
 Status QNNExecutionProvider::CompileFromOrtGraph(const std::vector<FusedNodeAndGraph>& fused_nodes_and_graphs,
                                                  std::vector<NodeComputeInfo>& node_compute_funcs,
                                                  const logging::Logger& logger) {
+  const bool is_npu_backend = qnn_backend_manager_->IsNpuBackend();
+  std::ifstream quant_weights_ifstream;
+
+  if (is_npu_backend && !quant_initializer_infos_.empty()) {
+    quant_weights_ifstream.open(quant_weights_filepath_, std::ifstream::binary);
+    ORT_RETURN_IF(!quant_weights_ifstream.is_open(), "Failed to open file with quantized initializers/weights.");
+  }
+
   for (const auto& fused_node_and_graph : fused_nodes_and_graphs) {
     Node& fused_node = fused_node_and_graph.fused_node;
     const onnxruntime::GraphViewer& graph_viewer(fused_node_and_graph.filtered_graph);
 
-    std::ifstream q_fs(quant_weights_filepath_, std::ifstream::binary);
-    ORT_RETURN_IF(!q_fs.is_open(), "Failed to open file with quantized initializers/weights.");
-
     std::unique_ptr<qnn::QnnModel> qnn_model = std::make_unique<qnn::QnnModel>(logger,
                                                                                qnn_backend_manager_.get(),
                                                                                tensor_encodings_,
-                                                                               q_fs,
+                                                                               quant_weights_ifstream,
                                                                                quant_initializer_infos_,
-                                                                               qnn_backend_manager_->IsNpuBackend());
+                                                                               is_npu_backend);
 
     std::string json_graph_filepath;
 
@@ -559,7 +568,7 @@ Status QNNExecutionProvider::Compile(const std::vector<FusedNodeAndGraph>& fused
     if (load_from_cached_context) {
       std::ifstream q_fs;
 
-      if (is_npu_backend) {
+      if (is_npu_backend && !quant_initializer_infos_.empty()) {
         q_fs.open(quant_weights_filepath_, std::ifstream::binary);
         ORT_RETURN_IF(!q_fs.is_open(), "Failed to open file with quantized initializers/weights.");
       }
