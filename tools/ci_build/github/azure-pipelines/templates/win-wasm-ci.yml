@@ -77,7 +77,7 @@ jobs:
 
   - script: |
       set -ex
-      cd
+      cd '$(Build.SourcesDirectory)/cmake/external/emsdk'
       ./emsdk install 3.1.37 ccache-git-emscripten-64bit
       ./emsdk activate 3.1.37 ccache-git-emscripten-64bit
       source ./emsdk_env.sh
