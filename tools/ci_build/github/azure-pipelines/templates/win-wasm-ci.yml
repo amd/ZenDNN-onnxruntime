@@ -96,6 +96,15 @@ jobs:
       ls $EM_DIR
       which ccache && ccache -s && ccache --version
       echo "##vso[task.setvariable variable=PATH;]$PATH"
+
+      pushd '$(Build.BinariesDirectory)'
+      python3 '$(Build.SourcesDirectory)/tools/ci_build/build.py' $(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --skip_test
+      ccache -s
+      ccache -z
+      emcc --clear-cache
+      rm -rf '$(Build.BinariesDirectory)/Linux'
+      python3 '$(Build.SourcesDirectory)/tools/ci_build/build.py' $(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --skip_test
+      popd
     displayName: 'Set CCache'
 
   - script: |
@@ -105,14 +114,6 @@ jobs:
   - script: |
       pushd '$(Build.SourcesDirectory)/cmake/external/emsdk'
       source ./emsdk_env.sh
-      popd
-      pushd '$(Build.BinariesDirectory)'
-      python3 '$(Build.SourcesDirectory)/tools/ci_build/build.py' $(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --skip_test
-      ccache -s
-      ccache -z
-      emcc --clear-cache
-      rm -rf '$(Build.BinariesDirectory)/Linux'
-      python3 '$(Build.SourcesDirectory)/tools/ci_build/build.py' $(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --skip_test
       popd
     displayName: 'Build and test (browser) (simd + threads)'
 
