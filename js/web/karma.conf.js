@@ -90,6 +90,10 @@ module.exports = function (config) {
     hostname,
     listenAddress,
     customLaunchers: {
+      EdgeTest: {
+        base: 'Edge',
+        flags: ['--enable-logging=stderr', '--log-level=0']
+      },
       ChromeTest: {
         base: 'Chrome',
         flags: ['--enable-features=SharedArrayBuffer']
