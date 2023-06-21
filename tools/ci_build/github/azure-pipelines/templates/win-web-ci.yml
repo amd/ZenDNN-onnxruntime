@@ -65,7 +65,7 @@ jobs:
     workingDirectory: '$(Build.SourcesDirectory)\js\web'
     displayName: 'npm ci /js/web/'
   - script: |
-     npm run pull:wasm 1038464
+     npm run pull:wasm 1039641
     workingDirectory: '$(Build.SourcesDirectory)\js\web'
     displayName: 'npm pull wasm'
   - script: |
