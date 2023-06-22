@@ -623,6 +623,30 @@ struct OrtTrainingApi {
                   _Out_ enum OrtPropertyType* property_type, _Outptr_ void** property_value);
 
   /// @}
+
+  /// \name Accessing The Training Session State
+  /// @{
+
+  /** \brief Load a checkpoint state from a buffer into checkpoint_state.
+   *
+   * This function will parse a checkpoint directory, pull relevant files and load the training
+   * state into the checkpoint_state. This checkpoint state can then be used to create the
+   * training session by invoking OrtTrainingApi::CreateTrainingSession. By doing so, the training
+   * session will resume training from the given checkpoint state.
+   * \note Note that the training session created with a checkpoint state uses this state to store the entire
+   * training state (including model parameters, its gradients, the optimizer states and the properties).
+   * As a result, it is required that the checkpoint state outlive the lifetime of the training session.
+   *
+   * \param[in] checkpoint_path Path to the checkpoint directory
+   * \param[out] checkpoint_state Checkpoint state that contains the states of the training session.
+   *
+   * \snippet{doc} snippets.dox OrtStatus Return Value
+   *
+   */
+  ORT_API2_STATUS(LoadCheckpointFromBuffer, _In_ const void* checkpoint_buffer,
+                  _In_ const size_t num_bytes, _Outptr_ OrtCheckpointState** checkpoint_state);
+
+  /// @}
 };
 
 typedef struct OrtTrainingApi OrtTrainingApi;

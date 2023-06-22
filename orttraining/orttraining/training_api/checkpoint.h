@@ -61,11 +61,20 @@ Status SaveCheckpoint(const std::vector<ONNX_NAMESPACE::TensorProto>& trainable_
  * @brief Load training states from ORT checkpoint.
  *
  * @param checkpoint_path file where checkpoint is stored.
- * @param checkpoint_states parameter/optimizer and other user defined training states.
+ * @param checkpoint_state parameter/optimizer and other user defined training states.
  * @return Status
  */
 Status LoadCheckpoint(const PathString& checkpoint_path,
                       CheckpointState& checkpoint_state);
+
+/**
+ * @brief Load training states from ORT checkpoint buffer.
+ * @param checkpoint_bytes bytes buffer of the checkpoint.
+ * @param checkpoint_state parameter/optimizer and other user defined training states.
+ * @return Status
+ */
+Status LoadCheckpointFromBuffer(gsl::span<const uint8_t> checkpoint_bytes,
+                                CheckpointState& checkpoint_state);
 
 #if !defined(ORT_MINIMAL_BUILD)
 /**

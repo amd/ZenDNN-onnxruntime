@@ -438,7 +438,6 @@ namespace Load {
  * @brief Load checkpoint flatbuffer from file.
  * @param checkpoint_path Path to the checkpoint file.
  * @param checkpoint_bytes Contents of the checkpoint file in bytes.
- * @param checkpoint_span Checkpoint bytes represented as a span.
  * @return Status of the operation.
  *
  */
@@ -452,9 +451,6 @@ Status FromFile(const PathString& checkpoint_path, std::vector<uint8_t>& checkpo
 
   ORT_RETURN_IF_NOT(bytes_stream, "Loading checkpoint from ", ToUTF8String(checkpoint_path), " failed. Only ",
                     bytes_stream.gcount(), "/", num_bytes, " bytes could be read.");
-
-  flatbuffers::Verifier verifier(checkpoint_bytes.data(), checkpoint_bytes.size());
-  ORT_RETURN_IF_NOT(fbs::VerifyCheckpointBuffer(verifier), "Checkpoint verification failed.");
 
   return Status::OK();
 }
@@ -598,10 +594,10 @@ Status ToPropertyBag(const onnxruntime::fbs::PropertyBag& fbs_property_bag,
  * @param model_proto Model proto to be populated.
  * @return Status of the operation.
  */
-Status ToModelProto(const PathString& checkpoint_path,
+Status ToModelProto(const std::vector<uint8_t>& checkpoint_bytes,
                     ONNX_NAMESPACE::ModelProto& model_proto) {
-  std::vector<uint8_t> checkpoint_bytes;
-  ORT_RETURN_IF_ERROR(Load::FromFile(checkpoint_path, checkpoint_bytes));
+  flatbuffers::Verifier verifier(checkpoint_bytes.data(), checkpoint_bytes.size());
+  ORT_RETURN_IF_NOT(fbs::VerifyCheckpointBuffer(verifier), "Checkpoint verification failed.");
 
   const auto* fbs_checkpoint = fbs::GetCheckpoint(checkpoint_bytes.data());
   ORT_RETURN_IF_NOT(fbs_checkpoint, "Checkpoint is invalid. Expected: Valid checkpoint flatbuffer. Actual: nullptr.");
@@ -654,15 +650,15 @@ Status ToModelProto(const PathString& checkpoint_path,
 #endif
 
 /**
- * @brief Load checkpoint from a checkpoint file to a checkpoint state.
+ * @brief Load checkpoint from a checkpoint buffer to a checkpoint state.
  *
- * @param checkpoint_path Path to the checkpoint file.
+ * @param checkpoint_bytes Buffer containing the checkpoint in bytes.
  * @param state Checkpoint state to be populated.
  * @return Status of the operation.
  */
-Status ToCheckpointState(const PathString& checkpoint_path, CheckpointState& state) {
-  std::vector<uint8_t> checkpoint_bytes;
-  ORT_RETURN_IF_ERROR(Load::FromFile(checkpoint_path, checkpoint_bytes));
+Status ToCheckpointState(gsl::span<const uint8_t> checkpoint_bytes, CheckpointState& state) {
+  flatbuffers::Verifier verifier(checkpoint_bytes.data(), checkpoint_bytes.size());
+  ORT_RETURN_IF_NOT(fbs::VerifyCheckpointBuffer(verifier), "Checkpoint verification failed.");
 
   const auto* fbs_checkpoint = fbs::GetCheckpoint(checkpoint_bytes.data());
   ORT_RETURN_IF_NOT(fbs_checkpoint, "Checkpoint is invalid. Expected: Valid checkpoint flatbuffer. Actual: nullptr.");
@@ -706,14 +702,22 @@ Status SaveCheckpoint(const CheckpointState& states, const PathString& checkpoin
   return Save::FromCheckpointState(states, checkpoint_path, include_optimizer_state);
 }
 
-Status LoadCheckpoint(const PathString& checkpoint_path, CheckpointState& checkpoint_states) {
-  return Load::ToCheckpointState(checkpoint_path, checkpoint_states);
+Status LoadCheckpoint(const PathString& checkpoint_path, CheckpointState& checkpoint_state) {
+  std::vector<uint8_t> checkpoint_bytes;
+  ORT_RETURN_IF_ERROR(Load::FromFile(checkpoint_path, checkpoint_bytes));
+  return Load::ToCheckpointState(checkpoint_bytes, checkpoint_state);
+}
+
+Status LoadCheckpointFromBuffer(gsl::span<const uint8_t> checkpoint_bytes, CheckpointState& checkpoint_state) {
+  return Load::ToCheckpointState(checkpoint_bytes, checkpoint_state);
 }
 
 #if !defined(ORT_MINIMAL_BUILD)
 Status LoadCheckpointToModel(const PathString& checkpoint_path,
                              ONNX_NAMESPACE::ModelProto& model_proto) {
-  return Load::ToModelProto(checkpoint_path, model_proto);
+  std::vector<uint8_t> checkpoint_bytes;
+  ORT_RETURN_IF_ERROR(Load::FromFile(checkpoint_path, checkpoint_bytes));
+  return Load::ToModelProto(checkpoint_bytes, model_proto);
 }
 #endif
 
