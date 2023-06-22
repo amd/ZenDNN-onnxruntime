@@ -43,6 +43,16 @@ const hostname = getMachineIpAddress();
 // In Node.js v17+, 'localhost' is using IPv6, so need to listen to '::'
 const listenAddress = Number.parseInt(process.versions.node.split('.')[0]) >= 17 ? '::' : '0.0.0.0';
 
+const path = require('path');
+const dir = path.join(__dirname, './karma_d_dir');
+require('fs').mkdirSync(dir);
+
+const mmmR = {'reporter:mmm': ['type', function() {
+  this.onBrowserComplete = function(browser, result) {
+    console.log(require('fs').readFileSync(path.join(dir, 'chrome_debug.log')).toString());
+  };
+}]};
+
 module.exports = function (config) {
   config.set({
     // global config of your BrowserStack account
@@ -76,10 +86,10 @@ module.exports = function (config) {
       '/base/test/ort-wasm-simd-threaded.jsep.wasm': '/base/dist/ort-wasm-simd-threaded.jsep.wasm',
       '/base/test/ort-wasm-threaded.worker.js': '/base/dist/ort-wasm-threaded.worker.js',
     },
-    plugins: karmaPlugins,
+    plugins: [mmmR,...karmaPlugins],
     client: { captureConsole: true, mocha: { expose: ['body'], timeout: timeoutMocha } },
     preprocessors: { mainFile: ['sourcemap'] },
-    reporters: ['mocha', 'BrowserStack'],
+    reporters: ['mocha', 'BrowserStack', 'mmm'],
     browsers: [],
     captureTimeout: 120000,
     reportSlowerThan: 100,
@@ -92,7 +102,8 @@ module.exports = function (config) {
     customLaunchers: {
       EdgeTest: {
         base: 'Edge',
-        flags: ['--enable-logging=stderr', '--log-level=0']
+        edgeDataDir: dir,
+        flags: ['--enable-logging', '--log-level=0']
       },
       ChromeTest: {
         base: 'Chrome',
