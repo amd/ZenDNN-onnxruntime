@@ -5,6 +5,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <filesystem>
 
 #include "QnnOpDef.h"
 
@@ -235,7 +236,7 @@ Status QnnModel::ComposeGraph(const GraphViewer& graph_viewer,
 
         ORT_RETURN_IF_NOT(qnn_model_wrapper.AddTensorWrapper(std::move(tensor)),
                           "Failed to add dequantized output tensor.");
-        dequant_op_out_names.push_back(std::move(name));
+        dequant_op_out_names.push_back(name);
       }
 
       ORT_RETURN_IF_NOT(qnn_model_wrapper.CreateQnnNode(name + "_qnn_ep_dequantizer",
@@ -254,7 +255,9 @@ Status QnnModel::ComposeGraph(const GraphViewer& graph_viewer,
   if (build_debug_json_graph) {
     auto& weights_writer = qnn_model_wrapper.GetWeightsFileWriter();
 
-    ORT_RETURN_IF_ERROR(weights_writer.Open("model.bin"));  // TODO: Don't hardcode. Set from fused_node name.
+    std::filesystem::path weights_path = debug_json_graph_path;
+    weights_path.replace_extension(".bin");
+    ORT_RETURN_IF_ERROR(weights_writer.Open(weights_path.string().c_str()));
   }
 
   ORT_RETURN_IF_NOT(qnn_model_wrapper.ComposeQnnGraph(build_debug_json_graph), "Failed to compose Qnn graph.");
