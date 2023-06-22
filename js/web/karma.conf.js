@@ -44,7 +44,7 @@ const hostname = getMachineIpAddress();
 const listenAddress = Number.parseInt(process.versions.node.split('.')[0]) >= 17 ? '::' : '0.0.0.0';
 
 const path = require('path');
-const dir = path.join(__dirname, './karma_d_dir');
+const dir = path.join(__dirname, `./karma_d_dir_${new Date().getTime()}`);
 require('fs').mkdirSync(dir);
 
 const mmmR = {'reporter:mmm': ['type', function() {

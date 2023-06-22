@@ -100,6 +100,10 @@ jobs:
     workingDirectory: '$(Build.SourcesDirectory)\js\web'
     displayName: 'Run ort-web tests'
   - script: |
+     npm test -- suite1 -e=edge
+    workingDirectory: '$(Build.SourcesDirectory)\js\web'
+    displayName: 'Run ort-web tests'
+  - script: |
      npm test -- --webgl-texture-pack-mode -b=webgl -e=edge
     workingDirectory: '$(Build.SourcesDirectory)\js\web'
     displayName: 'Run ort-web tests - WebGL: packed mode'
