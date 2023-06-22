@@ -122,7 +122,7 @@ Status SliceOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
 
     const auto* type_proto = inputs[input_i].node_arg.TypeAsProto();
     ORT_RETURN_IF_ERROR(qnn_model_wrapper.GetQnnDataType(input_name, is_quantized_model,
-                                                         do_op_validation, type_proto, qnn_data_type));
+                                                         do_op_validation || input_i > 0, type_proto, qnn_data_type));
 
     std::vector<uint32_t> input_shape;
     ORT_RETURN_IF_NOT(qnn_model_wrapper.GetOnnxShape(inputs[input_i].node_arg, input_shape), "Cannot get shape");
@@ -131,7 +131,7 @@ Status SliceOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
       ORT_RETURN_IF_NOT(qnn_model_wrapper.ProcessQuantizationParameter(input_name,
                                                                        quantize_param.scaleOffsetEncoding.scale,
                                                                        quantize_param.scaleOffsetEncoding.offset,
-                                                                       do_op_validation),
+                                                                       do_op_validation || input_i > 0),
                         "Cannot get quantization parameter");
     }
 
@@ -181,8 +181,7 @@ Status SliceOpBuilder::ProcessInputs(QnnModelWrapper& qnn_model_wrapper,
 
     input_names.push_back(input_name);
     Qnn_TensorType_t tensor_type = GetInputTensorType(qnn_model_wrapper, input_name);
-    Qnn_QuantizeParams_t quantize_params = QNN_QUANTIZE_PARAMS_INIT;
-    QnnTensorWrapper input_tensorwrapper(input_name, tensor_type, qnn_data_type, quantize_params,
+    QnnTensorWrapper input_tensorwrapper(input_name, tensor_type, qnn_data_type, quantize_param,
                                          std::move(input_shape), std::move(unpacked_tensor));
     ORT_RETURN_IF_NOT(qnn_model_wrapper.AddTensorWrapper(std::move(input_tensorwrapper)), "Failed to add tensor.");
   }

@@ -207,7 +207,8 @@ Status ResizeOpBuilder::ValidateOp(QnnModelWrapper& qnn_model_wrapper, const Nod
                 "Only 'nearest' and 'linear' are supported.");
 
   const std::string coordinate_mode = GetOnnxAttr(node_helper, onnx_coord_transf_mode_attr);
-  ORT_RETURN_IF((coordinate_mode != "half_pixel") && (coordinate_mode != "align_corners"),
+  ORT_RETURN_IF((coordinate_mode != "half_pixel") && (coordinate_mode != "align_corners") &&
+                (coordinate_mode != "asymmetric"),
                 "QNN EP: coordinate transformation mode '", coordinate_mode.c_str(), "' not supported for Resize op.",
                 "Only 'align_corners' and 'half_pixel' are supported.");
 
