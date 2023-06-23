@@ -96,6 +96,12 @@ jobs:
       errorActionPreference: stop
     displayName: 'Pack NPM packages'
   - script: |
+     dxdiag /t output2.txt
+     timeout /t 30 /nobreak > nul
+     type output2.txt
+    workingDirectory: '$(Build.SourcesDirectory)\js\web'
+    displayName: 'Run dxdiag'
+  - script: |
      npm test -- model test_abs -e=edge -b=webgpu
     workingDirectory: '$(Build.SourcesDirectory)\js\web'
     displayName: 'Run ort-web tests'
