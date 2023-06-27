@@ -26,20 +26,14 @@ def parse_args():
     parser.add_argument("--stop", action="store_true", help="Stop the emulator.")
 
     parser.add_argument("--android-sdk-root", required=True, help="Path to the Android SDK root.")
-    parser.add_argument(
-        "--system-image",
-        default="system-images;android-31;default;x86_64",
-        help="The Android system image package name.",
-    )
+    parser.add_argument("--system-image", default="system-images;android-31;default;x86_64",
+                        help="The Android system image package name.")
     parser.add_argument("--avd-name", default="ort_android", help="The Android virtual device name.")
-    parser.add_argument(
-        "--emulator-extra-args", default="", help="A string of extra arguments to pass to the Android emulator."
-    )
-    parser.add_argument(
-        "--emulator-pid-file",
-        help="Output/input file containing the PID of the emulator process. "
-        "This is only required if exactly one of --start or --stop is given.",
-    )
+    parser.add_argument("--emulator-extra-args", default="",
+                        help="A string of extra arguments to pass to the Android emulator.")
+    parser.add_argument("--emulator-pid-file",
+                        help="Output/input file containing the PID of the emulator process. "
+                             "This is only required if exactly one of --start or --stop is given.")
 
     args = parser.parse_args()
 
