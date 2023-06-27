@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
+import {DataType} from '../../../wasm-common';
 import {TensorView} from '../../tensor';
 import {MAX_CLIP, MIN_CLIP, ShapeUtil} from '../../util';
 import {AttributeWithCacheKey, createAttributeWithCacheKey} from '../attribute-with-cache-key';
@@ -83,6 +84,36 @@ export const atan = (context: ComputeContext): void => {
 };
 export const atanh = (context: ComputeContext): void => {
   context.compute(createElementwiseProgramInfoLoader(context.inputs[0], 'Atanh', 'atanh'));
+};
+
+export interface CastAttributes extends AttributeWithCacheKey {
+  readonly to: number;
+  readonly saturate?: boolean;
+}
+
+export const parseCastAttributes = (attributes: Record<string, unknown>): CastAttributes =>
+    createAttributeWithCacheKey(attributes as {to: number});
+
+
+export const cast = (context: ComputeContext, attributes: CastAttributes): void => {
+  let func: ElementwiseFunctionCall;
+  switch (attributes.to) {
+    case DataType.float:
+      func = 'f32';
+      break;
+    case DataType.uint32:
+      func = 'u32';
+      break;
+    case DataType.int32:
+      func = 'i32';
+      break;
+    case DataType.bool:
+      func = 'bool';
+      break;
+    default:
+      throw new RangeError(`not supported type (specified in attribute 'to' from 'Cast' operator): ${attributes.to}`);
+  }
+  context.compute(createElementwiseProgramInfoLoader(context.inputs[0], 'Cast', func, undefined, attributes.cacheKey));
 };
 
 export interface ClipAttributes extends AttributeWithCacheKey {
