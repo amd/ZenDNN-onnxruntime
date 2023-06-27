@@ -27,6 +27,8 @@ from typing import List, Optional, Union
 # Supress a warning of cuda lazy loading not enabled.
 os.environ["CUDA_MODULE_LOADING"] = "LAZY"
 
+import shutil
+
 import numpy as np
 import onnx
 import onnx_graphsurgeon as gs
@@ -268,21 +270,6 @@ class BaseModel:
     def get_sample_input(self, batch_size, image_height, image_width):
         pass
 
-    def get_sample_ort_input(self, batch_size, image_height, image_width):
-        input_names = self.get_input_names()
-        sample_input = self.get_sample_input(batch_size, image_height, image_width)
-        assert input_names and (sample_input is not None)
-
-        input_dict = {}
-        if len(input_names) > 1:
-            assert len(input_names) == len(sample_input)
-            for i, name in enumerate(input_names):
-                input_dict[name] = sample_input[i].cpu().numpy()
-        else:
-            input_dict[input_names[0]] = sample_input.cpu().numpy()
-
-        return input_dict
-
     def get_profile_id(self, batch_size, image_height, image_width, static_batch, static_image_shape):
         (
             min_batch,
@@ -397,11 +384,8 @@ def build_engines(
     static_image_shape=True,
     enable_preview=False,
     max_workspace_size=0,
-    warm_up=False,
 ):
     if force_engine_rebuild:
-        import shutil
-
         if os.path.isdir(onnx_dir):
             logger.warning("Remove existing directory %s since force_engine_rebuild is enabled", onnx_dir)
             shutil.rmtree(onnx_dir)
@@ -492,15 +476,6 @@ def build_engines(
         )
 
         built_engines[model_name] = engine
-
-    # Run a sample input to warm up
-    if warm_up:
-        for model_name, model_obj in models.items():
-            engine = built_engines[model_name]
-
-            logger.warning("Runing a sample input to warm up onnxruntime session of %s", model_name)
-            sample_input = model_obj.get_sample_ort_input(opt_batch_size, opt_image_height, opt_image_width)
-            engine.ort_session.run(None, sample_input)
 
     return built_engines
 
@@ -798,7 +773,6 @@ class OnnxruntimeTensorRTStableDiffusionPipeline(StableDiffusionPipeline):
         self,
         torch_device: Optional[Union[str, torch.device]] = None,
         silence_dtype_warnings: bool = False,
-        warm_up: bool = False,
     ):
         super().to(torch_device, silence_dtype_warnings=silence_dtype_warnings)
 
@@ -823,7 +797,6 @@ class OnnxruntimeTensorRTStableDiffusionPipeline(StableDiffusionPipeline):
             force_engine_rebuild=self.force_engine_rebuild,
             static_batch=self.build_static_batch,
             static_image_shape=not self.build_dynamic_shape,
-            warm_up=warm_up,
         )
 
         return self
