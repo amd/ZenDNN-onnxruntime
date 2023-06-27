@@ -24,11 +24,14 @@ import os
 from collections import OrderedDict
 from typing import List, Optional, Union
 
-import tensorrt as trt
-import torch
+# Supress a warning of cuda lazy loading not enabled.
+os.environ["CUDA_MODULE_LOADING"] = "LAZY"
+
 import numpy as np
 import onnx
 import onnx_graphsurgeon as gs
+import torch
+from cuda import cudart
 from diffusers.models import AutoencoderKL, UNet2DConditionModel
 from diffusers.pipelines.stable_diffusion import (
     StableDiffusionPipeline,
@@ -39,15 +42,11 @@ from diffusers.schedulers import DDIMScheduler
 from diffusers.utils import DIFFUSERS_CACHE, logging
 from huggingface_hub import snapshot_download
 from onnx import shape_inference
-from polygraphy import cuda
 from polygraphy.backend.onnx.loader import fold_constants
-
 from transformers import CLIPFeatureExtractor, CLIPTextModel, CLIPTokenizer
 
 import onnxruntime as ort
 from onnxruntime.transformers.io_binding_helper import TypeHelper
-
-from cuda import cudart
 
 """
 Modify from https://github.com/huggingface/diffusers/pull/3419.
@@ -60,7 +59,7 @@ pip install --upgrade polygraphy>=0.47.0 onnx-graphsurgeon --extra-index-url htt
 pip install onnxruntime-gpu
 """
 
-TRT_LOGGER = trt.Logger(trt.Logger.ERROR)
+
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # Map of numpy dtype -> torch dtype
@@ -88,7 +87,6 @@ torch_to_numpy_dtype_dict = {value: key for (key, value) in numpy_to_torch_dtype
 class Engine:
     def __init__(self, engine_path):
         self.engine_path = engine_path
-        self.engine = None
         self.tensors = OrderedDict()
 
         self.ort_session = None
@@ -98,7 +96,6 @@ class Engine:
         self.output_names = None
 
     def __del__(self):
-        del self.engine
         del self.tensors
         del self.io_binding
         del self.ort_session
@@ -108,39 +105,8 @@ class Engine:
         onnx_path,
         fp16,
         input_profile=None,
-        enable_preview=False,
-        enable_all_tactics=False,
-        timing_cache=None,
         workspace_size=0,
     ):
-        logger.warning(f"Building TensorRT engine for {onnx_path}: {self.engine_path}")
-
-        # config_kwargs["preview_features"] = [trt.PreviewFeature.DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805]
-        # if enable_preview:
-        #     Faster dynamic shapes made optional since it increases engine build time.
-        #     config_kwargs["preview_features"].append(trt.PreviewFeature.FASTER_DYNAMIC_SHAPES_0805)
-        # if workspace_size > 0:
-        #     config_kwargs["memory_pool_limits"] = {trt.MemoryPoolType.WORKSPACE: workspace_size}
-        # if not enable_all_tactics:
-        #     config_kwargs["tactic_sources"] = []
-
-        # engine = engine_from_network(
-        #     network_from_onnx_path(onnx_path, flags=[trt.OnnxParserFlag.NATIVE_INSTANCENORM]),
-        #     config=CreateConfig(fp16=fp16, profiles=[p], load_timing_cache=timing_cache, **config_kwargs),
-        #     save_timing_cache=timing_cache,
-        # )
-        # save_engine(engine, path=self.engine_path)
-
-        # TODO: use the following parameters in ORT: enable_preview, enable_all_tactics, timing_cache
-        if enable_preview:
-            logger.warning("enable_preview parameter is not used for ORT-TRT")
-
-        if enable_all_tactics:
-            logger.warning("enable_all_tactics parameter is not used for ORT-TRT")
-
-        if timing_cache:
-            logger.warning("timing_cache parameter is not used for ORT-TRT")
-
         self.ort_trt_provider_options = self.get_tensorrt_provider_options(input_profile, workspace_size, fp16)
         sess_options = ort.SessionOptions()
         sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
@@ -153,7 +119,7 @@ class Engine:
             ],
         )
 
-    def allocate_buffers(self, shape_dict=None, device="cuda"):
+    def allocate_output_buffers(self, shape_dict=None, device="cuda"):
         """Allocate output tensors for I/O Binding"""
         self.input_names = [input.name for input in self.ort_session.get_inputs()]
         for name in self.input_names:
@@ -205,10 +171,9 @@ class Engine:
             "trt_fp16_enable": fp16,
             "trt_engine_cache_enable": True,
             "trt_timing_cache_enable": True,
-            # "trt_force_timing_cache": False,
-            # "trt_cuda_graph_enable": False,
             "trt_detailed_build_log": True,
             "trt_engine_cache_path": self.engine_path,
+            # "trt_cuda_graph_enable": False,
         }
 
         if workspace_size > 0:
@@ -232,6 +197,8 @@ class Engine:
             trt_ep_options["trt_profile_min_shapes"] = ",".join(min_shapes)
             trt_ep_options["trt_profile_max_shapes"] = ",".join(max_shapes)
             trt_ep_options["trt_profile_opt_shapes"] = ",".join(opt_shapes)
+
+        logger.info("trt_ep_options=%s", trt_ep_options)
 
         return trt_ep_options
 
@@ -316,7 +283,31 @@ class BaseModel:
 
         return input_dict
 
-    def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape):
+    def get_profile_id(self, batch_size, image_height, image_width, static_batch, static_image_shape):
+        (
+            min_batch,
+            max_batch,
+            min_image_height,
+            max_image_height,
+            min_image_width,
+            max_image_width,
+            _,
+            _,
+            _,
+            _,
+        ) = self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_image_shape)
+
+        profile_id = f"_b_{batch_size}" if static_batch else f"_b_{min_batch}_{max_batch}"
+
+        if self.name != "CLIP":
+            if static_image_shape:
+                profile_id += f"_h_{image_height}_w_{image_width}"
+            else:
+                profile_id += f"_h_{min_image_height}_{max_image_height}_w_{min_image_width}_{max_image_width}"
+
+        return profile_id
+
+    def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_image_shape):
         return None
 
     def get_shape_dict(self, batch_size, image_height, image_width):
@@ -339,19 +330,19 @@ class BaseModel:
         assert latent_width >= self.min_latent_shape and latent_width <= self.max_latent_shape
         return (latent_height, latent_width)
 
-    def get_minmax_dims(self, batch_size, image_height, image_width, static_batch, static_shape):
+    def get_minmax_dims(self, batch_size, image_height, image_width, static_batch, static_image_shape):
         min_batch = batch_size if static_batch else self.min_batch
         max_batch = batch_size if static_batch else self.max_batch
         latent_height = image_height // 8
         latent_width = image_width // 8
-        min_image_height = image_height if static_shape else self.min_image_shape
-        max_image_height = image_height if static_shape else self.max_image_shape
-        min_image_width = image_width if static_shape else self.min_image_shape
-        max_image_width = image_width if static_shape else self.max_image_shape
-        min_latent_height = latent_height if static_shape else self.min_latent_shape
-        max_latent_height = latent_height if static_shape else self.max_latent_shape
-        min_latent_width = latent_width if static_shape else self.min_latent_shape
-        max_latent_width = latent_width if static_shape else self.max_latent_shape
+        min_image_height = image_height if static_image_shape else self.min_image_shape
+        max_image_height = image_height if static_image_shape else self.max_image_shape
+        min_image_width = image_width if static_image_shape else self.min_image_shape
+        max_image_width = image_width if static_image_shape else self.max_image_shape
+        min_latent_height = latent_height if static_image_shape else self.min_latent_shape
+        max_latent_height = latent_height if static_image_shape else self.max_latent_shape
+        min_latent_width = latent_width if static_image_shape else self.min_latent_shape
+        max_latent_width = latent_width if static_image_shape else self.max_latent_shape
         return (
             min_batch,
             max_batch,
@@ -366,19 +357,20 @@ class BaseModel:
         )
 
 
-def getOnnxPath(model_name, onnx_dir, opt=True):
+def get_onnx_path(model_name, onnx_dir, opt=True):
     return os.path.join(onnx_dir, model_name + (".opt" if opt else "") + ".onnx")
 
 
-def getEnginePath(model_name, engine_dir):
-    return os.path.join(engine_dir, model_name)
+def get_engine_path(engine_dir, model_name, profile_id):
+    return os.path.join(engine_dir, model_name + profile_id)
 
 
 def has_engine_file(engine_path):
-    children = os.scandir(engine_path)
-    for entry in children:
-        if entry.is_file() and entry.name.endswith(".engine"):
-            return True
+    if os.path.isdir(engine_path):
+        children = os.scandir(engine_path)
+        for entry in children:
+            if entry.is_file() and entry.name.endswith(".engine"):
+                return True
     return False
 
 
@@ -402,12 +394,21 @@ def build_engines(
     opt_batch_size=1,
     force_engine_rebuild=False,
     static_batch=False,
-    static_shape=True,
+    static_image_shape=True,
     enable_preview=False,
-    enable_all_tactics=False,
-    timing_cache=None,
     max_workspace_size=0,
+    warm_up=False,
 ):
+    if force_engine_rebuild:
+        import shutil
+
+        if os.path.isdir(onnx_dir):
+            logger.warning("Remove existing directory %s since force_engine_rebuild is enabled", onnx_dir)
+            shutil.rmtree(onnx_dir)
+        if os.path.isdir(engine_dir):
+            logger.warning("Remove existing directory %s since force_engine_rebuild is enabled", engine_dir)
+            shutil.rmtree(engine_dir)
+
     if not os.path.isdir(engine_dir):
         os.makedirs(engine_dir)
 
@@ -416,14 +417,15 @@ def build_engines(
 
     # Export models to ONNX
     for model_name, model_obj in models.items():
-        engine_path = getEnginePath(model_name, engine_dir)
-        if force_engine_rebuild or not has_engine_file(engine_path):
-            logger.warning("Building Engines...")
-            logger.warning("Engine build can take a while to complete")
-            onnx_path = getOnnxPath(model_name, onnx_dir, opt=False)
-            onnx_opt_path = getOnnxPath(model_name, onnx_dir)
-            if force_engine_rebuild or not os.path.exists(onnx_opt_path):
-                if force_engine_rebuild or not os.path.exists(onnx_path):
+        profile_id = model_obj.get_profile_id(
+            opt_batch_size, opt_image_height, opt_image_width, static_batch, static_image_shape
+        )
+        engine_path = get_engine_path(engine_dir, model_name, profile_id)
+        if not has_engine_file(engine_path):
+            onnx_path = get_onnx_path(model_name, onnx_dir, opt=False)
+            onnx_opt_path = get_onnx_path(model_name, onnx_dir)
+            if not os.path.exists(onnx_opt_path):
+                if not os.path.exists(onnx_path):
                     logger.warning(f"Exporting model: {onnx_path}")
                     model = model_obj.get_model()
                     with torch.inference_mode(), torch.autocast("cuda"):
@@ -443,23 +445,38 @@ def build_engines(
                     torch.cuda.empty_cache()
                     gc.collect()
                 else:
-                    logger.warning(f"Found cached model: {onnx_path}")
+                    logger.warning("Found cached model: %s", onnx_path)
 
                 # Optimize onnx
-                if force_engine_rebuild or not os.path.exists(onnx_opt_path):
-                    logger.warning(f"Generating optimizing model: {onnx_opt_path}")
+                if not os.path.exists(onnx_opt_path):
+                    logger.warning("Generating optimizing model: %s", onnx_opt_path)
                     onnx_opt_graph = model_obj.optimize(onnx.load(onnx_path))
                     onnx.save(onnx_opt_graph, onnx_opt_path)
                 else:
-                    logger.warning(f"Found cached optimized model: {onnx_opt_path} ")
+                    logger.warning("Found cached optimized model: %s", onnx_opt_path)
 
     built_engines = {}
     for model_name, model_obj in models.items():
-        engine_path = getEnginePath(model_name, engine_dir)
-        engine = Engine(engine_path)
-        onnx_opt_path = getOnnxPath(model_name, onnx_dir)
+        profile_id = model_obj.get_profile_id(
+            opt_batch_size, opt_image_height, opt_image_width, static_batch, static_image_shape
+        )
 
-        # We create session in engine build so it always needed.
+        engine_path = get_engine_path(engine_dir, model_name, profile_id)
+
+        engine = Engine(engine_path)
+        onnx_opt_path = get_onnx_path(model_name, onnx_dir)
+
+        if not has_engine_file(engine_path):
+            logger.warning(
+                "Building TensorRT engine for %s from %s to %s. It can take a while to complete...",
+                model_name,
+                onnx_opt_path,
+                engine_path,
+            )
+        else:
+            logger.warning("Reuse cached TensorRT engine in directory %s", engine_path)
+
+        # We create session within build() so it always needed to run.
         engine.build(
             onnx_opt_path,
             fp16=True,
@@ -468,27 +485,27 @@ def build_engines(
                 opt_image_height,
                 opt_image_width,
                 static_batch=static_batch,
-                static_shape=static_shape,
+                static_image_shape=static_image_shape,
             ),
             enable_preview=enable_preview,
-            enable_all_tactics=enable_all_tactics,
-            timing_cache=timing_cache,
             workspace_size=get_work_space_size(model_name, max_workspace_size),
         )
 
         built_engines[model_name] = engine
 
     # Run a sample input to warm up
-    for model_name, model_obj in models.items():
-        engine = built_engines[model_name]
+    if warm_up:
+        for model_name, model_obj in models.items():
+            engine = built_engines[model_name]
 
-        sample_input = model_obj.get_sample_ort_input(opt_batch_size, opt_image_height, opt_image_width)
-        engine.ort_session.run(None, sample_input)
+            logger.warning("Runing a sample input to warm up onnxruntime session of %s", model_name)
+            sample_input = model_obj.get_sample_ort_input(opt_batch_size, opt_image_height, opt_image_width)
+            engine.ort_session.run(None, sample_input)
 
     return built_engines
 
 
-def runEngine(engine, feed_dict, stream):
+def run_engine(engine, feed_dict, stream):
     return engine.infer(feed_dict, stream)
 
 
@@ -508,10 +525,10 @@ class CLIP(BaseModel):
     def get_dynamic_axes(self):
         return {"input_ids": {0: "B"}, "text_embeddings": {0: "B"}}
 
-    def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape):
+    def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_image_shape):
         self.check_dims(batch_size, image_height, image_width)
         min_batch, max_batch, _, _, _, _, _, _, _, _ = self.get_minmax_dims(
-            batch_size, image_height, image_width, static_batch, static_shape
+            batch_size, image_height, image_width, static_batch, static_image_shape
         )
         return {
             "input_ids": [(min_batch, self.text_maxlen), (batch_size, self.text_maxlen), (max_batch, self.text_maxlen)]
@@ -571,7 +588,7 @@ class UNet(BaseModel):
             "latent": {0: "2B", 2: "H", 3: "W"},
         }
 
-    def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape):
+    def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_image_shape):
         latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
         (
             min_batch,
@@ -584,7 +601,7 @@ class UNet(BaseModel):
             max_latent_height,
             min_latent_width,
             max_latent_width,
-        ) = self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape)
+        ) = self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_image_shape)
         return {
             "sample": [
                 (2 * min_batch, self.unet_dim, min_latent_height, min_latent_width),
@@ -646,7 +663,7 @@ class VAE(BaseModel):
     def get_dynamic_axes(self):
         return {"latent": {0: "B", 2: "H", 3: "W"}, "images": {0: "B", 2: "8H", 3: "8W"}}
 
-    def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape):
+    def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_image_shape):
         latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
         (
             min_batch,
@@ -659,7 +676,7 @@ class VAE(BaseModel):
             max_latent_height,
             min_latent_width,
             max_latent_width,
-        ) = self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape)
+        ) = self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_image_shape)
         return {
             "latent": [
                 (min_batch, 4, min_latent_height, min_latent_width),
@@ -686,30 +703,9 @@ def make_VAE(model, device, max_batch_size, embedding_dim, inpaint=False):
 
 class OnnxruntimeTensorRTStableDiffusionPipeline(StableDiffusionPipeline):
     r"""
-    Pipeline for text-to-image generation using TensorRT accelerated Stable Diffusion.
+    Pipeline for text-to-image generation using TensorRT execution provider in ONNX Runtime.
 
-    This model inherits from [`StableDiffusionPipeline`]. Check the superclass documentation for the generic methods the
-    library implements for all the pipelines (such as downloading or saving, running on a particular device, etc.)
-
-    Args:
-        vae ([`AutoencoderKL`]):
-            Variational Auto-Encoder (VAE) Model to encode and decode images to and from latent representations.
-        text_encoder ([`CLIPTextModel`]):
-            Frozen text-encoder. Stable Diffusion uses the text portion of
-            [CLIP](https://huggingface.co/docs/transformers/model_doc/clip#transformers.CLIPTextModel), specifically
-            the [clip-vit-large-patch14](https://huggingface.co/openai/clip-vit-large-patch14) variant.
-        tokenizer (`CLIPTokenizer`):
-            Tokenizer of class
-            [CLIPTokenizer](https://huggingface.co/docs/transformers/v4.21.0/en/model_doc/clip#transformers.CLIPTokenizer).
-        unet ([`UNet2DConditionModel`]): Conditional U-Net architecture to denoise the encoded image latents.
-        scheduler ([`SchedulerMixin`]):
-            A scheduler to be used in combination with `unet` to denoise the encoded image latents. Can be one of
-            [`DDIMScheduler`], [`LMSDiscreteScheduler`], or [`PNDMScheduler`].
-        safety_checker ([`StableDiffusionSafetyChecker`]):
-            Classification module that estimates whether generated images could be considered offensive or harmful.
-            Please, refer to the [model card](https://huggingface.co/runwayml/stable-diffusion-v1-5) for details.
-        feature_extractor ([`CLIPFeatureExtractor`]):
-            Model that extracts features from generated images to be used as inputs for the `safety_checker`.
+    This pipeline inherits from [`StableDiffusionPipeline`]. Check the documentation in super class for most parameters.
     """
 
     def __init__(
@@ -730,10 +726,8 @@ class OnnxruntimeTensorRTStableDiffusionPipeline(StableDiffusionPipeline):
         onnx_opset: int = 17,
         onnx_dir: str = "onnx",
         # TensorRT engine build parameters
-        engine_dir: str = "engine",
-        build_preview_features: bool = True,
+        engine_dir: str = "onnxruntime_tensorrt_engine",
         force_engine_rebuild: bool = False,
-        timing_cache: str = "timing_cache",
     ):
         super().__init__(
             vae, text_encoder, tokenizer, unet, scheduler, safety_checker, feature_extractor, requires_safety_checker
@@ -742,25 +736,24 @@ class OnnxruntimeTensorRTStableDiffusionPipeline(StableDiffusionPipeline):
         self.vae.forward = self.vae.decode
 
         self.stages = stages
-        self.image_height, self.image_width = image_height, image_width
+        self.image_height = image_height
+        self.image_width = image_width
         self.inpaint = False
         self.onnx_opset = onnx_opset
         self.onnx_dir = onnx_dir
         self.engine_dir = engine_dir
         self.force_engine_rebuild = force_engine_rebuild
-        self.timing_cache = timing_cache
         self.build_static_batch = False
         self.build_dynamic_shape = False
-        self.build_preview_features = build_preview_features
 
         self.max_batch_size = max_batch_size
-        # TODO: Restrict batch size to 4 for larger image dimensions as a WAR for TensorRT limitation.
+        # Restrict batch size to 4 for larger image dimensions as a walkaround for TensorRT limitation.
         if self.build_dynamic_shape or self.image_height > 512 or self.image_width > 512:
             self.max_batch_size = 4
 
-        self.stream = None  # loaded in loadResources()
+        self.stream = None  # not used for now
         self.models = {}  # loaded in __loadModels()
-        self.engine = {}  # loaded in build_engines()
+        self.engines = {}  # loaded in build_engines()
 
     def __loadModels(self):
         # Load pipeline models
@@ -801,12 +794,16 @@ class OnnxruntimeTensorRTStableDiffusionPipeline(StableDiffusionPipeline):
             )
         )
 
-    def to(self, torch_device: Optional[Union[str, torch.device]] = None, silence_dtype_warnings: bool = False):
+    def to(
+        self,
+        torch_device: Optional[Union[str, torch.device]] = None,
+        silence_dtype_warnings: bool = False,
+        warm_up: bool = False,
+    ):
         super().to(torch_device, silence_dtype_warnings=silence_dtype_warnings)
 
         self.onnx_dir = os.path.join(self.cached_folder, self.onnx_dir)
         self.engine_dir = os.path.join(self.cached_folder, self.engine_dir)
-        self.timing_cache = os.path.join(self.cached_folder, self.timing_cache)
 
         # set device
         self.torch_device = self._execution_device
@@ -816,7 +813,7 @@ class OnnxruntimeTensorRTStableDiffusionPipeline(StableDiffusionPipeline):
         self.__loadModels()
 
         # build engines
-        self.engine = build_engines(
+        self.engines = build_engines(
             self.models,
             self.engine_dir,
             self.onnx_dir,
@@ -825,9 +822,8 @@ class OnnxruntimeTensorRTStableDiffusionPipeline(StableDiffusionPipeline):
             opt_image_width=self.image_width,
             force_engine_rebuild=self.force_engine_rebuild,
             static_batch=self.build_static_batch,
-            static_shape=not self.build_dynamic_shape,
-            enable_preview=self.build_preview_features,
-            timing_cache=self.timing_cache,
+            static_image_shape=not self.build_dynamic_shape,
+            warm_up=warm_up,
         )
 
         return self
@@ -858,7 +854,7 @@ class OnnxruntimeTensorRTStableDiffusionPipeline(StableDiffusionPipeline):
         )
 
         # NOTE: output tensor for CLIP must be cloned because it will be overwritten when called again for negative prompt
-        text_embeddings = runEngine(self.engine["clip"], {"input_ids": text_input_ids}, self.stream)[
+        text_embeddings = run_engine(self.engines["clip"], {"input_ids": text_input_ids}, self.stream)[
             "text_embeddings"
         ].clone()
 
@@ -875,7 +871,7 @@ class OnnxruntimeTensorRTStableDiffusionPipeline(StableDiffusionPipeline):
             .to(self.torch_device)
         )
 
-        uncond_embeddings = runEngine(self.engine["clip"], {"input_ids": uncond_input_ids}, self.stream)[
+        uncond_embeddings = run_engine(self.engines["clip"], {"input_ids": uncond_input_ids}, self.stream)[
             "text_embeddings"
         ]
 
@@ -899,8 +895,8 @@ class OnnxruntimeTensorRTStableDiffusionPipeline(StableDiffusionPipeline):
             # Predict the noise residual
             timestep_float = timestep.float() if timestep.dtype != torch.float32 else timestep
 
-            noise_pred = runEngine(
-                self.engine["unet"],
+            noise_pred = run_engine(
+                self.engines["unet"],
                 {"sample": latent_model_input, "timestep": timestep_float, "encoder_hidden_states": text_embeddings},
                 self.stream,
             )["latent"]
@@ -915,17 +911,17 @@ class OnnxruntimeTensorRTStableDiffusionPipeline(StableDiffusionPipeline):
         return latents
 
     def __decode_latent(self, latents):
-        images = runEngine(self.engine["vae"], {"latent": latents}, self.stream)["images"]
+        images = run_engine(self.engines["vae"], {"latent": latents}, self.stream)["images"]
         images = (images / 2 + 0.5).clamp(0, 1)
         return images.cpu().permute(0, 2, 3, 1).float().numpy()
 
     def __loadResources(self, image_height, image_width, batch_size):
         # TODO: stream is not used yet
-        # self.stream = cuda.Stream()
+        # self.stream = polygraphy.cuda.Stream()
 
         # Allocate output tensors for I/O bindings
         for model_name, obj in self.models.items():
-            self.engine[model_name].allocate_buffers(
+            self.engines[model_name].allocate_output_buffers(
                 shape_dict=obj.get_shape_dict(batch_size, image_height, image_width), device=self.torch_device
             )
 
@@ -995,7 +991,7 @@ class OnnxruntimeTensorRTStableDiffusionPipeline(StableDiffusionPipeline):
         # load resources
         self.__loadResources(self.image_height, self.image_width, batch_size)
 
-        with torch.inference_mode(), torch.autocast("cuda"), trt.Runtime(TRT_LOGGER):
+        with torch.inference_mode(), torch.autocast("cuda"):
             # CLIP text encoder
             text_embeddings = self.__encode_prompt(prompt, negative_prompt)
 
@@ -1042,7 +1038,7 @@ def test():
     # re-use cached folder to save ONNX models and TensorRT Engines
     pipe.set_cached_folder("stabilityai/stable-diffusion-2-1", revision="fp16")
 
-    pipe = pipe.to("cuda")
+    pipe = pipe.to("cuda", warm_up=True)
 
     prompt = "photorealistic new zealand hills"
     image = pipe(prompt).images[0]

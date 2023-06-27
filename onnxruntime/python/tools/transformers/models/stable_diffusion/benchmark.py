@@ -426,6 +426,99 @@ def run_ort(
     return result
 
 
+def run_ort_trt(
+    model_name: str,
+    batch_size: int,
+    disable_safety_checker: bool,
+    height,
+    width,
+    steps,
+    num_prompts,
+    batch_count,
+    start_memory,
+    memory_monitor_type,
+):
+    import torch
+    from diffusers import DDIMScheduler
+    from onnxruntime_tensorrt_txt2img import OnnxruntimeTensorRTStableDiffusionPipeline
+
+    scheduler = DDIMScheduler.from_pretrained(model_name, subfolder="scheduler")
+
+    image_filename_prefix = get_image_filename_prefix("ort_trt", model_name, batch_size, disable_safety_checker)
+
+    MAX_BATCH_SIZE = 4
+    assert batch_size <= MAX_BATCH_SIZE
+
+    pipe = OnnxruntimeTensorRTStableDiffusionPipeline.from_pretrained(
+        model_name,
+        revision="fp16",
+        torch_dtype=torch.float16,
+        scheduler=scheduler,
+        requires_safety_checker=not disable_safety_checker,
+        image_height=height,
+        image_width=width,
+        max_batch_size=MAX_BATCH_SIZE,
+        onnx_opset=17,
+    )
+
+    # re-use cached folder to save ONNX models and TensorRT Engines
+    pipe.set_cached_folder(model_name, revision="fp16")
+
+    pipe = pipe.to("cuda")
+
+    def warmup():
+        pipe(["warm up"] * batch_size, num_inference_steps=steps)
+
+    # Run warm up, and measure GPU memory of two runs
+    # The first run has algo search so it might need more memory
+    first_run_memory = measure_gpu_memory(memory_monitor_type, warmup, start_memory)
+    second_run_memory = measure_gpu_memory(memory_monitor_type, warmup, start_memory)
+
+    if memory_monitor_type is None:
+        warmup()
+
+    latency_list = []
+    prompts = example_prompts()
+    for i, prompt in enumerate(prompts):
+        if i >= num_prompts:
+            break
+        for j in range(batch_count):
+            inference_start = time.time()
+            images = pipe(
+                [prompt] * batch_size,
+                num_inference_steps=steps,
+            ).images
+            inference_end = time.time()
+            latency = inference_end - inference_start
+            latency_list.append(latency)
+            print(f"Inference took {latency:.3f} seconds")
+            for k, image in enumerate(images):
+                image.save(f"{image_filename_prefix}_{i}_{j}_{k}.jpg")
+
+    from tensorrt import __version__ as trt_version
+
+    from onnxruntime import __version__ as ort_version
+
+    return {
+        "model_name": model_name,
+        "engine": "onnxruntime",
+        "version": "{ort_version}",
+        "provider": f"tensorrt{trt_version})",
+        "directory": pipe.engine_dir,
+        "height": height,
+        "width": width,
+        "steps": steps,
+        "batch_size": batch_size,
+        "batch_count": batch_count,
+        "num_prompts": num_prompts,
+        "average_latency": sum(latency_list) / len(latency_list),
+        "median_latency": statistics.median(latency_list),
+        "first_run_memory_MB": first_run_memory,
+        "second_run_memory_MB": second_run_memory,
+        "disable_safety_checker": disable_safety_checker,
+    }
+
+
 def run_tensorrt(
     model_name: str,
     batch_size: int,
@@ -716,7 +809,7 @@ def main():
     print(args)
 
     memory_monitor_type = None
-    if args.provider == "cuda":
+    if args.provider in ["cuda", "tensorrt"]:
         memory_monitor_type = CudaMemoryMonitor
     elif args.provider == "rocm":
         memory_monitor_type = RocmMemoryMonitor
@@ -726,7 +819,20 @@ def main():
 
     sd_model = SD_MODELS[args.version]
     provider = PROVIDERS[args.provider]
-    if args.engine == "onnxruntime":
+    if args.engine == "onnxruntime" and args.provider == "tensorrt":
+        result = run_ort_trt(
+            sd_model,
+            args.batch_size,
+            not args.enable_safety_checker,
+            args.height,
+            args.width,
+            args.steps,
+            args.num_prompts,
+            args.batch_count,
+            start_memory,
+            memory_monitor_type,
+        )
+    elif args.engine == "onnxruntime":
         assert args.pipeline, "--pipeline should be specified for onnxruntime engine"
 
         if args.version in ["2.1"]:
