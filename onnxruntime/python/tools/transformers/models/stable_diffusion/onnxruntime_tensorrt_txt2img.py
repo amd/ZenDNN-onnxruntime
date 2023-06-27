@@ -149,7 +149,7 @@ class Engine:
                     tensor.data_ptr(),
                 )
 
-    def infer(self, feed_dict, stream):
+    def infer(self, feed_dict):
         """Bind input tensors and run inference"""
         for name, tensor in feed_dict.items():
             assert isinstance(tensor, torch.Tensor)
@@ -480,8 +480,8 @@ def build_engines(
     return built_engines
 
 
-def run_engine(engine, feed_dict, stream):
-    return engine.infer(feed_dict, stream)
+def run_engine(engine, feed_dict):
+    return engine.infer(feed_dict)
 
 
 class CLIP(BaseModel):
@@ -726,7 +726,6 @@ class OnnxruntimeTensorRTStableDiffusionPipeline(StableDiffusionPipeline):
         if self.build_dynamic_shape or self.image_height > 512 or self.image_width > 512:
             self.max_batch_size = 4
 
-        self.stream = None  # not used for now
         self.models = {}  # loaded in __loadModels()
         self.engines = {}  # loaded in build_engines()
 
@@ -827,7 +826,7 @@ class OnnxruntimeTensorRTStableDiffusionPipeline(StableDiffusionPipeline):
         )
 
         # NOTE: output tensor for CLIP must be cloned because it will be overwritten when called again for negative prompt
-        text_embeddings = run_engine(self.engines["clip"], {"input_ids": text_input_ids}, self.stream)[
+        text_embeddings = run_engine(self.engines["clip"], {"input_ids": text_input_ids})[
             "text_embeddings"
         ].clone()
 
@@ -844,7 +843,7 @@ class OnnxruntimeTensorRTStableDiffusionPipeline(StableDiffusionPipeline):
             .to(self.torch_device)
         )
 
-        uncond_embeddings = run_engine(self.engines["clip"], {"input_ids": uncond_input_ids}, self.stream)[
+        uncond_embeddings = run_engine(self.engines["clip"], {"input_ids": uncond_input_ids})[
             "text_embeddings"
         ]
 
@@ -871,7 +870,6 @@ class OnnxruntimeTensorRTStableDiffusionPipeline(StableDiffusionPipeline):
             noise_pred = run_engine(
                 self.engines["unet"],
                 {"sample": latent_model_input, "timestep": timestep_float, "encoder_hidden_states": text_embeddings},
-                self.stream,
             )["latent"]
 
             # Perform guidance
@@ -884,14 +882,11 @@ class OnnxruntimeTensorRTStableDiffusionPipeline(StableDiffusionPipeline):
         return latents
 
     def __decode_latent(self, latents):
-        images = run_engine(self.engines["vae"], {"latent": latents}, self.stream)["images"]
+        images = run_engine(self.engines["vae"], {"latent": latents})["images"]
         images = (images / 2 + 0.5).clamp(0, 1)
         return images.cpu().permute(0, 2, 3, 1).float().numpy()
 
     def __loadResources(self, image_height, image_width, batch_size):
-        # TODO: stream is not used yet
-        # self.stream = polygraphy.cuda.Stream()
-
         # Allocate output tensors for I/O bindings
         for model_name, obj in self.models.items():
             self.engines[model_name].allocate_output_buffers(
