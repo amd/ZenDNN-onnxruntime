@@ -23,12 +23,7 @@ import gc
 import os
 from collections import OrderedDict
 from typing import List, Optional, Union
-
-# Supress a warning of cuda lazy loading not enabled.
-os.environ["CUDA_MODULE_LOADING"] = "LAZY"
-
 import shutil
-
 import numpy as np
 import onnx
 import onnx_graphsurgeon as gs
@@ -51,7 +46,7 @@ import onnxruntime as ort
 from onnxruntime.transformers.io_binding_helper import TypeHelper
 
 """
-Modify from https://github.com/huggingface/diffusers/pull/3419.
+Modify from https://github.com/huggingface/diffusers/blob/v0.17.1/examples/community/stable_diffusion_tensorrt_txt2img.py
 
 Installation instructions
 pip install torch==1.13.1+cu117 torchvision==0.14.1+cu117 torchaudio==0.13.1 --extra-index-url https://download.pytorch.org/whl/cu117
@@ -965,7 +960,7 @@ class OnnxruntimeTensorRTStableDiffusionPipeline(StableDiffusionPipeline):
         return StableDiffusionPipelineOutput(images=images, nsfw_content_detected=has_nsfw_concept)
 
 
-def test():
+if __name__ == "__main__":
     import torch
     from diffusers import DDIMScheduler
 
@@ -984,12 +979,8 @@ def test():
     # re-use cached folder to save ONNX models and TensorRT Engines
     pipe.set_cached_folder("stabilityai/stable-diffusion-2-1", revision="fp16")
 
-    pipe = pipe.to("cuda", warm_up=True)
+    pipe = pipe.to("cuda")
 
     prompt = "photorealistic new zealand hills"
     image = pipe(prompt).images[0]
     image.save("ort_trt_txt2img_new_zealand_hills.png")
-
-
-if __name__ == "__main__":
-    test()
