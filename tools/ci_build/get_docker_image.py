@@ -50,6 +50,10 @@ def parse_args():
         help="used in packaging pipeline, which couldn't use get-docker-images-steps.yml",
     )
 
+    parser.add_argument(
+        "--pull_directly", action="store_true", help="pull directly from docker hub"
+    )
+
     return parser.parse_args()
 
 
@@ -101,7 +105,14 @@ def main():
             cwd=str(dest),
         )
 
-    if use_container_registry:
+    if args.pull_directly:
+        log.info("pulling image...")
+        run(
+            args.docker_path,
+            "pull",
+            full_image_name,
+        )
+    elif use_container_registry:
         run(
             args.docker_path,
             "--log-level",
