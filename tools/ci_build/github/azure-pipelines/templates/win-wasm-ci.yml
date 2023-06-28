@@ -121,7 +121,7 @@ jobs:
       ccache -s
       ccache -z
       #emcc --clear-cache
-      rm -rf '$(Build.BinariesDirectory)/Linux'
+      rm -rf '$(Build.BinariesDirectory)/wasm_simd_threads'
       python3 '$(Build.SourcesDirectory)/tools/ci_build/build.py' $(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --skip_test
       ccache -s
       popd
