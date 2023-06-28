@@ -533,7 +533,7 @@ def run_tensorrt(
 ):
     import torch
     from diffusers import DDIMScheduler
-    from tensorrt_txt2img import TensorRTStableDiffusionPipeline
+    from stable_diffusion_tensorrt_txt2img import TensorRTStableDiffusionPipeline
 
     scheduler = DDIMScheduler.from_pretrained(model_name, subfolder="scheduler")
 
@@ -856,6 +856,13 @@ def main():
             args.tuning,
         )
     elif args.engine == "tensorrt":
+        if not os.path.exists("stable_diffusion_tensorrt_txt2img.py"):
+            print("Downloading stable_diffusion_tensorrt_txt2img.py...")
+            import wget
+            wget.download(
+                "https://raw.githubusercontent.com/huggingface/diffusers/main/examples/community/stable_diffusion_tensorrt_txt2img.py"
+            )
+
         result = run_tensorrt(
             sd_model,
             args.batch_size,
