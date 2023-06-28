@@ -133,7 +133,7 @@ class Engine:
     def infer(self, feed_dict):
         """Bind input tensors and run inference"""
         for name, tensor in feed_dict.items():
-            assert isinstance(tensor, torch.Tensor)
+            assert isinstance(tensor, torch.Tensor) and tensor.is_contiguous()
             if name in self.input_names:
                 self.io_binding.bind_input(
                     name,
