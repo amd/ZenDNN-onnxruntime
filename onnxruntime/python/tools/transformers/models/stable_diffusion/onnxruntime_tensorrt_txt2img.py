@@ -25,7 +25,7 @@ Based on https://github.com/huggingface/diffusers/blob/v0.17.1/examples/communit
 Modifications: (1) Create ONNX Runtime session (2) Use I/O Binding of ONNX Runtime for inference
 
 Installation instructions
-pip install torch==1.13.1+cu117 torchvision==0.14.1+cu117 torchaudio==0.13.1 --extra-index-url https://download.pytorch.org/whl/cu117
+pip install torch==1.13.1+cu117 --extra-index-url https://download.pytorch.org/whl/cu117
 pip install --upgrade transformers diffusers>=0.16.0
 pip install --upgrade tensorrt>=8.6.1
 pip install --upgrade polygraphy>=0.47.0 onnx-graphsurgeon --extra-index-url https://pypi.ngc.nvidia.com
