@@ -859,6 +859,7 @@ def main():
         if not os.path.exists("stable_diffusion_tensorrt_txt2img.py"):
             print("Downloading stable_diffusion_tensorrt_txt2img.py...")
             import wget
+
             wget.download(
                 "https://raw.githubusercontent.com/huggingface/diffusers/main/examples/community/stable_diffusion_tensorrt_txt2img.py"
             )

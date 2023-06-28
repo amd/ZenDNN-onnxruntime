@@ -19,6 +19,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Stable diffusion text to image pipeline using ONNX Runtime TensorRT execution provider.
+Based on https://github.com/huggingface/diffusers/blob/v0.17.1/examples/community/stable_diffusion_tensorrt_txt2img.py
+Modifications: (1) Create ONNX Runtime session (2) Use I/O Binding of ONNX Runtime for inference
+
+Installation instructions
+pip install torch==1.13.1+cu117 torchvision==0.14.1+cu117 torchaudio==0.13.1 --extra-index-url https://download.pytorch.org/whl/cu117
+pip install --upgrade transformers diffusers>=0.16.0
+pip install --upgrade tensorrt>=8.6.1
+pip install --upgrade polygraphy>=0.47.0 onnx-graphsurgeon --extra-index-url https://pypi.ngc.nvidia.com
+pip install onnxruntime-gpu
+"""
+
 import gc
 import os
 from collections import OrderedDict
@@ -44,18 +57,6 @@ from transformers import CLIPFeatureExtractor, CLIPTextModel, CLIPTokenizer
 
 import onnxruntime as ort
 from onnxruntime.transformers.io_binding_helper import TypeHelper
-
-"""
-Modify from https://github.com/huggingface/diffusers/blob/v0.17.1/examples/community/stable_diffusion_tensorrt_txt2img.py
-
-Installation instructions
-pip install torch==1.13.1+cu117 torchvision==0.14.1+cu117 torchaudio==0.13.1 --extra-index-url https://download.pytorch.org/whl/cu117
-pip install --upgrade transformers diffusers>=0.16.0
-pip install --upgrade tensorrt>=8.6.1
-pip install --upgrade polygraphy>=0.47.0 onnx-graphsurgeon --extra-index-url https://pypi.ngc.nvidia.com
-pip install onnxruntime-gpu
-"""
-
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
