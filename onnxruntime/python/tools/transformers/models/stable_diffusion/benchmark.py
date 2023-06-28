@@ -383,14 +383,14 @@ def run_ort(
     provider: str,
     batch_size: int,
     disable_safety_checker: bool,
-    height,
-    width,
-    steps,
-    num_prompts,
-    batch_count,
+    height: int,
+    width: int,
+    steps: int,
+    num_prompts: int,
+    batch_count: int,
     start_memory,
     memory_monitor_type,
-    tuning,
+    tuning: bool,
 ):
     provider_and_options = provider
     if tuning and provider in ["CUDAExecutionProvider", "ROCMExecutionProvider"]:
@@ -430,25 +430,22 @@ def run_ort_trt(
     model_name: str,
     batch_size: int,
     disable_safety_checker: bool,
-    height,
-    width,
-    steps,
-    num_prompts,
-    batch_count,
+    height: int,
+    width: int,
+    steps: int,
+    num_prompts: int,
+    batch_count: int,
     start_memory,
     memory_monitor_type,
+    max_batch_size: int,
 ):
     import torch
     from diffusers import DDIMScheduler
     from onnxruntime_tensorrt_txt2img import OnnxruntimeTensorRTStableDiffusionPipeline
 
+    assert batch_size <= max_batch_size
+
     scheduler = DDIMScheduler.from_pretrained(model_name, subfolder="scheduler")
-
-    image_filename_prefix = get_image_filename_prefix("ort_trt", model_name, batch_size, disable_safety_checker)
-
-    MAX_BATCH_SIZE = 4
-    assert batch_size <= MAX_BATCH_SIZE
-
     pipe = OnnxruntimeTensorRTStableDiffusionPipeline.from_pretrained(
         model_name,
         revision="fp16",
@@ -476,6 +473,8 @@ def run_ort_trt(
 
     if memory_monitor_type is None:
         warmup()
+
+    image_filename_prefix = get_image_filename_prefix("ort_trt", model_name, batch_size, disable_safety_checker)
 
     latency_list = []
     prompts = example_prompts()
@@ -523,25 +522,22 @@ def run_tensorrt(
     model_name: str,
     batch_size: int,
     disable_safety_checker: bool,
-    height,
-    width,
-    steps,
-    num_prompts,
-    batch_count,
+    height: int,
+    width: int,
+    steps: int,
+    num_prompts: int,
+    batch_count: int,
     start_memory,
     memory_monitor_type,
+    max_batch_size: int,
 ):
     import torch
     from diffusers import DDIMScheduler
     from stable_diffusion_tensorrt_txt2img import TensorRTStableDiffusionPipeline
 
+    assert batch_size <= max_batch_size
+
     scheduler = DDIMScheduler.from_pretrained(model_name, subfolder="scheduler")
-
-    MAX_BATCH_SIZE = 4
-    image_filename_prefix = get_image_filename_prefix("trt", model_name, batch_size, disable_safety_checker)
-
-    assert batch_size <= MAX_BATCH_SIZE
-
     pipe = TensorRTStableDiffusionPipeline.from_pretrained(
         model_name,
         revision="fp16",
@@ -550,7 +546,7 @@ def run_tensorrt(
         requires_safety_checker=not disable_safety_checker,
         image_height=height,
         image_width=width,
-        max_batch_size=MAX_BATCH_SIZE,
+        max_batch_size=max_batch_size,
         onnx_opset=17,
     )
 
@@ -569,6 +565,8 @@ def run_tensorrt(
 
     if memory_monitor_type is None:
         warmup()
+
+    image_filename_prefix = get_image_filename_prefix("trt", model_name, batch_size, disable_safety_checker)
 
     latency_list = []
     prompts = example_prompts()
@@ -612,11 +610,11 @@ def run_torch(
     disable_safety_checker: bool,
     enable_torch_compile: bool,
     use_xformers: bool,
-    height,
-    width,
-    steps,
-    num_prompts,
-    batch_count,
+    height: int,
+    width: int,
+    steps: int,
+    num_prompts: int,
+    batch_count: int,
     start_memory,
     memory_monitor_type,
 ):
@@ -800,7 +798,18 @@ def parse_arguments():
         help="Number of batches to test. Default is 5.",
     )
 
+    parser.add_argument(
+        "-m",
+        "--max_trt_batch_size",
+        required=False,
+        type=int,
+        choices=range(1, 16),
+        default=4,
+        help="Maximum batch size for TensorRT. Change the value may trigger TensorRT engine rebuild. Default is 4.",
+    )
+
     args = parser.parse_args()
+
     return args
 
 
@@ -831,6 +840,7 @@ def main():
             args.batch_count,
             start_memory,
             memory_monitor_type,
+            args.max_trt_batch_size,
         )
     elif args.engine == "onnxruntime":
         assert args.pipeline, "--pipeline should be specified for onnxruntime engine"
@@ -856,6 +866,7 @@ def main():
             args.tuning,
         )
     elif args.engine == "tensorrt":
+        # We cannot import TensorRTStableDiffusionPipeline from diffuser package so we have to download a copy.
         if not os.path.exists("stable_diffusion_tensorrt_txt2img.py"):
             print("Downloading stable_diffusion_tensorrt_txt2img.py...")
             import wget
@@ -875,6 +886,7 @@ def main():
             args.batch_count,
             start_memory,
             memory_monitor_type,
+            args.max_trt_batch_size,
         )
     else:
         result = run_torch(
