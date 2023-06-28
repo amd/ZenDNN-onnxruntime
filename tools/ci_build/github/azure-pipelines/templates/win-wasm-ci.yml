@@ -111,9 +111,10 @@ jobs:
       python3 '$(Build.SourcesDirectory)/tools/ci_build/build.py' $(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --skip_test
       ccache -s
       ccache -z
-      emcc --clear-cache
+      #emcc --clear-cache
       rm -rf '$(Build.BinariesDirectory)/Linux'
       python3 '$(Build.SourcesDirectory)/tools/ci_build/build.py' $(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --skip_test
+      ccache -s
       popd
       popd
     displayName: 'Build and test (browser) (simd + threads)'
@@ -138,36 +139,3 @@ jobs:
   #    scriptPath: '$(Build.SourcesDirectory)/tools/ci_build/build.py'
   #    arguments: '$(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --skip_test'
   #    workingDirectory: '$(Build.BinariesDirectory)'
-
-  - ${{ if eq(parameters.SkipPublish, false) }}:
-    - script: |
-        cp $(Build.BinariesDirectory)/wasm/${{ parameters.BuildConfig }}/ort-wasm*.* $(Build.ArtifactStagingDirectory)
-        cp $(Build.BinariesDirectory)/wasm_threads/${{ parameters.BuildConfig }}/ort-wasm*.* $(Build.ArtifactStagingDirectory)
-        cp $(Build.BinariesDirectory)/wasm_simd_threads/${{ parameters.BuildConfig }}/ort-wasm*.* $(Build.ArtifactStagingDirectory)
-        cp $(Build.BinariesDirectory)/wasm_simd/${{ parameters.BuildConfig }}/ort-wasm*.* $(Build.ArtifactStagingDirectory)
-        if exist $(Build.BinariesDirectory)/wasm_simd_jsep (
-          cp $(Build.BinariesDirectory)/wasm_simd_jsep/${{ parameters.BuildConfig }}/ort-wasm-simd.wasm $(Build.ArtifactStagingDirectory)/ort-wasm-simd.jsep.wasm
-          cp $(Build.BinariesDirectory)/wasm_simd_jsep/${{ parameters.BuildConfig }}/ort-wasm-simd.js $(Build.ArtifactStagingDirectory)/ort-wasm-simd.jsep.js
-        )
-        if exist $(Build.BinariesDirectory)/wasm_simd_threads_jsep (
-          cp $(Build.BinariesDirectory)/wasm_simd_threads_jsep/${{ parameters.BuildConfig }}/ort-wasm-simd-threaded.wasm $(Build.ArtifactStagingDirectory)/ort-wasm-simd-threaded.jsep.wasm
-          cp $(Build.BinariesDirectory)/wasm_simd_threads_jsep/${{ parameters.BuildConfig }}/ort-wasm-simd-threaded.js $(Build.ArtifactStagingDirectory)/ort-wasm-simd-threaded.jsep.js
-          cp $(Build.BinariesDirectory)/wasm_simd_threads_jsep/${{ parameters.BuildConfig }}/ort-wasm-simd-threaded.worker.js $(Build.ArtifactStagingDirectory)/ort-wasm-simd-threaded.jsep.worker.js
-        )
-      displayName: 'Create Artifacts'
-  - ${{ if eq(parameters.SkipPublish, false) }}:
-    - task: PublishPipelineArtifact@0
-      displayName: 'Publish Pipeline Artifact'
-      inputs:
-        artifactName: '${{ parameters.BuildConfig }}_wasm'
-        targetPath: '$(Build.ArtifactStagingDirectory)'
-  - task: PublishTestResults@2
-    displayName: 'Publish unit test results'
-    inputs:
-      testResultsFiles: '**/*.results.xml'
-      searchFolder: '$(Build.BinariesDirectory)'
-      testRunTitle: 'Unit Test Run'
-    condition: and(succeededOrFailed(), eq('${{ parameters.BuildConfig }}', 'Debug'))
-  - template: component-governance-component-detection-steps.yml
-    parameters :
-      condition : 'succeeded'
