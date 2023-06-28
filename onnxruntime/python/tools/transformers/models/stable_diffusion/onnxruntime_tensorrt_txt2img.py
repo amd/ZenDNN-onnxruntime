@@ -64,32 +64,11 @@ pip install onnxruntime-gpu
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-# Map of numpy dtype -> torch dtype
-numpy_to_torch_dtype_dict = {
-    np.uint8: torch.uint8,
-    np.int8: torch.int8,
-    np.int16: torch.int16,
-    np.int32: torch.int32,
-    np.int64: torch.int64,
-    np.float16: torch.float16,
-    np.float32: torch.float32,
-    # np.float64: torch.float64,
-    # np.complex64: torch.complex64,
-    # np.complex128: torch.complex128,
-}
-if np.version.full_version >= "1.24.0":
-    numpy_to_torch_dtype_dict[np.bool_] = torch.bool
-else:
-    numpy_to_torch_dtype_dict[np.bool] = torch.bool
-
-# Map of torch dtype -> numpy dtype
-torch_to_numpy_dtype_dict = {value: key for (key, value) in numpy_to_torch_dtype_dict.items()}
-
 
 class Engine:
     def __init__(self, engine_path):
         self.engine_path = engine_path
-        self.tensors = OrderedDict()
+        self.output_tensors = OrderedDict()
 
         self.ort_session = None
         self.ort_trt_provider_options = None
@@ -98,7 +77,7 @@ class Engine:
         self.output_names = None
 
     def __del__(self):
-        del self.tensors
+        del self.output_tensors
         del self.io_binding
         del self.ort_session
 
@@ -131,14 +110,16 @@ class Engine:
         for name in self.output_names:
             assert name in shape_dict
 
-        io_numpy_type = TypeHelper.get_io_numpy_type_map(self.ort_session)
+        output_name_to_numpy_type = TypeHelper.get_io_numpy_type_map(self.ort_session)
 
         self.io_binding = self.ort_session.io_binding()
         for name, shape in shape_dict.items():
             if name in self.output_names:
-                numpy_dtype = io_numpy_type[name]
-                tensor = torch.empty(tuple(shape), dtype=numpy_to_torch_dtype_dict[numpy_dtype]).to(device=device)
-                self.tensors[name] = tensor
+                numpy_dtype = output_name_to_numpy_type[name]
+                tensor = torch.empty(tuple(shape), dtype=TypeHelper.numpy_type_to_torch_type(numpy_dtype)).to(
+                    device=device
+                )
+                self.output_tensors[name] = tensor
 
                 self.io_binding.bind_output(
                     name,
@@ -158,14 +139,14 @@ class Engine:
                     name,
                     tensor.device.type,
                     tensor.device.index,
-                    torch_to_numpy_dtype_dict[tensor.dtype],
+                    TypeHelper.torch_type_to_numpy_type(tensor.dtype),
                     [1] if len(tensor.shape) == 0 else list(tensor.shape),
                     tensor.data_ptr(),
                 )
 
         self.ort_session.run_with_iobinding(self.io_binding)
 
-        return self.tensors
+        return self.output_tensors
 
     def get_tensorrt_provider_options(self, input_profile, workspace_size, fp16):
         trt_ep_options = {
@@ -175,7 +156,7 @@ class Engine:
             "trt_timing_cache_enable": True,
             "trt_detailed_build_log": True,
             "trt_engine_cache_path": self.engine_path,
-            # "trt_cuda_graph_enable": False,
+            # TODO: "trt_cuda_graph_enable": True,
         }
 
         if workspace_size > 0:
@@ -366,6 +347,7 @@ def get_work_space_size(model_name, max_workspace_size):
     workspace_size = 4 * GiB if model_name == "clip" else max_workspace_size
     if workspace_size == 0:
         _, free_mem, _ = cudart.cudaMemGetInfo()
+        # The following logic are adopted from TensorRT demo diffusion.
         if free_mem > 6 * GiB:
             workspace_size = free_mem - 4 * GiB
     return workspace_size
@@ -382,15 +364,14 @@ def build_engines(
     force_engine_rebuild=False,
     static_batch=False,
     static_image_shape=True,
-    enable_preview=False,
     max_workspace_size=0,
 ):
     if force_engine_rebuild:
         if os.path.isdir(onnx_dir):
-            logger.warning("Remove existing directory %s since force_engine_rebuild is enabled", onnx_dir)
+            logger.info("Remove existing directory %s since force_engine_rebuild is enabled", onnx_dir)
             shutil.rmtree(onnx_dir)
         if os.path.isdir(engine_dir):
-            logger.warning("Remove existing directory %s since force_engine_rebuild is enabled", engine_dir)
+            logger.info("Remove existing directory %s since force_engine_rebuild is enabled", engine_dir)
             shutil.rmtree(engine_dir)
 
     if not os.path.isdir(engine_dir):
@@ -410,7 +391,7 @@ def build_engines(
             onnx_opt_path = get_onnx_path(model_name, onnx_dir)
             if not os.path.exists(onnx_opt_path):
                 if not os.path.exists(onnx_path):
-                    logger.warning(f"Exporting model: {onnx_path}")
+                    logger.info(f"Exporting model: {onnx_path}")
                     model = model_obj.get_model()
                     with torch.inference_mode(), torch.autocast("cuda"):
                         inputs = model_obj.get_sample_input(opt_batch_size, opt_image_height, opt_image_width)
@@ -429,15 +410,15 @@ def build_engines(
                     torch.cuda.empty_cache()
                     gc.collect()
                 else:
-                    logger.warning("Found cached model: %s", onnx_path)
+                    logger.info("Found cached model: %s", onnx_path)
 
                 # Optimize onnx
                 if not os.path.exists(onnx_opt_path):
-                    logger.warning("Generating optimizing model: %s", onnx_opt_path)
+                    logger.info("Generating optimizing model: %s", onnx_opt_path)
                     onnx_opt_graph = model_obj.optimize(onnx.load(onnx_path))
                     onnx.save(onnx_opt_graph, onnx_opt_path)
                 else:
-                    logger.warning("Found cached optimized model: %s", onnx_opt_path)
+                    logger.info("Found cached optimized model: %s", onnx_opt_path)
 
     built_engines = {}
     for model_name, model_obj in models.items():
@@ -451,14 +432,14 @@ def build_engines(
         onnx_opt_path = get_onnx_path(model_name, onnx_dir)
 
         if not has_engine_file(engine_path):
-            logger.warning(
+            logger.info(
                 "Building TensorRT engine for %s from %s to %s. It can take a while to complete...",
                 model_name,
                 onnx_opt_path,
                 engine_path,
             )
         else:
-            logger.warning("Reuse cached TensorRT engine in directory %s", engine_path)
+            logger.info("Reuse cached TensorRT engine in directory %s", engine_path)
 
         # We create session within build() so it always needed to run.
         engine.build(
@@ -471,7 +452,6 @@ def build_engines(
                 static_batch=static_batch,
                 static_image_shape=static_image_shape,
             ),
-            enable_preview=enable_preview,
             workspace_size=get_work_space_size(model_name, max_workspace_size),
         )
 
@@ -719,6 +699,9 @@ class OnnxruntimeTensorRTStableDiffusionPipeline(StableDiffusionPipeline):
         self.engine_dir = engine_dir
         self.force_engine_rebuild = force_engine_rebuild
         self.build_static_batch = False
+
+        # TODO: support dynamic image shape.
+        # That need add a config for opt_image_height and opt_image_width, and image_height and image_width in __call__.
         self.build_dynamic_shape = False
 
         self.max_batch_size = max_batch_size
@@ -780,7 +763,7 @@ class OnnxruntimeTensorRTStableDiffusionPipeline(StableDiffusionPipeline):
 
         # set device
         self.torch_device = self._execution_device
-        logger.warning(f"Running inference on device: {self.torch_device}")
+        logger.info(f"Running inference on device: {self.torch_device}")
 
         # load models
         self.__loadModels()
@@ -826,9 +809,7 @@ class OnnxruntimeTensorRTStableDiffusionPipeline(StableDiffusionPipeline):
         )
 
         # NOTE: output tensor for CLIP must be cloned because it will be overwritten when called again for negative prompt
-        text_embeddings = run_engine(self.engines["clip"], {"input_ids": text_input_ids})[
-            "text_embeddings"
-        ].clone()
+        text_embeddings = run_engine(self.engines["clip"], {"input_ids": text_input_ids})["text_embeddings"].clone()
 
         # Tokenize negative prompt
         uncond_input_ids = (
@@ -843,9 +824,7 @@ class OnnxruntimeTensorRTStableDiffusionPipeline(StableDiffusionPipeline):
             .to(self.torch_device)
         )
 
-        uncond_embeddings = run_engine(self.engines["clip"], {"input_ids": uncond_input_ids})[
-            "text_embeddings"
-        ]
+        uncond_embeddings = run_engine(self.engines["clip"], {"input_ids": uncond_input_ids})["text_embeddings"]
 
         # Concatenate the unconditional and text embeddings into a single batch to avoid doing two forward passes for classifier free guidance
         text_embeddings = torch.cat([uncond_embeddings, text_embeddings]).to(dtype=torch.float16)
@@ -990,7 +969,6 @@ def test():
     import torch
     from diffusers import DDIMScheduler
 
-    # Use the DDIMScheduler scheduler here instead
     scheduler = DDIMScheduler.from_pretrained("stabilityai/stable-diffusion-2-1", subfolder="scheduler")
 
     pipe = OnnxruntimeTensorRTStableDiffusionPipeline.from_pretrained(
