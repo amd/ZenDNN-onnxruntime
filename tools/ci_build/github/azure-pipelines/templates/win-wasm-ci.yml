@@ -35,6 +35,7 @@ jobs:
     buildArch: x64
     CommonBuildArgs: '--parallel --config ${{ parameters.BuildConfig }} --skip_submodule_sync --cmake_generator "Ninja" --build_wasm --use_xnnpack --emsdk_version releases-7c905cfc1ca6699f6ccb288ae174902cfbdcf0a2-64bit ${{ parameters.ExtraBuildArgs }}'
     runCodesignValidationInjection: false
+    ORT_CACHE_DIR: $(Agent.TempDirectory)/ort_ccache
   timeoutInMinutes: ${{ parameters.TimeoutInMinutes }}
   workspace:
     clean: all
