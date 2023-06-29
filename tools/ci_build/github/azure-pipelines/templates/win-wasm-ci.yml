@@ -79,14 +79,7 @@ jobs:
   - script: |
       set -ex
       cd '$(Build.SourcesDirectory)/cmake/external/emsdk'
-      ./emsdk install 3.1.37 ccache-git-emscripten-64bit
-      ./emsdk activate 3.1.37 ccache-git-emscripten-64bit
-
     displayName: 'Set CCache'
-
-  - script: |
-      echo $PATH
-    displayName: 'Print PATH'
 
   - task: Cache@2
     inputs:
@@ -102,6 +95,8 @@ jobs:
   - script: |
       mkdir -p '$(Build.BinariesDirectory)/ccache_debug'
       pushd '$(Build.SourcesDirectory)/cmake/external/emsdk'
+      ./emsdk install 3.1.37 ccache-git-emscripten-64bit
+      ./emsdk activate 3.1.37 ccache-git-emscripten-64bit
       source ./emsdk_env.sh
       export PATH=$(Build.SourcesDirectory)/cmake/external/emsdk/:$PATH
       export PATH=$(Build.SourcesDirectory)/cmake/external/emsdk/ccache/git-emscripten_64bit/bin:$PATH
