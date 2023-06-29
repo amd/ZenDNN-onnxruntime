@@ -87,11 +87,20 @@ jobs:
       echo $PATH
     displayName: 'Print PATH'
 
+  - task: Cache@2
+    inputs:
+      ${{if eq(variables['Build.SourceBranchName'], 'merge')}}:
+        key: ' "$(TODAY)" |  wasm_simd_threads  | merge '
+      ${{else}}:
+        key: '"$(TODAY)" | onnxruntime | wasm_simd_threads  | $(Build.SourceVersion) '
+      path: $(ORT_CACHE_DIR)/wasm_simd_threads
+      restoreKeys: |
+        "$(TODAY)" | wasm_simd_threads
+    displayName: Cache Task
+
   - script: |
       mkdir -p '$(Build.BinariesDirectory)/ccache_debug'
       pushd '$(Build.SourcesDirectory)/cmake/external/emsdk'
-      ./emsdk install 3.1.37 ccache-git-emscripten-64bit
-      ./emsdk activate 3.1.37 ccache-git-emscripten-64bit
       source ./emsdk_env.sh
       export PATH=$(Build.SourcesDirectory)/cmake/external/emsdk/:$PATH
       export PATH=$(Build.SourcesDirectory)/cmake/external/emsdk/ccache/git-emscripten_64bit/bin:$PATH
@@ -105,32 +114,30 @@ jobs:
       # mtime of this file is checked by ccache, we set it to avoid cache misses.
       echo "##vso[task.setvariable variable=EM_CONFIG;]$(Build.SourcesDirectory)/cmake/external/emsdk/.emscripten"
 
-      export _EMCC_CCACHE=1
-      export EM_COMPILER_WRAPPER=ccache
-      export EM_DIR=$(Build.SourcesDirectory)/cmake/external/emsdk/upstream/emscripten
-      ls $EM_DIR
-      # mtime of this file is checked by ccache, we set it to avoid cache misses.
-      export EM_CONFIG="$(Build.SourcesDirectory)/cmake/external/emsdk/.emscripten"
-
-      ls $EM_DIR
       which ccache && ccache -s && ccache --version
       echo "##vso[task.setvariable variable=PATH;]$PATH"
+      popd
 
       pushd '$(Build.BinariesDirectory)'
       python3 '$(Build.SourcesDirectory)/tools/ci_build/build.py' $(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --skip_test
       ccache -s
       ccache -z
       #emcc --clear-cache
-      rm -rf '$(Build.BinariesDirectory)/wasm_simd_threads'
-      python3 '$(Build.SourcesDirectory)/tools/ci_build/build.py' $(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --skip_test
-      ccache -s
-      popd
       popd
     displayName: 'Build and test (browser) (simd + threads)'
     env:
       CCACHE_DEBUG: 1
       CCACHE_DEBUGDIR: '$(Build.BinariesDirectory)/ccache_debug'
       CCACHE_SLOPPINESS: include_file_ctime,include_file_mtime,time_macros
+      CCACHE_DIR: $(ORT_CACHE_DIR)/wasm_simd_threads
+      _EMCC_CCACHE: 1
+      EM_COMPILER_WRAPPER: ccache
+      EM_DIR: '$(Build.SourcesDirectory)/cmake/external/emsdk/upstream/emscripten'
+      EM_CONFIG: '$(Build.SourcesDirectory)/cmake/external/emsdk/.emscripten'
+
+  - script: |
+      echo $PATH
+    displayName: 'Print PATH'
 
   - script: |
       ccache -s
