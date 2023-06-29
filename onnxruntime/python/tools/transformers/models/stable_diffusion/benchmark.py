@@ -501,7 +501,7 @@ def run_ort_trt(
     return {
         "model_name": model_name,
         "engine": "onnxruntime",
-        "version": "{ort_version}",
+        "version": ort_version,
         "provider": f"tensorrt{trt_version})",
         "directory": pipe.engine_dir,
         "height": height,
