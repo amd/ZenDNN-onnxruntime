@@ -308,7 +308,7 @@ Results are from Standard_NC4as_T4_v3 Azure virtual machine:
 | torch       | 2.0.0+cu117             | compile               | 1          | 6.0             | 12,989              | 3,841                |
 | torch       | 2.0.0+cu117             | default               | 1          | 6.4             | 12,987              | 3,841                |
 | onnxruntime | 1.14.1                  | CUDAExecutionProvider | 4          | 23.0            | 6,977               | 6,977                |
-| onnxruntime | 1.15.1 (tensorrt 8.6.1) | TensorrtExecutionProvider | 4      | 23.6            | 10,746              | 10,746               |
+| onnxruntime | 1.15.1 (tensorrt 8.6.1) | TensorrtExecutionProvider | 4      | 24.1            | 10,746              | 10,746               |
 | tensorrt    | 8.6.1                   | default               | 4          | 24.6            | 8,542               | 8,542                |
 | torch       | 1.13.1+cu117            | xformers              | 4          | 25.8            | 12,819              | 8,269                |
 | torch       | 2.0.0+cu117             | compile               | 4          | 22.2            | 14,637              | 6,583                |
