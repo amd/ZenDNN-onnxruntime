@@ -12,6 +12,7 @@ tensorrt>=8.6.1
 onnxruntime-gpu>=1.15.1
 py3nvml
 wget
+cuda-python
 #To export onnx of stable diffusion, please install PyTorch 1.13.1+cu117
 #--extra-index-url https://download.pytorch.org/whl/cu117
 #torch==1.13.1+cu117

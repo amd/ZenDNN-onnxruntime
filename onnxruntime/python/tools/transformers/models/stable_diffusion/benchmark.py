@@ -454,7 +454,7 @@ def run_ort_trt(
         requires_safety_checker=not disable_safety_checker,
         image_height=height,
         image_width=width,
-        max_batch_size=MAX_BATCH_SIZE,
+        max_batch_size=max_batch_size,
         onnx_opset=17,
     )
 
