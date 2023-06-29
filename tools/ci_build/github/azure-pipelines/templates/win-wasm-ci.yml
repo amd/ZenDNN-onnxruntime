@@ -114,7 +114,7 @@ jobs:
 
       #export _EMCC_CCACHE=1
       #export EM_COMPILER_WRAPPER=ccache
-      export EM_DIR=$(Build.SourcesDirectory)/cmake/external/emsdk/upstream/emscripten
+      #export EM_DIR=$(Build.SourcesDirectory)/cmake/external/emsdk/upstream/emscripten
       ls $EM_DIR
       # mtime of this file is checked by ccache, we set it to avoid cache misses.
       export EM_CONFIG="$(Build.SourcesDirectory)/cmake/external/emsdk/.emscripten"
@@ -136,7 +136,7 @@ jobs:
       CCACHE_DIR: $(ORT_CACHE_DIR)/wasm_simd_threads
       _EMCC_CCACHE: 1
       EM_COMPILER_WRAPPER: ccache
-      #EM_DIR: '$(Build.SourcesDirectory)/cmake/external/emsdk/upstream/emscripten'
+      EM_DIR: '$(Build.SourcesDirectory)/cmake/external/emsdk/upstream/emscripten'
       #EM_CONFIG: '$(Build.SourcesDirectory)/cmake/external/emsdk/.emscripten'
 
   - script: |
