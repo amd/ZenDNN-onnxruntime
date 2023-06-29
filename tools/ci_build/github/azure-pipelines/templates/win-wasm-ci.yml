@@ -147,11 +147,11 @@ jobs:
       ccache -s
     displayName: 'CCache Stats'
 
-  - task: PublishBuildArtifacts@1
-    displayName: 'Publish Artifact'
-    inputs:
-      PathtoPublish: '$(Build.BinariesDirectory)/ccache_debug'
-      ArtifactName: 'ccache_log'
+  #- task: PublishBuildArtifacts@1
+  #  displayName: 'Publish Artifact'
+  #  inputs:
+  #    PathtoPublish: '$(Build.BinariesDirectory)/ccache_debug'
+  #    ArtifactName: 'ccache_log'
 
   #- task: PythonScript@0
   #  displayName: 'Build and test (browser) (simd + threads)'
