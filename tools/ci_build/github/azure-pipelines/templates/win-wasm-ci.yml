@@ -92,7 +92,7 @@ jobs:
         key: '"$(TODAY)" | onnxruntime | wasm_simd_threads  | $(Build.SourceVersion) '
       path: $(ORT_CACHE_DIR)/wasm_simd_threads
       restoreKeys: |
-        "$(TODAY)" | wasm_simd_threads
+        "$(TODAY)" | onnxruntime | wasm_simd_threads
     displayName: Cache Task
 
   - script: |
