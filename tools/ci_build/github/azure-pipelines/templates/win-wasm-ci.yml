@@ -117,7 +117,7 @@ jobs:
       #export EM_DIR=$(Build.SourcesDirectory)/cmake/external/emsdk/upstream/emscripten
       ls $EM_DIR
       # mtime of this file is checked by ccache, we set it to avoid cache misses.
-      export EM_CONFIG="$(Build.SourcesDirectory)/cmake/external/emsdk/.emscripten"
+      #export EM_CONFIG="$(Build.SourcesDirectory)/cmake/external/emsdk/.emscripten"
 
       which ccache && ccache -s && ccache --version
       #echo "##vso[task.setvariable variable=PATH;]$PATH"
@@ -137,7 +137,7 @@ jobs:
       _EMCC_CCACHE: 1
       EM_COMPILER_WRAPPER: ccache
       EM_DIR: '$(Build.SourcesDirectory)/cmake/external/emsdk/upstream/emscripten'
-      #EM_CONFIG: '$(Build.SourcesDirectory)/cmake/external/emsdk/.emscripten'
+      EM_CONFIG: '$(Build.SourcesDirectory)/cmake/external/emsdk/.emscripten'
 
   - script: |
       echo $PATH
