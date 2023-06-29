@@ -221,16 +221,15 @@ Sometime, it complains ptxas not found when there are multiple CUDA versions ins
 Note that torch.compile is not supported in Windows: we encountered error `Windows not yet supported for torch.compile`. So it is excluded from RTX 3060 results of Windows.
 
 
-### Run Benchmark with TensorRT or TensorRT execution provider
+### Run Benchmark with TensorRT and TensorRT execution provider
 
 For TensorRT installation, follow https://docs.nvidia.com/deeplearning/tensorrt/install-guide/index.html.
 
 ```
 pip install torch==1.13.1+cu117 --extra-index-url https://download.pytorch.org/whl/cu117
-pip install --upgrade transformers diffusers>=0.16.0
-pip install --upgrade tensorrt>=8.6.1
 pip install --upgrade polygraphy>=0.47.0 onnx-graphsurgeon --extra-index-url https://pypi.ngc.nvidia.com
-pip install onnxruntime-gpu >= 1.15.1
+pip install -r requirements-tensorrt.txt
+export CUDA_MODULE_LOADING=LAZY
 python benchmark.py -e tensorrt -b 1 -v 1.5
 python benchmark.py -e onnxruntime -r tensorrt -b 1 -v 1.5
 ```
@@ -286,7 +285,7 @@ Results from Standard_NC6s_v3 Azure virtual machine:
 | torch       | 1.13.1+cu117            | xformers              | 1          | 3.5             | 14,979              | 10,449               |
 | onnxruntime | 1.14.1                  | CUDAExecutionProvider | 4          | 8.4             | 7,114               | 7,114                |
 | torch       | 2.0.0+cu117             | compile               | 4          | 8.0             | 13,897              | 6,821                |
-| torch       | 2.0.0+cu117             | default               | 4          | 8.7             | 13,873              | 6,607   |             |
+| torch       | 2.0.0+cu117             | default               | 4          | 8.7             | 13,873              | 6,607                |
 | torch       | 1.13.1+cu117            | xformers              | 4          | 9.1             | 12,969              | 8,421                |
 | onnxruntime | 1.14.1                  | CUDAExecutionProvider | 8          | 15.9            | 7,120               | 7,120                |
 | torch       | 2.0.0+cu117             | compile               | 8          | 15.5            | 14,669              | 10,355               |
@@ -303,14 +302,14 @@ Results are from Standard_NC4as_T4_v3 Azure virtual machine:
 | engine      | version                 | provider              | batch size | average latency | first run memory MB | second run memory MB |
 | ----------- | ----------------------- | --------------------- | ---------- | --------------- | ------------------- | -------------------- |
 | onnxruntime | 1.14.1                  | CUDAExecutionProvider | 1          | 5.6             | 4,925               | 4,925                |
-| onnxruntime | 1.15.1 (tensorrt 8.6.1) | TensorrtExecutionProvider | 1      | 5.0             | 11,658              | 11,658               |
-| tensorrt    | 8.6.1                   | default               | 1          | 5.0             | 9,272               | 9,272                |
-| torch       | 2.0.0+cu117             | compile               | 1          | 6.0             | 12,989              | 3,841                |
-| torch       | 2.0.0+cu117             | default               | 1          | 6.4             | 12,987              | 3,841                |
+| onnxruntime | 1.15.1 (tensorrt 8.6.1) | TensorrtExecutionProvider | 1      | 5.2             | 10,710              | 10,710               |
+| tensorrt    | 8.6.1                   | default               | 1          | 5.2             | 8,504               | 8,524                |
 | torch       | 1.13.1+cu117            | xformers              | 1          | 6.9             | 14,845              | 10,317               |
 | torch       | 2.0.0+cu117             | compile               | 1          | 6.0             | 12,989              | 3,841                |
 | torch       | 2.0.0+cu117             | default               | 1          | 6.4             | 12,987              | 3,841                |
 | onnxruntime | 1.14.1                  | CUDAExecutionProvider | 4          | 23.0            | 6,977               | 6,977                |
+| onnxruntime | 1.15.1 (tensorrt 8.6.1) | TensorrtExecutionProvider | 4      | 23.6            | 10,746              | 10,746               |
+| tensorrt    | 8.6.1                   | default               | 4          | 24.6            | 8,542               | 8,542                |
 | torch       | 1.13.1+cu117            | xformers              | 4          | 25.8            | 12,819              | 8,269                |
 | torch       | 2.0.0+cu117             | compile               | 4          | 22.2            | 14,637              | 6,583                |
 | torch       | 2.0.0+cu117             | default               | 4          | 25.2            | 14,409              | 6,355                |
