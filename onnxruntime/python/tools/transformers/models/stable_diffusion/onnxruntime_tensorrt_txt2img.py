@@ -92,7 +92,6 @@ class Engine:
             sess_options,
             providers=[
                 ("TensorrtExecutionProvider", self.ort_trt_provider_options),
-                "CUDAExecutionProvider",
             ],
         )
 
