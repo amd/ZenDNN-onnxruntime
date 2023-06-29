@@ -35,6 +35,7 @@ jobs:
     buildArch: x64
     CommonBuildArgs: '--parallel --config ${{ parameters.BuildConfig }} --skip_submodule_sync --cmake_generator "Ninja" --build_wasm --use_xnnpack --emsdk_version releases-7c905cfc1ca6699f6ccb288ae174902cfbdcf0a2-64bit ${{ parameters.ExtraBuildArgs }}'
     runCodesignValidationInjection: false
+    TODAY: $[format('{0:dd}{0:MM}{0:yyyy}', pipeline.startTime)]
     ORT_CACHE_DIR: $(Agent.TempDirectory)/ort_ccache
   timeoutInMinutes: ${{ parameters.TimeoutInMinutes }}
   workspace:
@@ -124,7 +125,6 @@ jobs:
       pushd '$(Build.BinariesDirectory)'
       python3 '$(Build.SourcesDirectory)/tools/ci_build/build.py' $(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --skip_test
       ccache -s
-      ccache -z
       #emcc --clear-cache
       popd
       popd
