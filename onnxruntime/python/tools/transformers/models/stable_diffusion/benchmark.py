@@ -718,7 +718,7 @@ def parse_arguments():
         required=False,
         type=str,
         default=None,
-        help="Directory of saved onnx pipeline. It could be output directory of optimize_pipeline.py.",
+        help="Directory of saved onnx pipeline. It could be the output directory of optimize_pipeline.py.",
     )
 
     parser.add_argument(
@@ -843,7 +843,7 @@ def main():
             args.max_trt_batch_size,
         )
     elif args.engine == "onnxruntime":
-        assert args.pipeline, "--pipeline should be specified for onnxruntime engine"
+        assert args.pipeline, "--pipeline should be specified for the directory of ONNX models"
 
         if args.version in ["2.1"]:
             # Set a flag to avoid overflow in attention, which causes black image output in SD 2.1 model
@@ -866,9 +866,10 @@ def main():
             args.tuning,
         )
     elif args.engine == "tensorrt":
-        # We cannot import TensorRTStableDiffusionPipeline from diffuser package so we have to download a copy.
+        # We cannot import TensorRTStableDiffusionPipeline from diffusers so we have to download the pipeline script.
+        # You may need retry if you see error like `No module named stable_diffusion_tensorrt_txt2img`.
         if not os.path.exists("stable_diffusion_tensorrt_txt2img.py"):
-            print("Downloading stable_diffusion_tensorrt_txt2img.py...")
+            print("Downloading stable_diffusion_tensorrt_txt2img.py from huggingface/diffusers examples in github...")
             import wget
 
             wget.download(
