@@ -117,6 +117,8 @@ jobs:
       #export EM_DIR=$(Build.SourcesDirectory)/cmake/external/emsdk/upstream/emscripten
       ls $EM_DIR
       # mtime of this file is checked by ccache, we set it to avoid cache misses.
+      #https://dev.azure.com/onnxruntime/onnxruntime/_build/results?buildId=1049559&view=logs&j=990616d7-1f75-5fe5-5c67-c84a39482fba&t=67a495a8-8444-507d-6780-4eb1ddef3707
+      #it must be set after source ./emsdk_env.sh
       #export EM_CONFIG="$(Build.SourcesDirectory)/cmake/external/emsdk/.emscripten"
 
       which ccache && ccache -s && ccache --version
@@ -124,6 +126,11 @@ jobs:
 
       pushd '$(Build.BinariesDirectory)'
       python3 '$(Build.SourcesDirectory)/tools/ci_build/build.py' $(CommonBuildArgs) --build_dir $(Build.BinariesDirectory)/wasm_simd_threads --enable_wasm_simd --enable_wasm_threads --skip_test
+      ret=$?
+      if [ $ret -ne 0 ]; then
+          echo "Build failed with error code $ret"
+          exit 1
+      fi
       ccache -s
       #emcc --clear-cache
       popd
@@ -137,7 +144,7 @@ jobs:
       _EMCC_CCACHE: 1
       EM_COMPILER_WRAPPER: ccache
       EM_DIR: '$(Build.SourcesDirectory)/cmake/external/emsdk/upstream/emscripten'
-      EM_CONFIG: '$(Build.SourcesDirectory)/cmake/external/emsdk/.emscripten'
+      EM_CONFIG: "$(Build.SourcesDirectory)/cmake/external/emsdk/.emscripten
 
   - script: |
       echo $PATH
