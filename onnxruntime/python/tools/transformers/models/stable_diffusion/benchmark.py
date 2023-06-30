@@ -947,7 +947,9 @@ def print_loaded_libraries():
         filepath = info.contents.dlpi_name
         if filepath:
             filepath = filepath.decode("utf-8")
-            print(filepath)
+            if os.path.isfile(filepath):
+                from pathlib import Path
+                print(Path(filepath).resolve())
 
         return 0
 
