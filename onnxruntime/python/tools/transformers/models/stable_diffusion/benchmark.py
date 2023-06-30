@@ -812,29 +812,18 @@ def parse_arguments():
 
     return args
 
-def print_loaded_libraries():
-    import ctypes
-
-    class _dl_phdr_info(ctypes.Structure):
-        _fields_ = [
-            ("dlpi_addr", ctypes.c_uint64),
-            ("dlpi_name", ctypes.c_char_p),
-            ("dlpi_phdr", ctypes.c_void_p),
-            ("dlpi_phnum", ctypes.c_uint32),
-        ]
-
-    def match_library_callback(info, size, data):
-        filepath = info.contents.dlpi_name
-        if filepath:
-            filepath = filepath.decode("utf-8")
-            if os.path.isfile(filepath):
-                from pathlib import Path
-                path = str(Path(filepath).resolve())
-                if True in ["libcu" in path, "libnv" in path, "tensorrt" in path]:
-                    print(path)
-
-        return 0
-
+def print_loaded_libraries(cuda_related_only=True):
+    import os
+    import psutil
+    from pathlib import Path
+    p = psutil.Process(os.getpid())
+    for lib in p.memory_maps():
+      if (not cuda_related_only) or (True in ["libcu" in path, "libnv" in path, "tensorrt" in path]):
+        path = str(Path(lib.path).resolve())
+        if (path != lib.path):
+            print(f"{path} <== {lib.path}")
+        else:
+            print(path)
     c_func_signature = ctypes.CFUNCTYPE(ctypes.c_int,  # Return type
                                         ctypes.POINTER(_dl_phdr_info),
                                         ctypes.c_size_t,
@@ -963,9 +952,9 @@ def main():
         csv_writer.writeheader()
         csv_writer.writerow(result)
 
-    # Show loaded DLLs when steps == 1 for debugging.
+    # Show loaded DLLs when steps == 1 for debugging purpose.
     if args.steps == 1 and sys.platform in ["linux", "linux2"]:
-        print_loaded_libraries()
+        print_loaded_libraries(args.provider in ["cuda", "tensorrt"])
 
 if __name__ == "__main__":
     try:
