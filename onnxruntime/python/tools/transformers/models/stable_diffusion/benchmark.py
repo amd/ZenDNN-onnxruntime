@@ -843,7 +843,7 @@ def main():
             args.max_trt_batch_size,
         )
     elif args.engine == "onnxruntime":
-        assert args.pipeline, "--pipeline should be specified for the directory of ONNX models"
+        assert args.pipeline and os.path.isdir(args.pipeline), "--pipeline should be specified for the directory of ONNX models"
 
         if args.version in ["2.1"]:
             # Set a flag to avoid overflow in attention, which causes black image output in SD 2.1 model
