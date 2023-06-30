@@ -144,7 +144,7 @@ jobs:
       _EMCC_CCACHE: 1
       EM_COMPILER_WRAPPER: ccache
       EM_DIR: '$(Build.SourcesDirectory)/cmake/external/emsdk/upstream/emscripten'
-      EM_CONFIG: "$(Build.SourcesDirectory)/cmake/external/emsdk/.emscripten
+      EM_CONFIG: '$(Build.SourcesDirectory)/cmake/external/emsdk/.emscripten'
 
   - script: |
       echo $PATH
