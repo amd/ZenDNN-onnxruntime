@@ -829,9 +829,9 @@ def print_loaded_libraries():
             filepath = filepath.decode("utf-8")
             if os.path.isfile(filepath):
                 from pathlib import Path
-                path = Path(filepath).resolve()
+                path = str(Path(filepath).resolve())
                 if True in ["libcu" in path, "libnv" in path, "tensorrt" in path]:
-                    print()
+                    print(path)
 
         return 0
 
