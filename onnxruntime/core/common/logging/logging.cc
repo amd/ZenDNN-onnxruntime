@@ -10,6 +10,9 @@
 #include "core/common/logging/isink.h"
 #include "core/common/logging/logging.h"
 
+// TEMPORARY
+#include "core/common/logging/sinks/cerr_sink.h"
+
 #ifdef _WIN32
 #include <Windows.h>
 #else
@@ -241,6 +244,24 @@ unsigned int GetProcessId() {
 #else
   return static_cast<unsigned int>(syscall(SYS_getpid));
 #endif
+}
+
+void LoggingManager::CreateTempDebugLoggingManager() {
+  // TEMPORARY logging manager/logger to diagnose issue with AWS Lambda
+  //
+  // When the 'real' default logging manager is created, CreateDefaultLogger will throw as it does not allow
+  // s_default_logger_ to have been previously set. This allows us to capture all default log output up until
+  // the point the default logging manager is created.
+
+  // We don't have a good owner for this LoggingManager instance, so we'll leak it given we expect ORT to throw and
+  // exit as soon as the real default logging manager is created.
+  static std::string temp_logger_name = "TempDebugLoggingManager";
+  std::unique_ptr<ISink> temp_sink = std::make_unique<CErrSink>();
+  std::unique_ptr<LoggingManager> temp_logging_manager =
+      std::make_unique<LoggingManager>(std::move(temp_sink), Severity::kINFO, false, InstanceType::Default,
+                                       &temp_logger_name);
+
+  static_cast<void>(temp_logging_manager.release());  // leak it
 }
 
 }  // namespace logging

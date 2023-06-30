@@ -181,6 +181,11 @@ class LoggingManager final {
   void SendProfileEvent(profiling::EventRecord& eventRecord) const;
   ~LoggingManager();
 
+  // TEMPORARY: Create a logging manager that outputs to cerr if there's an attempt to use the default logger
+  // and it has not been initialized yet. We leak this logging manager on purpose. ORT will throw when the 'real'
+  // default logging manager is created as that will attempt to create a new default logger which is not allowed.
+  static void CreateTempDebugLoggingManager();
+
  private:
   ORT_DISALLOW_COPY_ASSIGNMENT_AND_MOVE(LoggingManager);
 
@@ -289,6 +294,11 @@ class Logger {
 };
 
 inline const Logger& LoggingManager::DefaultLogger() {
+  // TEMPORARY - create default logging manager/logger to diagnose issue with AWS Lambda
+  if (s_default_logger_ == nullptr) {
+    LoggingManager::CreateTempDebugLoggingManager();
+  }
+
   if (s_default_logger_ == nullptr) {
     // fail early for attempted misuse. don't use logging macros as we have no logger.
     ORT_THROW("Attempt to use DefaultLogger but none has been registered.");
