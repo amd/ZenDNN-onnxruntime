@@ -931,9 +931,41 @@ def main():
         csv_writer.writerow(result)
 
 
+def print_loaded_libraries():
+    import ctypes
+    from ctypes.util import find_library
+
+    class _dl_phdr_info(ctypes.Structure):
+        _fields_ = [
+            ("dlpi_addr", ctypes.c_uint64),
+            ("dlpi_name", ctypes.c_char_p),
+            ("dlpi_phdr", ctypes.c_void_p),
+            ("dlpi_phnum", ctypes.c_uint32),
+        ]
+
+    def match_library_callback(info, size, data):
+        filepath = info.contents.dlpi_name
+        if filepath:
+            filepath = filepath.decode("utf-8")
+            print(filepath)
+
+        return 0
+
+    c_func_signature = ctypes.CFUNCTYPE(ctypes.c_int,  # Return type
+                                        ctypes.POINTER(_dl_phdr_info),
+                                        ctypes.c_size_t,
+                                        ctypes.c_char_p,)
+
+    c_match_library_callback = c_func_signature(match_library_callback)
+    data = ctypes.c_char_p(b"")
+
+    dl_iterate_phdr = ctypes.CDLL('libc.so.6').dl_iterate_phdr
+    dl_iterate_phdr(c_match_library_callback, data)
+
 if __name__ == "__main__":
     try:
         main()
+        print_loaded_libraries()
     except Exception as e:
         tb = sys.exc_info()
         print(e.with_traceback(tb[2]))
