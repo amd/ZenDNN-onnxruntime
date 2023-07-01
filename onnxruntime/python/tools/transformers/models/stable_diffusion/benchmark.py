@@ -426,6 +426,91 @@ def run_ort(
     return result
 
 
+def export_and_run_ort(
+    model_name: str,
+    provider: str,
+    batch_size: int,
+    disable_safety_checker: bool,
+    height: int,
+    width: int,
+    steps: int,
+    num_prompts: int,
+    batch_count: int,
+    start_memory,
+    memory_monitor_type,
+):
+    assert provider == "CUDAExecutionProvider"
+
+    import torch
+    from diffusers import DDIMScheduler
+    from onnxruntime_cuda_txt2img import OnnxruntimeCudaStableDiffusionPipeline
+
+    scheduler = DDIMScheduler.from_pretrained(model_name, subfolder="scheduler")
+
+    pipe = OnnxruntimeCudaStableDiffusionPipeline.from_pretrained(
+        model_name,
+        scheduler=scheduler,
+        requires_safety_checker=not disable_safety_checker,
+    )
+
+    # re-use cached folder to save ONNX models
+    pipe.set_cached_folder(model_name)
+
+    pipe = pipe.to("cuda", torch_dtype=torch.float16)
+
+    def warmup():
+        pipe(["warm up"] * batch_size, num_inference_steps=steps)
+
+    # Run warm up, and measure GPU memory of two runs
+    # The first run has algo search so it might need more memory
+    first_run_memory = measure_gpu_memory(memory_monitor_type, warmup, start_memory)
+    second_run_memory = measure_gpu_memory(memory_monitor_type, warmup, start_memory)
+
+    if memory_monitor_type is None:
+        warmup()
+
+    image_filename_prefix = get_image_filename_prefix("ort_cuda", model_name, batch_size, disable_safety_checker)
+
+    latency_list = []
+    prompts = example_prompts()
+    for i, prompt in enumerate(prompts):
+        if i >= num_prompts:
+            break
+        for j in range(batch_count):
+            inference_start = time.time()
+            images = pipe(
+                [prompt] * batch_size,
+                num_inference_steps=steps,
+            ).images
+            inference_end = time.time()
+            latency = inference_end - inference_start
+            latency_list.append(latency)
+            print(f"Inference took {latency:.3f} seconds")
+            for k, image in enumerate(images):
+                image.save(f"{image_filename_prefix}_{i}_{j}_{k}.jpg")
+
+    from onnxruntime import __version__ as ort_version
+
+    return {
+        "model_name": model_name,
+        "engine": "onnxruntime",
+        "version": ort_version,
+        "provider": provider,
+        "directory": pipe.engine_dir,
+        "height": height,
+        "width": width,
+        "steps": steps,
+        "batch_size": batch_size,
+        "batch_count": batch_count,
+        "num_prompts": num_prompts,
+        "average_latency": sum(latency_list) / len(latency_list),
+        "median_latency": statistics.median(latency_list),
+        "first_run_memory_MB": first_run_memory,
+        "second_run_memory_MB": second_run_memory,
+        "disable_safety_checker": disable_safety_checker,
+    }
+
+
 def run_ort_trt(
     model_name: str,
     batch_size: int,
@@ -812,28 +897,34 @@ def parse_arguments():
 
     return args
 
+
 def print_loaded_libraries(cuda_related_only=True):
     import os
-    import psutil
     from pathlib import Path
+
+    import psutil
+
     p = psutil.Process(os.getpid())
     for lib in p.memory_maps():
-      if (not cuda_related_only) or (True in ["libcu" in path, "libnv" in path, "tensorrt" in path]):
-        path = str(Path(lib.path).resolve())
-        if (path != lib.path):
-            print(f"{path} <== {lib.path}")
-        else:
-            print(path)
-    c_func_signature = ctypes.CFUNCTYPE(ctypes.c_int,  # Return type
-                                        ctypes.POINTER(_dl_phdr_info),
-                                        ctypes.c_size_t,
-                                        ctypes.c_char_p,)
+        if (not cuda_related_only) or (True in ["libcu" in path, "libnv" in path, "tensorrt" in path]):
+            path = str(Path(lib.path).resolve())
+            if path != lib.path:
+                print(f"{path} <== {lib.path}")
+            else:
+                print(path)
+    c_func_signature = ctypes.CFUNCTYPE(
+        ctypes.c_int,  # Return type
+        ctypes.POINTER(_dl_phdr_info),
+        ctypes.c_size_t,
+        ctypes.c_char_p,
+    )
 
     c_match_library_callback = c_func_signature(match_library_callback)
     data = ctypes.c_char_p(b"")
 
-    dl_iterate_phdr = ctypes.CDLL('libc.so.6').dl_iterate_phdr
+    dl_iterate_phdr = ctypes.CDLL("libc.so.6").dl_iterate_phdr
     dl_iterate_phdr(c_match_library_callback, data)
+
 
 def main():
     args = parse_arguments()
@@ -864,8 +955,25 @@ def main():
             memory_monitor_type,
             args.max_trt_batch_size,
         )
+    elif args.engine == "onnxruntime" and provider == "CUDAExecutionProvider" and args.pipeline is None:
+        print("Pipeline is not specified. Try export and optimize onnx models...")
+        result = export_and_run_ort(
+            sd_model,
+            provider,
+            args.batch_size,
+            not args.enable_safety_checker,
+            args.height,
+            args.width,
+            args.steps,
+            args.num_prompts,
+            args.batch_count,
+            start_memory,
+            memory_monitor_type,
+        )
     elif args.engine == "onnxruntime":
-        assert args.pipeline and os.path.isdir(args.pipeline), "--pipeline should be specified for the directory of ONNX models"
+        assert args.pipeline and os.path.isdir(
+            args.pipeline
+        ), "--pipeline should be specified for the directory of ONNX models"
 
         if args.version in ["2.1"]:
             # Set a flag to avoid overflow in attention, which causes black image output in SD 2.1 model
@@ -955,6 +1063,7 @@ def main():
     # Show loaded DLLs when steps == 1 for debugging purpose.
     if args.steps == 1 and sys.platform in ["linux", "linux2"]:
         print_loaded_libraries(args.provider in ["cuda", "tensorrt"])
+
 
 if __name__ == "__main__":
     try:
