@@ -153,7 +153,7 @@ class Engine:
 
     def get_cuda_provider_options(self):
         cuda_ep_options = {
-            # "device_id": 0,
+            # TODO: "device_id": 0,
             "arena_extend_strategy": "kSameAsRequested",
             # "gpu_mem_limit": workspace_size,
             # TODO: "enable_cuda_graph": True,
@@ -355,8 +355,8 @@ def build_engines(
         if not os.path.exists(onnx_opt_path):
             if not os.path.exists(onnx_path):
                 logger.info(f"Exporting model: {onnx_path}")
-                model = model_obj.get_model()
-                with torch.inference_mode(), torch.autocast("cuda"):
+                model = model_obj.get_model().to(model_obj.device)
+                with torch.inference_mode():
                     inputs = model_obj.get_sample_input(1, 512, 512)
                     torch.onnx.export(
                         model,
@@ -547,8 +547,8 @@ class OnnxruntimeCudaStableDiffusionPipeline(StableDiffusionPipeline):
         requires_safety_checker: bool = True,
         stages=["clip", "unet", "vae"],
         # ONNX export parameters
-        onnx_opset: int = 17,
-        onnx_dir: str = "onnx",
+        onnx_opset: int = 14,
+        onnx_dir: str = "raw_onnx",
         # Onnxruntime execution provider parameters
         engine_dir: str = "onnxruntime_optimized_onnx",
         force_engine_rebuild: bool = False,
@@ -572,7 +572,6 @@ class OnnxruntimeCudaStableDiffusionPipeline(StableDiffusionPipeline):
         self.models = {}  # loaded in __loadModels()
         self.engines = {}  # loaded in build_engines()
 
-        # TODO: support ROCm
         self.provider = "CUDAExecutionProvider"
         self.fp16 = False
 
