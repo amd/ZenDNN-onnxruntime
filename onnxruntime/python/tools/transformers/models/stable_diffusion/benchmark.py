@@ -10,6 +10,8 @@ import statistics
 import sys
 import time
 
+import coloredlogs
+
 SD_MODELS = {
     "1.5": "runwayml/stable-diffusion-v1-5",
     "2.0": "stabilityai/stable-diffusion-2",
@@ -929,6 +931,8 @@ def print_loaded_libraries(cuda_related_only=True):
 def main():
     args = parse_arguments()
     print(args)
+
+    coloredlogs.install(fmt="%(funcName)20s: %(message)s")
 
     memory_monitor_type = None
     if args.provider in ["cuda", "tensorrt"]:
