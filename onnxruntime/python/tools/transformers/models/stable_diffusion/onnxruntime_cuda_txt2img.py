@@ -159,8 +159,6 @@ class Engine:
             # TODO: "enable_cuda_graph": True,
         }
 
-        logger.info("cuda_ep_options=%s", cuda_ep_options)
-
         return cuda_ep_options
 
 
@@ -389,8 +387,9 @@ def build_engines(
 
         # We create session within build() so it always needed to run.
         disable_graph_optimization = fp16 or (model_obj.model_type != "unet")
-        engine.build(disable_graph_optimization)
+        logger.info("%s options for %s: %s", provider, model_name, engine.provider_options)
 
+        engine.build(disable_graph_optimization)
         built_engines[model_name] = engine
 
     return built_engines
