@@ -200,11 +200,6 @@ stages:
       clean: all
     condition: succeeded()
     steps:
-      - script: |
-          set -ex
-          system_profiler SPSoftwareDataType SPHardwareDataType
-        displayName: 'Mac Agent Info'
-
       - task: DownloadPipelineArtifact@2
         inputs:
           ${{ if eq(parameters.specificArtifact, true) }}:
