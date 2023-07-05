@@ -17,6 +17,7 @@ def parse_arguments():
     parser.add_argument("--cwd", help="Path to the current working directory")
     parser.add_argument("--mnist", help="Path to the mnist data directory", type=str, default=None)
     parser.add_argument("--bert_data", help="Path to the bert data directory", type=str, default=None)
+    parser.add_argument("--disable_no_cuda_test", action="store_true", default=False, help="disables CPU training")
     parser.add_argument(
         "--transformers_cache", help="Path to the transformers model cache directory", type=str, default=None
     )
@@ -178,15 +179,17 @@ def main():
 
     run_ortmodule_poc_net(cwd, log, no_cuda=False, data_dir=args.mnist)
 
-    run_ortmodule_poc_net(cwd, log, no_cuda=True, data_dir=args.mnist)
+    if not args.disable_no_cuda_test:
+        run_ortmodule_poc_net(cwd, log, no_cuda=True, data_dir=args.mnist)
 
     run_ortmodule_hf_bert_for_sequence_classification_from_pretrained(
         cwd, log, no_cuda=False, data_dir=args.bert_data, transformers_cache=args.transformers_cache
     )
 
-    run_ortmodule_hf_bert_for_sequence_classification_from_pretrained(
-        cwd, log, no_cuda=True, data_dir=args.bert_data, transformers_cache=args.transformers_cache
-    )
+    if not args.disable_no_cuda_test:
+        run_ortmodule_hf_bert_for_sequence_classification_from_pretrained(
+            cwd, log, no_cuda=True, data_dir=args.bert_data, transformers_cache=args.transformers_cache
+        )
 
     run_ortmodule_torch_lightning(cwd, log, args.mnist)
 
