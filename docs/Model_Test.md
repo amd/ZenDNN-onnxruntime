@@ -1,3 +1,27 @@
+<!-- *******************************************************************************
+* Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+* LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+* OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
+******************************************************************************* -->
+
 ONNX has a collection of standard tests. This document describes how to run these tests through a C++ program named 'onnx_test_runner' in this repo. You could also run these test through onnxruntime python binding, which would be much easier to setup, but, a bit harder to debug issues.
 
 # Get the test data
@@ -35,7 +59,7 @@ Options:
 	-r [repeat]: Specifies the number of times to repeat    
 	-v: verbose    
 	-n [test_case_name]: Specifies a single test case to run.    
-	-e [EXECUTION_PROVIDER]: EXECUTION_PROVIDER could be 'cpu', 'cuda', 'dnnl' or 'tensorrt'. Default: 'cpu'.    
+	-e [EXECUTION_PROVIDER]: EXECUTION_PROVIDER could be 'cpu', 'cuda', 'dnnl', 'zendnn' or 'tensorrt'. Default: 'cpu'.
 	-x: Use parallel executor, default (without -x): sequential executor.    
 	-h: help    
 

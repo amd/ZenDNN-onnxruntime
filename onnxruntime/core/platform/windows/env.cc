@@ -1,4 +1,9 @@
-﻿/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
+﻿/*******************************************************************************
+* Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+* Notified per clause 4(b) of the license.
+*******************************************************************************/
+
+/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -787,16 +792,13 @@ std::string WindowsEnv::GetEnvironmentVar(const std::string& var_name) const {
   constexpr DWORD kBufferSize = 32767;
 
   // Create buffer to hold the result
-  std::string buffer(kBufferSize, '\0');
+  // std::string buffer(kBufferSize, '\0');
+  char buffer[kBufferSize];
+  auto char_count = GetEnvironmentVariableA(var_name.c_str(), buffer, kBufferSize);
 
-  // The last argument is the size of the buffer pointed to by the lpBuffer parameter, including the null-terminating character, in characters.
-  // If the function succeeds, the return value is the number of characters stored in the buffer pointed to by lpBuffer, not including the terminating null character.
-  // Therefore, If the function succeeds, kBufferSize should be larger than char_count.
-  auto char_count = GetEnvironmentVariableA(var_name.c_str(), buffer.data(), kBufferSize);
-
-  if (kBufferSize > char_count) {
-    buffer.resize(char_count);
-    return buffer;
+  // Will be > 0 if the API call was successful
+  if (char_count) {
+    return std::string(buffer, buffer + char_count);
   }
 
   // Else either the call was failed, or the buffer wasn't large enough.

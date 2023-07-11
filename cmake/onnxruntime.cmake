@@ -1,5 +1,32 @@
+#**************************************************************************************
+# Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+#**************************************************************************************
+
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
+
+#**************************************************************************************
+#
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and associated documentation files (the
+# "Software"), to deal in the Software without restriction, including
+# without limitation the rights to use, copy, modify, merge, publish,
+# distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so, subject to
+# the following conditions:
+#
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+# LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+# WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+#**************************************************************************************
 
 if(UNIX)
   set(SYMBOL_FILE ${CMAKE_CURRENT_BINARY_DIR}/onnxruntime.lds)
@@ -103,8 +130,16 @@ else()
   endif()
 endif()
 
-add_dependencies(onnxruntime onnxruntime_generate_def ${onnxruntime_EXTERNAL_DEPENDENCIES})
-target_include_directories(onnxruntime PRIVATE ${ONNXRUNTIME_ROOT})
+set_target_properties(onnxruntime PROPERTIES VERSION ${ORT_VERSION})
+if (onnxruntime_USE_ZENDNN)
+  add_dependencies(onnxruntime onnxruntime_generate_def project_zendnn ${onnxruntime_EXTERNAL_DEPENDENCIES})
+  target_include_directories(onnxruntime PRIVATE ${ONNXRUNTIME_ROOT} ${ZENDNN_SOURCE} ${ZENDNN_INCLUDE_DIR})
+  onnxruntime_add_include_to_target(onnxruntime)
+else ()
+  add_dependencies(onnxruntime onnxruntime_generate_def ${onnxruntime_EXTERNAL_DEPENDENCIES})
+  target_include_directories(onnxruntime PRIVATE ${ONNXRUNTIME_ROOT})
+  onnxruntime_add_include_to_target(onnxruntime)
+endif()
 
 target_compile_definitions(onnxruntime PRIVATE VER_MAJOR=${VERSION_MAJOR_PART})
 target_compile_definitions(onnxruntime PRIVATE VER_MINOR=${VERSION_MINOR_PART})
@@ -204,6 +239,10 @@ set(onnxruntime_INTERNAL_LIBRARIES
   onnxruntime_common
   onnxruntime_flatbuffers
 )
+
+if (onnxruntime_USE_ZENDNN)
+  target_link_libraries(onnxruntime PUBLIC amdZenDNN ${ZENDNN_BLIS_LIB})
+endif()
 
 if (onnxruntime_ENABLE_LANGUAGE_INTEROP_OPS)
   list(APPEND onnxruntime_INTERNAL_LIBRARIES

@@ -1,3 +1,8 @@
+#**********************************************************************************
+# Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+# Notified per clause 4(b) of the license.
+#**********************************************************************************
+
 # Copyright (c) Microsoft Corporation.  All rights reserved.
 # Copyright 2018 The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
@@ -140,6 +145,9 @@ def run_onnxruntime(
         logger.warning(
             f"OptimizerInfo is set to {optimizer_info}, graph optimizations specified in FusionOptions are not applied."
         )
+
+    if not use_gpu:
+        warm_up_repeat = 5
 
     for model_name in model_names:
         all_input_names = MODELS[model_name][0]

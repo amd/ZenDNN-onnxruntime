@@ -1,3 +1,8 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+# Notified per clause 4(b) of the license.
+*******************************************************************************/
+
 /* Copyright 2016 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -45,6 +50,8 @@ std::vector<std::unique_ptr<IExecutionProvider>> GetExecutionProviders(
         result.emplace_back(DefaultRocmExecutionProvider());
       } else if (entry->Type() == onnxruntime::kDnnlExecutionProvider) {
         result.emplace_back(DefaultDnnlExecutionProvider());
+      } else if (entry->Type() == onnxruntime::kZendnnExecutionProvider) {
+        result.emplace_back(DefaultZendnnExecutionProvider());
       } else if (entry->Type() == onnxruntime::kTensorrtExecutionProvider) {
         result.emplace_back(DefaultTensorrtExecutionProvider());
       }

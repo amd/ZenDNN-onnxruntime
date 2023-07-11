@@ -1,8 +1,36 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+*******************************************************************************/
+
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
+/*******************************************************************************
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+* LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+* OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
+*******************************************************************************/
+
 #include "gtest/gtest.h"
 #include "test/common/dnnl_op_test_utils.h"
+#include "test/common/zendnn_op_test_utils.h"
 #include "test/providers/provider_test_utils.h"
 #include "test/util/include/default_providers.h"
 
@@ -209,10 +237,16 @@ TEST(SqueezeOpTest, Squeeze_4d_NegAxis_axes_input) {
   run_test(false);
   run_test(true);  // NNAPI EP will need axes as an initializer
 }
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(SqueezeOpTest, Squeeze_opset13_1_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -224,12 +258,21 @@ TEST(SqueezeOpTest, Squeeze_opset13_1_bfloat16) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif  //  USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif  //  USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
 }
 
 TEST(SqueezeOpTest, Squeeze_opset13_2_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -244,13 +287,22 @@ TEST(SqueezeOpTest, Squeeze_opset13_2_bfloat16) {
   std::vector<std::unique_ptr<IExecutionProvider>> execution_providers;
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
-#endif                                                                                                                //  USE_DNNL
+#endif
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif                                                                                                                //  USE_DNNL USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kOpenVINOExecutionProvider}, nullptr, &execution_providers);  // Incorrect precision. Will be re-enabled after it's fixed
 }
 
 TEST(SqueezeOpTest, Squeeze_Empty_Axes_1_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -263,12 +315,21 @@ TEST(SqueezeOpTest, Squeeze_Empty_Axes_1_bfloat16) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif  //  USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif  //  USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kTensorrtExecutionProvider}, nullptr, &execution_providers);
 }
 
 TEST(SqueezeOpTest, Squeeze_Empty_Axes_2_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -282,6 +343,9 @@ TEST(SqueezeOpTest, Squeeze_Empty_Axes_2_bfloat16) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif  //  USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif  //  USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kTensorrtExecutionProvider}, nullptr, &execution_providers);
 }
 
@@ -292,16 +356,28 @@ TEST(SqueezeOpTest, Squeeze_Empty_Axes_3_bfloat16) {
     return;
   }
 #endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
   OpTester test("Squeeze", 13);
   test.AddInput<BFloat16>("data", {1, 1, 1, 1}, FloatsToBFloat16s(std::vector<float>{1.0f}));
   test.AddOutput<BFloat16>("squeezed", {}, FloatsToBFloat16s(std::vector<float>{1.0f}));
-  // DNNL ep does not support empty axis input.
-  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kTensorrtExecutionProvider, kDnnlExecutionProvider});
+  // DNNL and ZENDNN ep does not support empty axis input.
+  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kTensorrtExecutionProvider, kDnnlExecutionProvider, kZendnnExecutionProvider});
 }
 
 TEST(SqueezeOpTest, UnsortedAxes_opset13_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -316,11 +392,20 @@ TEST(SqueezeOpTest, UnsortedAxes_opset13_bfloat16) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif                                                                                                                //  USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif                                                                                                                //  USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kOpenVINOExecutionProvider}, nullptr, &execution_providers);  // Incorrect precision. Will be re-enabled after it's fixed
 }
 
 TEST(SqueezeOpTest, DuplicateAxes_opset13_bfloat16) {
 #ifdef USE_DNNL
+  if (!ZendnnHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
   if (!DnnlHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
@@ -336,12 +421,21 @@ TEST(SqueezeOpTest, DuplicateAxes_opset13_bfloat16) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif                                                                                                                //  USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif                                                                                                                //  USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kOpenVINOExecutionProvider}, nullptr, &execution_providers);  // Incorrect precision. Will be re-enabled after it's fixed
 }
 
 TEST(SqueezeOpTest, BadAxes_opset13_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -357,12 +451,21 @@ TEST(SqueezeOpTest, BadAxes_opset13_bfloat16) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif                                                                                                                                                           //  USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif                                                                                                                                                            // USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectFailure, "Dimension of input 0 must be 1 instead of 3", {kTensorrtExecutionProvider}, nullptr, &execution_providers);  // Incorrect precision. Will be re-enabled after it's fixed
 }
 
 TEST(SqueezeOpTest, SqueezeNegAxis_2_opset13_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -377,9 +480,12 @@ TEST(SqueezeOpTest, SqueezeNegAxis_2_opset13_bfloat16) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif                                                                                                                //  USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif                                                                                                                // USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kOpenVINOExecutionProvider}, nullptr, &execution_providers);  // Incorrect precision. Will be re-enabled after it's fixed
 }
-#endif  //  USE_DNNL
+#endif  //  USE_DNNL USE_ZENDNN
 
 }  // namespace test
 }  // namespace onnxruntime

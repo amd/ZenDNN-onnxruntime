@@ -1,5 +1,32 @@
+#*******************************************************************************
+# Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+#******************************************************************************
+
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
+
+#*******************************************************************************
+#
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and associated documentation files (the
+# "Software"), to deal in the Software without restriction, including
+# without limitation the rights to use, copy, modify, merge, publish,
+# distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so, subject to
+# the following conditions:
+#
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+# LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+# WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+#******************************************************************************
 
 import argparse
 import os
@@ -120,7 +147,7 @@ def parse_arguments():
         required=False,
         default="None",
         type=str,
-        choices=["cuda", "dnnl", "openvino", "tensorrt", "snpe", "tvm", "qnn", "None"],
+        choices=["cuda", "dnnl", "zendnn", "openvino", "tensorrt", "snpe", "tvm", "qnn", "None"],
         help="The selected execution provider for this build.",
     )
     parser.add_argument("--sdk_info", required=False, default="", type=str, help="dependency SDK information.")
@@ -343,9 +370,11 @@ def generate_files(line_list, args):
             "mklml": "mklml.dll",
             "openmp": "libiomp5md.dll",
             "dnnl": "dnnl.dll",
+            "zendnn": "amdZenDNN.dll",
             "tvm": "tvm.dll",
             "providers_shared_lib": "onnxruntime_providers_shared.dll",
             "dnnl_ep_shared_lib": "onnxruntime_providers_dnnl.dll",
+            "zendnn_ep_shared_lib": "onnxruntime_providers_zendnn.dll",
             "tensorrt_ep_shared_lib": "onnxruntime_providers_tensorrt.dll",
             "openvino_ep_shared_lib": "onnxruntime_providers_openvino.dll",
             "cuda_ep_shared_lib": "onnxruntime_providers_cuda.dll",
@@ -362,9 +391,11 @@ def generate_files(line_list, args):
             "mklml_1": "libmklml_gnu.so",
             "openmp": "libiomp5.so",
             "dnnl": "libdnnl.so.1",
+            "zendnn": "libamdZenDNN.so",
             "tvm": "libtvm.so.0.5.1",
             "providers_shared_lib": "libonnxruntime_providers_shared.so",
             "dnnl_ep_shared_lib": "libonnxruntime_providers_dnnl.so",
+            "zendnn_ep_shared_lib": "libonnxruntime_providers_zendnn.so",
             "tensorrt_ep_shared_lib": "libonnxruntime_providers_tensorrt.so",
             "openvino_ep_shared_lib": "libonnxruntime_providers_openvino.so",
             "cuda_ep_shared_lib": "libonnxruntime_providers_cuda.so",
@@ -445,6 +476,14 @@ def generate_files(line_list, args):
             "<file src="
             + '"'
             + os.path.join(args.sources_path, "include\\onnxruntime\\core\\providers\\dnnl\\dnnl_provider_factory.h")
+            + '" target="build\\native\\include" />'
+        )
+
+    if args.execution_provider == "zendnn":
+        files_list.append(
+            "<file src="
+            + '"'
+            + os.path.join(args.sources_path, "include\\onnxruntime\\core\\providers\\zendnn\\zendnn_provider_factory.h")
             + '" target="build\\native\\include" />'
         )
 
@@ -635,6 +674,24 @@ def generate_files(line_list, args):
             + '\\native" />'
         )
 
+    if args.execution_provider == "zendnn":
+        files_list.append(
+            "<file src="
+            + '"'
+            + os.path.join(args.native_build_path, nuget_dependencies["providers_shared_lib"])
+            + runtimes_target
+            + args.target_architecture
+            + '\\native" />'
+        )
+        files_list.append(
+            "<file src="
+            + '"'
+            + os.path.join(args.native_build_path, nuget_dependencies["zendnn_ep_shared_lib"])
+            + runtimes_target
+            + args.target_architecture
+            + '\\native" />'
+        )
+
     if args.execution_provider == "tvm":
         files_list.append(
             "<file src="
@@ -771,6 +828,12 @@ def generate_files(line_list, args):
         if os.path.exists(os.path.join(args.native_build_path, nuget_dependencies["dnnl"])):
             files_list.append(
                 "<file src=" + '"' + os.path.join(args.native_build_path, nuget_dependencies["dnnl"]) + runtimes + " />"
+            )
+
+        # Process zendnn dependency
+        if os.path.exists(os.path.join(args.native_build_path, nuget_dependencies["zendnn"])):
+            files_list.append(
+                "<file src=" + '"' + os.path.join(args.native_build_path, nuget_dependencies["zendnn"]) + runtimes + " />"
             )
 
         # Process mklml dependency
@@ -1120,13 +1183,14 @@ def validate_execution_provider(execution_provider):
         if not (
             execution_provider == "None"
             or execution_provider == "dnnl"
+            or execution_provider == "zendnn"
             or execution_provider == "cuda"
             or execution_provider == "tensorrt"
             or execution_provider == "openvino"
         ):
             raise Exception(
                 "On Linux platform nuget generation is supported only "
-                "for cpu|cuda|dnnl|tensorrt|openvino execution providers."
+                "for cpu|cuda|dnnl|zendnn|tensorrt|openvino execution providers."
             )
 
 

@@ -1,5 +1,32 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+*******************************************************************************/
+
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
+
+/*******************************************************************************
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+* LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+* OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
+*******************************************************************************/
 
 #include <sstream>
 
@@ -396,7 +423,7 @@ struct TensorCheck<BFloat16> {
     /// XXX: May need to adjust threshold as BFloat is coarse
     float abs_threshold = 0.0001f;
     float threshold = 0.001f;
-#if defined(USE_TENSORRT) || defined(ENABLE_TRAINING_CORE) || defined(USE_CUDA) || defined(USE_ROCM) || defined(USE_DML) || defined(USE_DNNL)
+#if defined(USE_TENSORRT) || defined(ENABLE_TRAINING_CORE) || defined(USE_CUDA) || defined(USE_ROCM) || defined(USE_DML) || defined(USE_DNNL) || defined(USE_ZENDNN)
     threshold = 0.05f;  // expect at least 95% close
 #endif
 
@@ -888,6 +915,7 @@ std::vector<OrtValue> OpTester::ExecuteModel(
       if (expect_result == ExpectResult::kExpectFailure) {
         // Disable expected_failure_string checks for MKL-DNN and OpenVINO EP's
         if (provider_type != kDnnlExecutionProvider &&
+            provider_type != kZendnnExecutionProvider &&
             provider_type != kOpenVINOExecutionProvider) {
           EXPECT_THAT(status.ErrorMessage(),
                       testing::HasSubstr(expected_failure_string));
@@ -985,6 +1013,7 @@ bool SetEpsForAllNodes(
           provider_type == onnxruntime::kNnapiExecutionProvider ||
           provider_type == onnxruntime::kCoreMLExecutionProvider ||
           provider_type == onnxruntime::kDnnlExecutionProvider ||
+          provider_type == onnxruntime::kZendnnExecutionProvider ||
           provider_type == onnxruntime::kQnnExecutionProvider ||
           provider_type == onnxruntime::kSnpeExecutionProvider) {
         found = true;
@@ -1212,6 +1241,7 @@ void OpTester::RunWithConfig(size_t* number_of_pre_packed_weights_counter,
           kCpuExecutionProvider,
           kCudaExecutionProvider,
           kDnnlExecutionProvider,
+          kZendnnExecutionProvider,
           kTensorrtExecutionProvider,
           kOpenVINOExecutionProvider,
           kDmlExecutionProvider,
@@ -1241,6 +1271,8 @@ void OpTester::RunWithConfig(size_t* number_of_pre_packed_weights_counter,
           execution_provider = DefaultCudaExecutionProvider();
         else if (provider_type == onnxruntime::kDnnlExecutionProvider)
           execution_provider = DefaultDnnlExecutionProvider();
+        else if (provider_type == onnxruntime::kZendnnExecutionProvider)
+          execution_provider = DefaultZendnnExecutionProvider();
         else if (provider_type == onnxruntime::kOpenVINOExecutionProvider)
           execution_provider = DefaultOpenVINOExecutionProvider();
         else if (provider_type == onnxruntime::kTensorrtExecutionProvider)

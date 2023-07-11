@@ -1,3 +1,8 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+* Notified per clause 4(b) of the license.
+*******************************************************************************/
+
 /* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -237,7 +242,7 @@ class Env {
   // \brief Gets the file path of the onnx runtime code
   //
   // Used to help load other shared libraries that live in the same folder as the core code, for example
-  // The DNNL provider shared library. Without this path, the module won't be found on windows in all cases.
+  // The DNNL, ZENDNN provider shared library. Without this path, the module won't be found on windows in all cases.
   virtual PathString GetRuntimePath() const { return PathString(); }
 
   // \brief Get a pointer to a symbol from a dynamic library.

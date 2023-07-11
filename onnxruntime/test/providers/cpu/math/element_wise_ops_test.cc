@@ -1,10 +1,38 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+*******************************************************************************/
+
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
+
+/*******************************************************************************
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+* LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+* OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
+*******************************************************************************/
 
 #include "gtest/gtest.h"
 #include "test/providers/provider_test_utils.h"
 #include "test/util/include/default_providers.h"
 #include "test/common/dnnl_op_test_utils.h"
+#include "test/common/zendnn_op_test_utils.h"
 #include "core/util/math.h"
 #include <algorithm>
 #include <math.h>
@@ -59,8 +87,12 @@ void TestBFloat16(const char* op_name, const std::vector<int64_t>& lhs_dim,
                   const std::initializer_list<float>& rhs_values, const std::vector<int64_t>& out_dim,
                   const std::initializer_list<float>& out_values) {
   {
-#ifdef USE_DNNL
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
     if (!DnnlHasBF16Support()) {
+      LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+      return;
+    }
+    if (!ZendnnHasBF16Support()) {
       LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
       return;
     }
@@ -73,6 +105,9 @@ void TestBFloat16(const char* op_name, const std::vector<int64_t>& lhs_dim,
 #if defined(USE_DNNL)
     execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif  //  USE_DNNL
+#if defined(USE_ZENDNN)
+    execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif  //  USE_ZENDNN
     tester.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
   }
 }
@@ -164,9 +199,9 @@ TEST(MathOpTest, Add_float) {
   TestFloat16("Add", dims, lhs_values, dims, rhs_values, dims, out_values);
 #endif
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
   TestBFloat16("Add", dims, lhs_values, dims, rhs_values, dims, out_values);
-#endif  // USE_DNNL
+#endif  // USE_DNNL USE_ZENDNN
 }
 
 TEST(MathOpTest, Add_double) {
@@ -203,9 +238,9 @@ TEST(MathOpTest, Add_Broadcast_Axis) {
   TestFloat16("Add", dims, lhs_values, {3, 1}, rhs_values, dims, out_values);
 #endif
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
   TestBFloat16("Add", dims, lhs_values, {3, 1}, rhs_values, dims, out_values);
-#endif  // USE_DNNL
+#endif  // USE_DNNL USE_ZENDNN
 }
 
 TEST(MathOpTest, Add_Broadcast_MultidirectionalAB) {
@@ -229,9 +264,9 @@ TEST(MathOpTest, Add_Broadcast_MultidirectionalAB) {
   TestFloat16("Add", {3, 1}, lhs_values, {3}, rhs_values, {3, 3}, out_values);
 #endif
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
   TestBFloat16("Add", {3, 1}, lhs_values, {3}, rhs_values, {3, 3}, out_values);
-#endif  // USE_DNNL
+#endif  // USE_DNNL USE_ZENDNN
 }
 
 TEST(MathOpTest, Add_Broadcast_MultidirectionalBA) {
@@ -255,9 +290,9 @@ TEST(MathOpTest, Add_Broadcast_MultidirectionalBA) {
   TestFloat16("Add", {3}, lhs_values, {3, 1}, rhs_values, {3, 3}, out_values);
 #endif
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
   TestBFloat16("Add", {3}, lhs_values, {3, 1}, rhs_values, {3, 3}, out_values);
-#endif  // USE_DNNL
+#endif  // USE_DNNL USE_ZENDNN
 }
 
 TEST(MathOpTest, Add_Broadcast_0x0) {
@@ -268,7 +303,7 @@ TEST(MathOpTest, Add_Broadcast_0x0) {
   test.AddOutput<float>("C", {}, {12.0f});
   test.Run(OpTester::ExpectResult::kExpectSuccess, "");
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
   std::initializer_list<float> lhs_values{10.0f};
   std::initializer_list<float> rhs_values{2.0f};
   std::initializer_list<float> out_values{12.0f};
@@ -289,7 +324,7 @@ TEST(MathOpTest, Add_Broadcast_0x1) {
   run(false);
   run(true);
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
   std::initializer_list<float> lhs_values{10.0f};
   std::initializer_list<float> rhs_values{2.0f};
   std::initializer_list<float> out_values{12.0f};
@@ -310,7 +345,7 @@ TEST(MathOpTest, Add_Broadcast_1x0) {
   run(false);
   run(true);
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
   std::initializer_list<float> lhs_values{10.0f};
   std::initializer_list<float> rhs_values{2.0f};
   std::initializer_list<float> out_values{12.0f};
@@ -326,7 +361,7 @@ TEST(MathOpTest, Add_Broadcast_1x1) {
   test.AddOutput<float>("C", {1}, {12.0f});
   test.Run(OpTester::ExpectResult::kExpectSuccess, "");
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
   std::initializer_list<float> lhs_values{10.0f};
   std::initializer_list<float> rhs_values{2.0f};
   std::initializer_list<float> out_values{12.0f};
@@ -352,7 +387,7 @@ TEST(MathOpTest, Add_Broadcast_3x2_3x1) {
                          8.0f, 9.0f});
   test.Run(OpTester::ExpectResult::kExpectSuccess, "");
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
   std::initializer_list<float> lhs_values{1.0f, 2.0f,
                                           3.0f, 4.0f,
                                           5.0f, 6.0f};
@@ -385,7 +420,7 @@ TEST(MathOpTest, Add_Broadcast_2x1x4_1x3x1) {
 
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kTensorrtExecutionProvider});
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
   std::initializer_list<float> lhs_values{101.0f, 102.0f, 103.0f, 104.0f,
                                           201.0f, 202.0f, 203.0f, 204.0f};
   std::initializer_list<float> rhs_values{010.0f, 020.0f, 030.0f};
@@ -427,7 +462,7 @@ TEST(MathOpTest, Add_Broadcast_2x1x1_3x4) {
 #endif
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", excluded_providers);  // TensorRT: Input batch size is inconsistent
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
   std::initializer_list<float> lhs_values{100.0f, 200.0f};
   std::initializer_list<float> rhs_values{011.0f, 012.0f, 013.0f, 014.0f,
                                           021.0f, 022.0f, 023.0f, 024.0f,
@@ -512,7 +547,7 @@ TEST(MathOpTest, Sub) {
   TestFloat16("Sub", dims, lhs_values, dims, rhs_values, dims, out_values);
 #endif
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
   TestBFloat16("Sub", dims, lhs_values, dims, rhs_values, dims, out_values);
 #endif
 }
@@ -569,7 +604,7 @@ TEST(MathOpTest, Mul) {
   TestFloat16("Mul", dims, lhs_values, dims, rhs_values, dims, out_values);
 #endif
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
   TestBFloat16("Mul", dims, lhs_values, dims, rhs_values, dims, out_values);
 #endif
 }
@@ -607,7 +642,7 @@ TEST(MathOpTest, Div) {
   TestFloat16("Div", dims, lhs_values, dims, rhs_values, dims, out_values);
 #endif
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
   TestBFloat16("Div", dims, lhs_values, dims, rhs_values, dims, out_values);
 #endif
 }
@@ -620,10 +655,16 @@ TEST(MathOpTest, Abs) {
   test.Run();
 }
 
-#ifdef USE_DNNL
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(MathOpTest, Abs_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -634,7 +675,7 @@ TEST(MathOpTest, Abs_bfloat16) {
   test_bf16.AddOutput<BFloat16>("Y", dims, MakeBFloat16({1.0f, 2.0f, 0.0f, 10.0f}));
   test_bf16.Run();
 }
-#endif  //  USE_DNNL
+#endif  //  USE_DNNL USE_ZENDNN
 
 TEST(MathOpTest, Abs_int8) {
   OpTester test("Abs");
@@ -786,10 +827,16 @@ TEST(MathOpTest, Sqrt_Float) {
   test.Run();
 }
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(MathOpTest, Sqrt_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -804,6 +851,9 @@ TEST(MathOpTest, Sqrt_bfloat16) {
   std::vector<std::unique_ptr<IExecutionProvider>> execution_providers;
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
+#endif
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
 #endif
   test_bf16.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
 }
@@ -902,10 +952,16 @@ TEST(MathOpTest, Pow_Float_15) {
   test.Run();
 }
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(MathOpTest, Pow_bfloat16_15) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -923,6 +979,9 @@ TEST(MathOpTest, Pow_bfloat16_15) {
   std::vector<std::unique_ptr<IExecutionProvider>> execution_providers;
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
+#endif
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
 #endif
   test_bf16.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
 }
@@ -1062,10 +1121,16 @@ TEST(MathOpTest, Pow_float_float16) {
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
 }
 #endif
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(MathOpTest, Exp_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -1082,6 +1147,9 @@ TEST(MathOpTest, Exp_bfloat16) {
   std::vector<std::unique_ptr<IExecutionProvider>> execution_providers;
 #ifdef USE_DNNL
   execution_providers.push_back(DefaultDnnlExecutionProvider());
+#endif
+#ifdef USE_ZENDNN
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
 #endif
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);  // TensorRT: result differs
 }
@@ -1126,10 +1194,16 @@ TEST(MathOpTest, Log) {
   test.Run();
 }
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(MathOpTest, Log_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -1146,9 +1220,12 @@ TEST(MathOpTest, Log_bfloat16) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif  //  USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif  //  USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
 }
-#endif  //  USE_DNNL
+#endif  //  USE_DNNL USE_ZENDNN
 TEST(MathOpTest, Log_double) {
   OpTester test("Log");
   std::vector<int64_t> dims{2, 2};
@@ -1385,10 +1462,16 @@ TEST(MathOpTest, SumMultipleInputsNoBroadcasting_double) {
   }
 }
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(MathOpTest, Sum_13_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -1415,9 +1498,12 @@ TEST(MathOpTest, Sum_13_bfloat16) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif  //  USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif  //  USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
 }
-#endif  //  USE_DNNL
+#endif  //  USE_DNNL USE_ZENDNN
 
 TEST(MathOpTest, Min_6) {
   OpTester test("Min", 6);
@@ -1908,7 +1994,7 @@ TEST(MathOpTest, Less) {
   test.Run();
 }
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(MathOpTest, Less_bfloat16) {
 #ifdef USE_DNNL
 #ifdef DNNL_GPU_RUNTIME
@@ -1916,6 +2002,17 @@ TEST(MathOpTest, Less_bfloat16) {
   return;
 #else
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#endif
+#ifdef USE_ZENDNN
+#ifdef ZENDNN_GPU_RUNTIME
+  LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+  return;
+#else
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -1930,9 +2027,12 @@ TEST(MathOpTest, Less_bfloat16) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif  //  USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif  //  USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
 }
-#endif  //  USE_DNNL
+#endif  //  USE_DNNL USE_ZENDNN
 
 TEST(MathOpTest, Less_Scalar0) {
   OpTester test("Less");
@@ -2061,7 +2161,7 @@ TEST(MathOpTest, LessOrEqual_multidiretional_broadcastBA) {
            {kTensorrtExecutionProvider, kNnapiExecutionProvider, kOpenVINOExecutionProvider});
 }
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(MathOpTest, LessOrEqual_bfloat16) {
 #ifdef USE_DNNL
 #ifdef DNNL_GPU_RUNTIME
@@ -2074,6 +2174,19 @@ TEST(MathOpTest, LessOrEqual_bfloat16) {
   }
 #endif
 #endif
+
+#ifdef USE_ZENDNN
+#ifdef ZENDNN_GPU_RUNTIME
+  LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+  return;
+#else
+  if (!ZendnnHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#endif
+
   OpTester test("LessOrEqual", 16);
   std::vector<int64_t> dims{4};
   test.AddInput<BFloat16>("A", dims, MakeBFloat16({1.0f, 0.0f, -1.0f, -1.0f}));
@@ -2083,6 +2196,9 @@ TEST(MathOpTest, LessOrEqual_bfloat16) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif  //  USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif  //  USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "",
            {kTensorrtExecutionProvider, kNnapiExecutionProvider, kOpenVINOExecutionProvider}, nullptr, &execution_providers);
 }
@@ -2099,6 +2215,18 @@ TEST(MathOpTest, LessOrEqual_bfloat16_Scalar0) {
   }
 #endif
 #endif
+#ifdef USE_ZENDNN
+#ifdef ZENDNN_GPU_RUNTIME
+  LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+  return;
+#else
+  if (!ZendnnHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#endif
+
   OpTester test("LessOrEqual", 16);
   test.AddInput<BFloat16>("A", {1}, MakeBFloat16({1.0f}));
   test.AddInput<BFloat16>("B", {4}, MakeBFloat16({1.0f, 1.5f, 2.0f, -1.0f}));
@@ -2107,6 +2235,9 @@ TEST(MathOpTest, LessOrEqual_bfloat16_Scalar0) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif  //  USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif  //  USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "",
            {kTensorrtExecutionProvider, kNnapiExecutionProvider, kOpenVINOExecutionProvider}, nullptr, &execution_providers);
 }
@@ -2122,6 +2253,17 @@ TEST(MathOpTest, LessOrEqual_bfloat16_Scalar1) {
   }
 #endif
 #endif
+#ifdef USE_ZENDNN
+#ifdef ZENDNN_GPU_RUNTIME
+  LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+  return;
+#else
+  if (!ZendnnHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#endif
   OpTester test("LessOrEqual", 16);
   test.AddInput<BFloat16>("A", {4}, MakeBFloat16({1.0f, 0.5f, 2.0f, -1.0f}));
   test.AddInput<BFloat16>("B", {1}, MakeBFloat16({1.0f}));
@@ -2130,6 +2272,9 @@ TEST(MathOpTest, LessOrEqual_bfloat16_Scalar1) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif  //  USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif  //  USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "",
            {kTensorrtExecutionProvider, kNnapiExecutionProvider, kOpenVINOExecutionProvider}, nullptr, &execution_providers);
 }
@@ -2146,6 +2291,17 @@ TEST(MathOpTest, LessOrEqual_bfloat16_broadcastAB) {
   }
 #endif
 #endif
+#ifdef USE_ZENDNN
+#ifdef ZENDNN_GPU_RUNTIME
+  LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+  return;
+#else
+  if (!ZendnnHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#endif
   OpTester test("LessOrEqual", 16);
   test.AddInput<BFloat16>("A", {4, 2}, MakeBFloat16({10.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f, 17.0f}));
   test.AddInput<BFloat16>("B", {2}, MakeBFloat16({15.0f, 7.0f}));
@@ -2154,6 +2310,9 @@ TEST(MathOpTest, LessOrEqual_bfloat16_broadcastAB) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif  //  USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif  //  USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "",
            {kTensorrtExecutionProvider, kNnapiExecutionProvider, kOpenVINOExecutionProvider}, nullptr, &execution_providers);
 }
@@ -2170,6 +2329,17 @@ TEST(MathOpTest, LessOrEqual_bfloat16_broadcastBA) {
   }
 #endif
 #endif
+#ifdef USE_ZENDNN
+#ifdef ZENDNN_GPU_RUNTIME
+  LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+  return;
+#else
+  if (!ZendnnHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#endif
   OpTester test("LessOrEqual", 16);
   test.AddInput<BFloat16>("A", {2}, MakeBFloat16({15.0f, 7.0f}));
   test.AddInput<BFloat16>("B", {4, 2}, MakeBFloat16({10.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f, 17.0f}));
@@ -2178,6 +2348,9 @@ TEST(MathOpTest, LessOrEqual_bfloat16_broadcastBA) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif  //  USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif  //  USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "",
            {kTensorrtExecutionProvider, kNnapiExecutionProvider, kOpenVINOExecutionProvider}, nullptr, &execution_providers);
 }
@@ -2194,6 +2367,18 @@ TEST(MathOpTest, LessOrEqual_multidiretional_bfloat16_broadcastAB) {
   }
 #endif
 #endif
+
+#ifdef USE_ZENDNN
+#ifdef ZENDNN_GPU_RUNTIME
+  LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+  return;
+#else
+  if (!ZendnnHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#endif
   OpTester test("LessOrEqual", 16);
   test.AddInput<BFloat16>("A", {4, 1}, MakeBFloat16({10.0f, 11.0f, 12.0f, 13.0f}));
   test.AddInput<BFloat16>("B", {2}, MakeBFloat16({15.0f, 7.0f}));
@@ -2202,6 +2387,9 @@ TEST(MathOpTest, LessOrEqual_multidiretional_bfloat16_broadcastAB) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif  //  USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif  //  USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "",
            {kTensorrtExecutionProvider, kNnapiExecutionProvider, kOpenVINOExecutionProvider}, nullptr, &execution_providers);
 }
@@ -2218,6 +2406,17 @@ TEST(MathOpTest, LessOrEqual_multidiretional_bfloat16_broadcastBA) {
   }
 #endif
 #endif
+#ifdef USE_ZENDNN
+#ifdef ZENDNN_GPU_RUNTIME
+  LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+  return;
+#else
+  if (!ZendnnHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#endif
   OpTester test("LessOrEqual", 16);
   test.AddInput<BFloat16>("A", {2}, MakeBFloat16({15.0f, 7.0f}));
   test.AddInput<BFloat16>("B", {4, 1}, MakeBFloat16({10.0f, 11.0f, 12.0f, 13.0f}));
@@ -2226,10 +2425,13 @@ TEST(MathOpTest, LessOrEqual_multidiretional_bfloat16_broadcastBA) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif  //  USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif  //  USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "",
            {kTensorrtExecutionProvider, kNnapiExecutionProvider, kOpenVINOExecutionProvider}, nullptr, &execution_providers);
 }
-#endif  //  USE_DNNL
+#endif  //  USE_DNNL USE_ZENDNN
 
 TEST(MathOpTest, Greater_7) {
   OpTester test("Greater");
@@ -2275,7 +2477,7 @@ TEST(MathOpTest, Greater_9_int64) {
   test.AddOutput<bool>("C", dims, {false, true, false, true});
   test.Run();
 }
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(MathOpTest, Greater_13_bfloat16) {
 #ifdef USE_DNNL
 #ifdef DNNL_GPU_RUNTIME
@@ -2283,6 +2485,17 @@ TEST(MathOpTest, Greater_13_bfloat16) {
   return;
 #else
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#endif
+#ifdef USE_ZENDNN
+#ifdef ZENDNN_GPU_RUNTIME
+  LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+  return;
+#else
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -2297,9 +2510,12 @@ TEST(MathOpTest, Greater_13_bfloat16) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif  //  USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif  //  USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
 }
-#endif  //  USE_DNNL
+#endif  //  USE_DNNL USE_ZENDNN
 
 TEST(MathOpTest, Greater_broadcastAB) {
   OpTester test("Greater", 9);
@@ -2373,7 +2589,7 @@ TEST(MathOpTest, GreaterOrEqual_12_int64) {
            {kTensorrtExecutionProvider, kNnapiExecutionProvider, kOpenVINOExecutionProvider});
 }
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(MathOpTest, GreaterOrEqual_16_bfloat16) {
 #ifdef USE_DNNL
 #ifdef DNNL_GPU_RUNTIME
@@ -2381,6 +2597,17 @@ TEST(MathOpTest, GreaterOrEqual_16_bfloat16) {
   return;
 #else
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#endif
+#ifdef USE_ZENDNN
+#ifdef ZENDNN_GPU_RUNTIME
+  LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+  return;
+#else
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -2395,10 +2622,13 @@ TEST(MathOpTest, GreaterOrEqual_16_bfloat16) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif  //  USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif  //  USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "",
            {kTensorrtExecutionProvider, kNnapiExecutionProvider, kOpenVINOExecutionProvider}, nullptr, &execution_providers);
 }
-#endif  //  USE_DNNL
+#endif  //  USE_DNNL USE_ZENDNN
 
 TEST(MathOpTest, GreaterOrEqual_broadcastAB) {
   OpTester test("GreaterOrEqual", 12);
@@ -2497,7 +2727,7 @@ TEST(MathOpTest, Equal_float) {
   test.Run();
 }
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(MathOpTest, Equal_bfloat16) {
 #ifdef USE_DNNL
 #ifdef DNNL_GPU_RUNTIME
@@ -2505,6 +2735,17 @@ TEST(MathOpTest, Equal_bfloat16) {
   return;
 #else
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#endif
+#ifdef USE_ZENDNN
+#ifdef ZENDNN_GPU_RUNTIME
+  LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+  return;
+#else
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -2519,9 +2760,12 @@ TEST(MathOpTest, Equal_bfloat16) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif  //  USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif  //  USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
 }
-#endif  //  USE_DNNL
+#endif  //  USE_DNNL USE_ZENDNN
 
 TEST(MathOpTest, Equal_broadcastAB) {
   OpTester test("Equal");

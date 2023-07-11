@@ -1,3 +1,27 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+* LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+* OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
+*******************************************************************************/
+
 #include "ort_test_session.h"
 #include <algorithm>
 #include <limits>
@@ -7,6 +31,7 @@
 #include "core/session/onnxruntime_session_options_config_keys.h"
 #include "core/providers/tensorrt/tensorrt_provider_options.h"
 #include "core/providers/dnnl/dnnl_provider_options.h"
+#include "core/providers/zendnn/zendnn_provider_options.h"
 #include <assert.h>
 #include "providers.h"
 #include "TestCase.h"
@@ -90,6 +115,59 @@ OnnxRuntimeTestSession::OnnxRuntimeTestSession(Ort::Env& env, std::random_device
     session_options.AppendExecutionProvider_Dnnl(dnnl_options);
 #else
     ORT_THROW("DNNL is not supported in this build\n");
+#endif
+  } if (provider_name == onnxruntime::kZendnnExecutionProvider) {
+#ifdef USE_ZENDNN
+    // Generate provider options
+    OrtZendnnProviderOptions zendnn_options;
+    zendnn_options.use_arena = 1;
+    zendnn_options.threadpool_args = nullptr;
+
+#if !defined(ZENDNN_ORT_THREAD)
+#if defined(_MSC_VER)
+    std::string ov_string = ToUTF8String(performance_test_config.run_config.ep_runtime_config_string);
+#else
+    std::string ov_string = performance_test_config.run_config.ep_runtime_config_string;
+#endif  // defined(_MSC_VER)
+    int num_threads = 0;
+    std::istringstream ss(ov_string);
+    std::string token;
+    while (ss >> token) {
+      if (token == "") {
+        continue;
+      }
+      auto pos = token.find("|");
+      if (pos == std::string::npos || pos == 0 || pos == token.length()) {
+        ORT_THROW(
+            "[ERROR] [OneDNN] Use a '|' to separate the key and value for the "
+            "run-time option you are trying to use.\n");
+      }
+
+      auto key = token.substr(0, pos);
+      auto value = token.substr(pos + 1);
+
+      if (key == "num_of_threads") {
+        std::stringstream sstream(value);
+        sstream >> num_threads;
+        if (num_threads < 0) {
+          ORT_THROW(
+              "[ERROR] [OneDNN] Invalid entry for the key 'num_of_threads',"
+              " set number of threads or use '0' for default\n");
+          // If the user doesnt define num_threads, auto detect threads later
+        }
+      } else {
+        ORT_THROW(
+            "[ERROR] [OneDNN] wrong key type entered. "
+            "Choose from the following runtime key options that are available for OneDNN. ['num_of_threads']\n");
+      }
+    }
+    zendnn_options.threadpool_args = static_cast<void*>(&num_threads);
+#endif  // !defined(ZENDNN_ORT_THREAD)
+    zendnn_options.use_arena = performance_test_config.run_config.enable_cpu_mem_arena ? 1 : 0;
+
+    session_options.AppendExecutionProvider_Zendnn(zendnn_options);
+#else
+    ORT_THROW("ZENDNN is not supported in this build\n");
 #endif
   } else if (provider_name == onnxruntime::kCudaExecutionProvider) {
 #ifdef USE_CUDA

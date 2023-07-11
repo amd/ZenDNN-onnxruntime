@@ -1,3 +1,8 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+* Notified per clause 4(b) of the license.
+*******************************************************************************/
+
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
@@ -35,6 +40,9 @@ struct MaxpoolWithMask1DTask final {
   }
 
   void operator()(std::ptrdiff_t begin, std::ptrdiff_t end) const {
+#ifdef _OPENMP
+#pragma omp parallel for
+#endif
     for (std::ptrdiff_t c = begin; c < end; ++c) {
       operator()(c);
     }
@@ -82,6 +90,9 @@ struct MaxpoolWithMask2DTask final {
   }
 
   void operator()(std::ptrdiff_t begin, std::ptrdiff_t end) const {
+#ifdef _OPENMP
+#pragma omp parallel for
+#endif
     for (std::ptrdiff_t c = begin; c < end; ++c) {
       operator()(c);
     }
@@ -142,6 +153,9 @@ struct MaxpoolWithMask3DTask final {
   }
 
   void operator()(std::ptrdiff_t begin, std::ptrdiff_t end) const {
+#ifdef _OPENMP
+#pragma omp parallel for
+#endif
     for (std::ptrdiff_t c = begin; c < end; ++c) {
       operator()(c);
     }
@@ -185,7 +199,12 @@ struct MaxpoolWithMask3DTask final {
 };
 template <typename T>
 inline static void RunMaxpoolLoop(concurrency::ThreadPool* tp, std::ptrdiff_t total_channels, T&& task) {
+#ifdef _OPENMP
+  ORT_UNUSED_PARAMETER(tp);
+  task(0, total_channels);
+#else
   concurrency::ThreadPool::TryParallelFor(tp, total_channels, task.Cost(), task);
+#endif
 }
 class MaxpoolWithMask : public OpKernel, public PoolBase {
  public:

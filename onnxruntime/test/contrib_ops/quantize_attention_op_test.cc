@@ -1,5 +1,32 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+*******************************************************************************/
+
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
+
+/*******************************************************************************
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+* LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+* OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
+*******************************************************************************/
 
 #include <algorithm>
 #include <cfenv>
@@ -20,7 +47,8 @@ namespace test {
 enum class EP : char {
   CPU,
   CUDA,
-  DNNL
+  DNNL,
+  ZENDNN
 };
 
 // input:      [batch_size, sequence_length, hidden_size]
@@ -55,8 +83,8 @@ void RunQAttention(const std::vector<float>& input_data,
   std::vector<int64_t> weights_dims = {input_hidden_size, static_cast<int64_t>(3 * hidden_size)};
   std::vector<int64_t> bias_dims = {static_cast<int64_t>(3 * hidden_size)};
   std::vector<int64_t> mask_index_dims = {batch_size};
-  if constexpr (ep == EP::DNNL) {
-    // onednn only supports raw mask
+  if constexpr (ep == EP::DNNL || ep == EP::ZENDNN) {
+    // onednn and zendnn only supports raw mask
     if (mask_index_data.size() == static_cast<size_t>(batch_size * sequence_length)) {
       mask_index_dims = {batch_size, sequence_length};
     }
@@ -111,6 +139,8 @@ void RunQAttention(const std::vector<float>& input_data,
     execution_providers.push_back(DefaultCudaExecutionProvider());
   } else if constexpr (ep == EP::CPU) {
     execution_providers.push_back(DefaultCpuExecutionProvider());
+  } else if constexpr (ep == EP::ZENDNN) {
+    execution_providers.push_back(DefaultZendnnExecutionProvider());
   } else {  // onednn ep
     execution_providers.push_back(DefaultDnnlExecutionProvider());
   }
@@ -174,6 +204,49 @@ static void RunQAttentionDNNL(
   }
 
   RunQAttention<uint8_t, int8_t, EP::DNNL>(
+      input_data, weights_data, bias_data, mask_index_data, output_data, input_quant_params, weights_quant_params,
+      batch_size, sequence_length, hidden_size, number_of_heads, is_unidirectional, false, input_hidden_size);
+#else
+  ORT_UNUSED_PARAMETER(input_data);
+  ORT_UNUSED_PARAMETER(weights_data);
+  ORT_UNUSED_PARAMETER(bias_data);
+  ORT_UNUSED_PARAMETER(mask_index_data);
+  ORT_UNUSED_PARAMETER(output_data);
+  ORT_UNUSED_PARAMETER(batch_size);
+  ORT_UNUSED_PARAMETER(sequence_length);
+  ORT_UNUSED_PARAMETER(hidden_size);
+  ORT_UNUSED_PARAMETER(number_of_heads);
+  ORT_UNUSED_PARAMETER(use_special_quantize_parameter);
+  ORT_UNUSED_PARAMETER(is_unidirectional);
+  ORT_UNUSED_PARAMETER(input_hidden_size);
+#endif
+}
+
+static void RunQAttentionZENDNN(
+    const std::vector<float>& input_data,
+    const std::vector<float>& weights_data,
+    const std::vector<float>& bias_data,
+    const std::vector<int32_t>& mask_index_data,  // onednn only support raw mask data
+    const std::vector<float>& output_data,
+    int batch_size,
+    int sequence_length,
+    int hidden_size,
+    int number_of_heads,
+    bool use_special_quantize_parameter = true,
+    bool is_unidirectional = false,
+    int input_hidden_size = 0) {
+  // Return without running code if USE_ZENDNN is not defined
+#ifdef USE_ZENDNN
+  quantization::Params<uint8_t> input_quant_params(/*scale=*/0.0f, /*zero_point=*/0);
+  quantization::Params<int8_t> weights_quant_params(/*scale=*/0.0f, /*zero_point=*/0);
+  if (use_special_quantize_parameter) {
+    input_quant_params.scale = 0.1f;
+    weights_quant_params.scale = 0.1f;
+    input_quant_params.zero_point = 128;
+    weights_quant_params.zero_point = 1;
+  }
+
+  RunQAttention<uint8_t, int8_t, EP::ZENDNN>(
       input_data, weights_data, bias_data, mask_index_data, output_data, input_quant_params, weights_quant_params,
       batch_size, sequence_length, hidden_size, number_of_heads, is_unidirectional, false, input_hidden_size);
 #else
@@ -272,6 +345,9 @@ static void RunQAttentionAll(
   RunQAttentionDNNL(input_data, weight_data, bias_data, mask_index_data, output_data,
                     batch_size, sequence_length, hidden_size, number_of_heads,
                     use_special_quantize_parameter, is_unidirectional, input_hidden_size);
+  RunQAttentionZENDNN(input_data, weight_data, bias_data, mask_index_data, output_data,
+                    batch_size, sequence_length, hidden_size, number_of_heads,
+                    use_special_quantize_parameter, is_unidirectional, input_hidden_size);
 }
 
 // ONEDNN EP only supports 2D raw mask
@@ -305,6 +381,37 @@ TEST(QAttentionTest, QAttentionDNNLBatch1) {
                     batch_size, sequence_length, hidden_size, number_of_heads);
 }
 #endif  // USE_DNNL
+
+#ifdef USE_ZENDNN
+TEST(QAttentionTest, QAttentionZENDNNBatch1) {
+  int batch_size = 1;
+  int sequence_length = 2;
+  int hidden_size = 4;
+  int number_of_heads = 2;
+
+  std::vector<float> input_data = {
+      0.8f, -0.5f, 0.0f, 1.f,
+      0.5f, 0.2f, 0.3f, -0.6f};
+
+  std::vector<float> weight_data = {
+      0.1f, -0.2f, 0.3f, 1.0f, 1.1f, 0.3f, 0.5f, 0.2f, 0.3f, -0.6f, 1.5f, 2.0f,
+      0.5f, 0.1f, 0.4f, 1.6f, 1.0f, 2.0f, 0.4f, 0.8f, 0.9f, 0.1f, -1.3f, 0.7f,
+      0.3f, 0.2f, 4.0f, 2.2f, 1.6f, 1.1f, 0.7f, 0.2f, 0.4f, 1.0f, 1.2f, 0.5f,
+      0.2f, 0.1f, 0.4f, 1.6f, 2.4f, 3.3f, 2.1f, 4.2f, 8.4f, 0.0f, 2.1f, 3.2f};
+
+  std::vector<float> bias_data = {
+      -0.5f, 0.6f, 1.2f, 2.1f, 0.5f, 0.7f, 0.2f, 1.2f, 0.5f, 0.4f, 0.3f, 1.2f};
+
+  std::vector<int32_t> mask_index_data = {1L, 1L};
+
+  std::vector<float> output_data = {
+      3.1495983600616455f, 0.10843668878078461f, 4.25f, 5.6499996185302734f,
+      3.9696791172027588f, 0.073143675923347473f, 4.2499995231628418f, 5.6499991416931152f};
+
+  RunQAttentionZENDNN(input_data, weight_data, bias_data, mask_index_data, output_data,
+                    batch_size, sequence_length, hidden_size, number_of_heads);
+}
+#endif  // USE_ZENDNN
 
 TEST(QAttentionTest, QAttentionBatch1) {
   int batch_size = 1;
@@ -436,6 +543,41 @@ TEST(QAttentionTest, QAttentionDNNLBatch2) {
 }
 #endif  // USE_DNNL
 
+#ifdef USE_ZENDNN
+TEST(QAttentionTest, QAttentionZENDNNBatch2) {
+  int batch_size = 2;
+  int sequence_length = 2;
+  int hidden_size = 4;
+  int number_of_heads = 2;
+
+  std::vector<float> input_data = {
+      0.8f, -0.5f, 0.0f, 1.f,
+      0.5f, 0.2f, 0.3f, -0.6f,
+      0.8f, -0.5f, 0.0f, 1.f,
+      0.5f, 0.2f, 0.3f, -0.6f};
+
+  std::vector<float> weight_data = {
+      0.1f, -0.2f, 0.3f, 1.0f, 1.1f, 0.3f, 0.5f, 0.2f, 0.3f, -0.6f, 1.5f, 2.0f,
+      0.5f, 0.1f, 0.4f, 1.6f, 1.0f, 2.0f, 0.4f, 0.8f, 0.9f, 0.1f, -1.3f, 0.7f,
+      0.3f, 0.2f, 4.0f, 2.2f, 1.6f, 1.1f, 0.7f, 0.2f, 0.4f, 1.0f, 1.2f, 0.5f,
+      0.2f, 0.1f, 0.4f, 1.6f, 2.4f, 3.3f, 2.1f, 4.2f, 8.4f, 0.0f, 2.1f, 3.2f};
+
+  std::vector<float> bias_data = {
+      -0.5f, 0.6f, 1.2f, 2.1f, 0.5f, 0.7f, 0.2f, 1.2f, 0.5f, 0.4f, 0.3f, 1.2f};
+
+  std::vector<int32_t> mask_index_data = {1L, 1L, 1L, 1L};
+
+  std::vector<float> output_data = {
+      3.1495983600616455f, 0.10843668878078461f, 4.25f, 5.6499996185302734f,
+      3.9696791172027588f, 0.073143675923347473f, 4.2499995231628418f, 5.6499991416931152f,
+      3.1495983600616455f, 0.10843668878078461f, 4.25f, 5.6499996185302734f,
+      3.9696791172027588f, 0.073143675923347473f, 4.2499995231628418f, 5.6499991416931152f};
+
+  RunQAttentionZENDNN(input_data, weight_data, bias_data, mask_index_data, output_data,
+                    batch_size, sequence_length, hidden_size, number_of_heads);
+}
+#endif  // USE_ZENDNN
+
 TEST(QAttentionTest, QAttentionMaskPartialSequence) {
   int batch_size = 1;
   int sequence_length = 2;
@@ -497,6 +639,37 @@ TEST(QAttentionTest, QAttentionDNNLMaskPartialSequence) {
                     batch_size, sequence_length, hidden_size, number_of_heads);
 }
 #endif  // USE_DNNL
+
+#ifdef USE_ZENDNN
+TEST(QAttentionTest, QAttentionZENDNNMaskPartialSequence) {
+  int batch_size = 1;
+  int sequence_length = 2;
+  int hidden_size = 4;
+  int number_of_heads = 2;
+
+  std::vector<float> input_data = {
+      0.8f, -0.5f, 0.0f, 1.f,
+      0.5f, 0.2f, 0.3f, -0.6f};
+
+  std::vector<float> weight_data = {
+      0.1f, -0.2f, 0.3f, 1.0f, 1.1f, 0.3f, 0.5f, 0.2f, 0.3f, -0.6f, 1.5f, 2.0f,
+      0.5f, 0.1f, 0.4f, 1.6f, 1.0f, 2.0f, 0.4f, 0.8f, 0.9f, 0.1f, -1.3f, 0.7f,
+      0.3f, 0.2f, 4.0f, 2.2f, 1.6f, 1.1f, 0.7f, 0.2f, 0.4f, 1.0f, 1.2f, 0.5f,
+      0.2f, 0.1f, 0.4f, 1.6f, 2.4f, 3.3f, 2.1f, 4.2f, 8.4f, 0.0f, 2.1f, 3.2f};
+
+  std::vector<float> bias_data = {
+      -0.5f, 0.6f, 1.2f, 2.1f, 0.5f, 0.7f, 0.2f, 1.2f, 0.5f, 0.4f, 0.3f, 1.2f};
+
+  std::vector<int32_t> mask_index_data = {1L, 0L};
+
+  std::vector<float> output_data = {
+      8.6899995803833008f, -0.13000002503395081f, 4.25f, 5.6499996185302734f,
+      8.6899995803833008f, -0.13000002503395081f, 4.2499995231628418f, 5.6499991416931152f};
+
+  RunQAttentionZENDNN(input_data, weight_data, bias_data, mask_index_data, output_data,
+                    batch_size, sequence_length, hidden_size, number_of_heads);
+}
+#endif  // USE_ZENDNN
 
 TEST(QAttentionTest, QAttentionMaskExceedSequence) {
   int batch_size = 1;

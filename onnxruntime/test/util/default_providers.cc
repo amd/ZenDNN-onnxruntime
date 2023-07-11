@@ -1,5 +1,32 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+*******************************************************************************/
+
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
+
+/*******************************************************************************
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+* LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+* OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
+*******************************************************************************/
 
 #include <memory>
 #include "default_providers.h"
@@ -131,9 +158,30 @@ std::unique_ptr<IExecutionProvider> DefaultDnnlExecutionProvider() {
   return nullptr;
 }
 
+std::unique_ptr<IExecutionProvider> DefaultZendnnExecutionProvider() {
+#ifdef USE_ZENDNN
+  OrtZendnnProviderOptions zendnn_options;
+  zendnn_options.use_arena = 1;
+  zendnn_options.threadpool_args = nullptr;
+  if (auto factory = ZendnnProviderFactoryCreator::Create(&zendnn_options))
+    return factory->CreateProvider();
+#endif
+  return nullptr;
+}
+
 std::unique_ptr<IExecutionProvider> DnnlExecutionProviderWithOptions(const OrtDnnlProviderOptions* provider_options) {
 #ifdef USE_DNNL
   if (auto factory = DnnlProviderFactoryCreator::Create(provider_options))
+    return factory->CreateProvider();
+#else
+  ORT_UNUSED_PARAMETER(provider_options);
+#endif
+  return nullptr;
+}
+
+std::unique_ptr<IExecutionProvider> ZendnnExecutionProviderWithOptions(const OrtZendnnProviderOptions* provider_options) {
+#ifdef USE_ZENDNN
+  if (auto factory = ZendnnProviderFactoryCreator::Create(provider_options))
     return factory->CreateProvider();
 #else
   ORT_UNUSED_PARAMETER(provider_options);

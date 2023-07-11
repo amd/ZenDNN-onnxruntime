@@ -1,5 +1,32 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+*******************************************************************************/
+
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
+
+/*******************************************************************************
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+* LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+* OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
+*******************************************************************************/
 
 #include "python/onnxruntime_pybind_exceptions.h"
 #include "python/onnxruntime_pybind_mlvalue.h"
@@ -685,6 +712,35 @@ std::unique_ptr<IExecutionProvider> CreateExecutionProviderInstance(
 
     return onnxruntime::DnnlProviderFactoryCreator::Create(&dnnl_options)->CreateProvider();
 #endif
+  } else if (type == kZendnnExecutionProvider) {
+#ifdef USE_ZENDNN
+    // Generate zendnn_options
+    OrtZendnnProviderOptions zendnn_options;
+// For Eigen and OpenMP
+#if defined(ZENDNN_OPENMP)
+    int num_threads = 0;
+    auto it = provider_options_map.find(type);
+    if (it != provider_options_map.end()) {
+      for (auto option : it->second) {
+        if (option.first == "num_of_threads") {
+          num_threads = std::stoi(option.second);
+          if (num_threads < 0) {
+            ORT_THROW(
+                "[ERROR] [OneDNN] Invalid entry for the key 'num_of_threads',"
+                " set number of threads or use '0' for default\n");
+            // If the user doesnt define num_threads, auto detect threads later
+          }
+        } else {
+          ORT_THROW("Invalid OneDNN EP option: ", option.first);
+        }
+      }
+    }
+    zendnn_options.threadpool_args = static_cast<void*>(&num_threads);;
+#endif  // !defined(ZENDNN_ORT_THREAD)
+    zendnn_options.use_arena = session_options.enable_cpu_mem_arena;
+
+    return onnxruntime::ZendnnProviderFactoryCreator::Create(&zendnn_options)->CreateProvider();
+#endif
   } else if (type == kOpenVINOExecutionProvider) {
 #ifdef USE_OPENVINO
     OrtOpenVINOProviderOptions params;
@@ -980,7 +1036,7 @@ void addGlobalMethods(py::module& m) {
   m.def("get_session_initializer", &SessionObjectInitializer::Get, "Return a default session object initializer.");
   m.def(
       "get_device", []() -> std::string { return BACKEND_DEVICE; },
-      "Return the device used to compute the prediction (CPU, MKL, ...)");
+      "Return the device used to compute the prediction (CPU, MKL, ZENDNN, ...)");
   m.def(
       "set_seed", [](const int64_t seed) { utils::SetRandomSeed(seed); },
       "Sets the seed used for random number generation in Onnxruntime.");

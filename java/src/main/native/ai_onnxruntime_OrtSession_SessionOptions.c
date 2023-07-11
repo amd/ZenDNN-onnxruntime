@@ -1,7 +1,35 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+*******************************************************************************/
+
 /*
  * Copyright (c) 2019, 2022 Oracle and/or its affiliates. All rights reserved.
  * Licensed under the MIT License.
  */
+
+/*******************************************************************************
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+* LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+* OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
+*******************************************************************************/
+
 #include <jni.h>
 #include <string.h>
 #include <stdlib.h>
@@ -29,6 +57,10 @@
 
 #ifdef USE_DNNL
 #include "core/providers/dnnl/dnnl_provider_options.h"
+#endif
+
+#ifdef USE_ZENDNN
+#include "core/providers/zendnn/zendnn_provider_options.h"
 #endif
 
 /*
@@ -440,6 +472,26 @@ JNIEXPORT void JNICALL Java_ai_onnxruntime_OrtSession_00024SessionOptions_addDnn
 #else
     (void)apiHandle; (void)handle; (void)useArena; // Parameters used when DNNL is defined.
     throwOrtException(jniEnv,convertErrorCode(ORT_INVALID_ARGUMENT),"This binary was not compiled with DNNL support.");
+#endif
+}
+
+
+/*
+ * Class:     ai_onnxruntime_OrtSession_SessionOptions
+ * Method:    addZendnn
+ * Signature: (JJI)V
+ */
+JNIEXPORT void JNICALL Java_ai_onnxruntime_OrtSession_00024SessionOptions_addZendnn
+  (JNIEnv * jniEnv, jobject jobj, jlong apiHandle, jlong handle, jint useArena) {
+    (void)jobj;
+#ifdef USE_ZENDNN
+    OrtZendnnProviderOptions zendnn_options;
+    zendnn_options.use_arena = useArena;  // Follow the user command
+    const OrtApi* api = (OrtApi*)apiHandle;
+    checkOrtStatus(jniEnv, api, api->SessionOptionsAppendExecutionProvider_Zendnn((OrtSessionOptions*)handle, &zendnn_options));
+#else
+    (void)apiHandle; (void)handle; (void)useArena; // Parameters used when ZENDNN is defined.
+    throwOrtException(jniEnv,convertErrorCode(ORT_INVALID_ARGUMENT),"This binary was not compiled with ZENDNN support.");
 #endif
 }
 

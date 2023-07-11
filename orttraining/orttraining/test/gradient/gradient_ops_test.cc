@@ -1,5 +1,32 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+﻿/*******************************************************************************
+* Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+*******************************************************************************/
+
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
+
+/*******************************************************************************
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+* LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+* OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
+*******************************************************************************/
 
 #ifdef NDEBUG  // disable for debug builds because some of these tests are slow
 
@@ -442,7 +469,7 @@ TEST(GradientCheckerTest, LogGrad) {
   TensorInfo x_info{shape, true, &transformer};
 
   float max_error;
-#ifdef USE_DNNL
+#ifdef USE_DNNL || defined(USE_ZENDNN)
   float error_tolerance = 4e-3f;
 #else
   float error_tolerance = 1e-3f;
@@ -1019,6 +1046,10 @@ TEST(GradientCheckerTest, ConvGrad) {
   // Dnnl EP does not run for ConvGrad unless it is pushed first.
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif
+#ifdef USE_ZENDNN
+  // Zendnn EP does not run for ConvGrad unless it is pushed first.
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif
 
   execution_providers.push_back(DefaultCpuExecutionProvider());
 
@@ -1212,6 +1243,12 @@ TEST(GradientCheckerTest, AveragePoolGrad) {
   execution_providers.push_back(DefaultDnnlExecutionProvider());
   AveragepoolGradientCheckerTest(&execution_providers);
 #endif  // USE_DNNL
+}
+#ifdef USE_ZENDNN
+  std::vector<std::unique_ptr<IExecutionProvider>> execution_providers;
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+  AveragepoolGradientCheckerTest(&execution_providers);
+#endif  // USE_ZENDNN
 }
 
 TEST(GradientCheckerTest, TransposeGrad) {

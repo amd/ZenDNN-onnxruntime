@@ -1,5 +1,32 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+*******************************************************************************/
+
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
+
+/*******************************************************************************
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+* LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+* OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
+*******************************************************************************/
 
 #include "cxxopts.hpp"
 #include "core/common/logging/logging.h"
@@ -23,6 +50,10 @@
 
 #ifdef USE_DNNL
 #include "core/providers/dnnl/dnnl_provider_options.h"
+#endif
+
+#ifdef USE_ZENDNN
+#include "core/providers/zendnn/zendnn_provider_options.h"
 #endif
 
 using namespace onnxruntime;
@@ -57,6 +88,7 @@ Status ParseArguments(int argc, char* argv[], MnistParameters& params) {
       ("gist_compr", "Compression type used for GIST", cxxopts::value<std::string>()->default_value("GistPack8"))
       ("use_cuda", "Use CUDA execution provider for training.", cxxopts::value<bool>()->default_value("false"))
       ("use_dnnl", "Use DNNL execution provider for training.", cxxopts::value<bool>()->default_value("false"))
+      ("use_zendnn", "Use ZENDNN execution provider for training.", cxxopts::value<bool>()->default_value("false"))
       ("num_train_steps", "Number of training steps.", cxxopts::value<int>()->default_value("2000"))
       ("train_batch_size", "Total batch size for training.", cxxopts::value<int>()->default_value("100"))
       ("eval_batch_size", "Total batch size for eval.", cxxopts::value<int>()->default_value("100"))
@@ -177,6 +209,14 @@ Status ParseArguments(int argc, char* argv[], MnistParameters& params) {
     if (use_dnnl) {
       OrtDnnlProviderOptions dnnl_options;
       params.providers.emplace(kDnnlExecutionProvider, DnnlProviderFactoryCreator::Create(&dnnl_options));
+    }
+#endif
+
+#ifdef USE_ZENDNN
+    bool use_zendnn = flags.count("use_zendnn") > 0;
+    if (use_zendnn) {
+      OrtZendnnProviderOptions zendnn_options;
+      params.providers.emplace(kZendnnExecutionProvider, ZendnnProviderFactoryCreator::Create(&zendnn_options));
     }
 #endif
 

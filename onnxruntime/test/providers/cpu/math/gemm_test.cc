@@ -1,11 +1,39 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+*******************************************************************************/
+
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
+
+/*******************************************************************************
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+* LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+* OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
+*******************************************************************************/
 
 #include "gtest/gtest.h"
 #include "core/framework/run_options.h"
 #include "test/common/cuda_op_test_utils.h"
 #include "test/providers/provider_test_utils.h"
 #include "test/common/dnnl_op_test_utils.h"
+#include "test/common/zendnn_op_test_utils.h"
 #include "test/providers/run_options_config_keys.h"
 #include "test/util/include/default_providers.h"
 
@@ -104,7 +132,7 @@ TEST(GemmOpTest, GemmNoTrans_f16) {
 }
 #endif
 
-#if defined(USE_CUDA) || defined(USE_ROCM) || defined(USE_DNNL)
+#if defined(USE_CUDA) || defined(USE_ROCM) || defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(GemmOpTest, GemmNoTrans_bfloat16) {
 #ifdef USE_CUDA
   int min_cuda_architecture = 530;
@@ -115,6 +143,12 @@ TEST(GemmOpTest, GemmNoTrans_bfloat16) {
 #endif
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -141,11 +175,13 @@ TEST(GemmOpTest, GemmNoTrans_bfloat16) {
   execution_providers.emplace_back(DefaultRocmExecutionProvider(/*test_tunable_op=*/false));
 #elif USE_DNNL
   execution_providers.emplace_back(DefaultDnnlExecutionProvider());
+#elif USE_ZENDNN
+  execution_providers.emplace_back(DefaultZendnnExecutionProvider());
 #endif
   test.ConfigEps(std::move(execution_providers))
       .RunWithConfig();
 }
-#endif  // USE_CUDA USE_RCOM USE_DNNL
+#endif  // USE_CUDA USE_RCOM USE_DNNL USE_ZENDNN
 
 template <typename T>
 void TestGemmBroadcast() {
@@ -444,6 +480,39 @@ TEST(GemmOpTest, GemmNaN_bfloat16) {
 }
 #endif  //  USE_DNNL
 
+#if defined(USE_ZENDNN)
+TEST(GemmOpTest, GemmNaN_bfloat16) {
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+  OpTester test("Gemm", 14);
+
+  test.AddAttribute("transA", (int64_t)0);
+  test.AddAttribute("transB", (int64_t)0);
+  test.AddAttribute("alpha", 1.0f);
+  test.AddAttribute("beta", 0.0f);
+  test.AddInput<BFloat16>("A", {2, 4},
+                          MakeBFloat16({1.0f, 2.0f, 3.0f, 4.0f,
+                                        -1.0f, -2.0f, -3.0f, -4.0f}));
+  test.AddInput<BFloat16>("B", {4, 3},
+                          MakeBFloat16({1.0f, 1.0f, 1.0f, 1.0f,
+                                        1.0f, 1.0f, 1.0f, 1.0f,
+                                        1.0f, 1.0f, 1.0f, 1.0f}));
+  test.AddInput<BFloat16>("C", {2, 3}, MakeBFloat16({1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f}));
+  test.AddOutput<BFloat16>("Y", {2, 3},
+                           MakeBFloat16({10.0f, 10.0f, 10.0f,
+                                         -10.0f, -10.0f, -10.0f}));
+  std::vector<std::unique_ptr<IExecutionProvider>> execution_providers;
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif                                                                                                                //  USE_ZENDNN
+  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kTensorrtExecutionProvider}, nullptr, &execution_providers);  // TensorRT: Seg fault in parser
+}
+#endif  //  USE_ZENDNN
+
 template <typename T>
 void TestGemmScalarBroadcast() {
   OpTester test("Gemm");
@@ -502,6 +571,38 @@ TEST(GemmOpTest, GemmScalarBroadcast_bfloat16) {
 }
 #endif  //  USE_DNNL
 
+#if defined(USE_ZENDNN)
+TEST(GemmOpTest, GemmScalarBroadcast_bfloat16) {
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+  OpTester test("Gemm", 14);
+
+  test.AddAttribute("transA", (int64_t)0);
+  test.AddAttribute("transB", (int64_t)0);
+  test.AddAttribute("alpha", 1.0f);
+  test.AddInput<BFloat16>("A", {2, 4},
+                          MakeBFloat16({1.0f, 2.0f, 3.0f, 4.0f,
+                                        -1.0f, -2.0f, -3.0f, -4.0f}));
+  test.AddInput<BFloat16>("B", {4, 3},
+                          MakeBFloat16({1.0f, 1.0f, 1.0f, 1.0f,
+                                        1.0f, 1.0f, 1.0f, 1.0f,
+                                        1.0f, 1.0f, 1.0f, 1.0f}));
+  test.AddInput<BFloat16>("C", {1}, MakeBFloat16({1.0f}));
+  test.AddOutput<BFloat16>("Y", {2, 3},
+                           MakeBFloat16({11.0f, 11.0f, 11.0f,
+                                         -9.0f, -9.0f, -9.0f}));
+  std::vector<std::unique_ptr<IExecutionProvider>> execution_providers;
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif                                                                                                                //  USE_ZENDNN
+  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kTensorrtExecutionProvider}, nullptr, &execution_providers);  // TensorRT: Seg fault in parser
+}
+#endif  //  USE_ZENDNN
+
 template <typename T>
 void TestGemm2DBroadcast_1() {
   OpTester test("Gemm");
@@ -558,6 +659,38 @@ TEST(GemmOpTest, Gemm2DBroadcast_1_bfloat16) {
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kTensorrtExecutionProvider}, nullptr, &execution_providers);  // TensorRT: Seg fault in parser
 }
 #endif  //  USE_DNNL
+
+#if defined(USE_ZENDNN)
+TEST(GemmOpTest, Gemm2DBroadcast_1_bfloat16) {
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+  OpTester test("Gemm", 14);
+
+  test.AddAttribute("transA", (int64_t)0);
+  test.AddAttribute("transB", (int64_t)0);
+  test.AddAttribute("alpha", 1.0f);
+  test.AddInput<BFloat16>("A", {2, 4},
+                          MakeBFloat16({1.0f, 2.0f, 3.0f, 4.0f,
+                                        -1.0f, -2.0f, -3.0f, -4.0f}));
+  test.AddInput<BFloat16>("B", {4, 3},
+                          MakeBFloat16({1.0f, 1.0f, 1.0f, 1.0f,
+                                        1.0f, 1.0f, 1.0f, 1.0f,
+                                        1.0f, 1.0f, 1.0f, 1.0f}));
+  test.AddInput<BFloat16>("C", {2, 1}, MakeBFloat16({1.0f, 2.0f}));
+  test.AddOutput<BFloat16>("Y", {2, 3},
+                           MakeBFloat16({11.0f, 11.0f, 11.0f,
+                                         -8.0f, -8.0f, -8.0f}));
+  std::vector<std::unique_ptr<IExecutionProvider>> execution_providers;
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif                                                                                                                //  USE_ZENDNN
+  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kTensorrtExecutionProvider}, nullptr, &execution_providers);  // TensorRT: Seg fault in parser
+}
+#endif  //  USE_ZENDNN
 
 template <typename T>
 void TestGemm2DBroadcast_2() {
@@ -618,6 +751,38 @@ TEST(GemmOpTest, Gemm2DBroadcast_2_bfloat16) {
 }
 #endif  //  USE_DNNL
 
+#if defined(USE_ZENDNN)
+TEST(GemmOpTest, Gemm2DBroadcast_2_bfloat16) {
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+  OpTester test("Gemm", 14);
+
+  test.AddAttribute("transA", (int64_t)0);
+  test.AddAttribute("transB", (int64_t)0);
+  test.AddAttribute("alpha", 1.0f);
+  test.AddInput<BFloat16>("A", {2, 4},
+                          MakeBFloat16({1.0f, 2.0f, 3.0f, 4.0f,
+                                        -1.0f, -2.0f, -3.0f, -4.0f}));
+  test.AddInput<BFloat16>("B", {4, 3},
+                          MakeBFloat16({1.0f, 1.0f, 1.0f, 1.0f,
+                                        1.0f, 1.0f, 1.0f, 1.0f,
+                                        1.0f, 1.0f, 1.0f, 1.0f}));
+  test.AddInput<BFloat16>("C", {1, 3}, MakeBFloat16({1.0f, 2.0f, 3.0f}));
+  test.AddOutput<BFloat16>("Y", {2, 3},
+                           MakeBFloat16({11.0f, 12.0f, 13.0f,
+                                         -9.0f, -8.0f, -7.0f}));
+  std::vector<std::unique_ptr<IExecutionProvider>> execution_providers;
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif                                                                                                                //  USE_ZENDNN
+  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kTensorrtExecutionProvider}, nullptr, &execution_providers);  // TensorRT: Seg fault in parser
+}
+#endif  //  USE_ZENDNN
+
 template <typename T>
 void TestGemmFalseBroadcast() {
   OpTester test("Gemm");
@@ -675,6 +840,39 @@ TEST(GemmOpTest, GemmFalseBroadcast_2_bfloat16) {
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
 }
 #endif  //  USE_DNNL
+
+#if defined(USE_ZENDNN)
+TEST(GemmOpTest, GemmFalseBroadcast_2_bfloat16) {
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+  OpTester test("Gemm", 14);
+
+  test.AddAttribute("transA", (int64_t)0);
+  test.AddAttribute("transB", (int64_t)0);
+  test.AddAttribute("alpha", 1.0f);
+  test.AddInput<BFloat16>("A", {2, 4},
+                          MakeBFloat16({1.0f, 2.0f, 3.0f, 4.0f,
+                                        -1.0f, -2.0f, -3.0f, -4.0f}));
+  test.AddInput<BFloat16>("B", {4, 3},
+                          MakeBFloat16({1.0f, 1.0f, 1.0f, 1.0f,
+                                        1.0f, 1.0f, 1.0f, 1.0f,
+                                        1.0f, 1.0f, 1.0f, 1.0f}));
+  test.AddInput<BFloat16>("C", {2, 3}, MakeBFloat16({1.0f, 1.0f, 1.0f, 2.0f, 2.0f, 2.0f}));
+  test.AddOutput<BFloat16>("Y", {2, 3},
+                           MakeBFloat16({11.0f, 11.0f, 11.0f,
+                                         -8.0f, -8.0f, -8.0f}));
+  std::vector<std::unique_ptr<IExecutionProvider>> execution_providers;
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif  //  USE_ZENDNN
+  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
+}
+#endif  //  USE_ZENDNN
+
 template <typename T>
 void TestGemmEmptyTensor() {
   OpTester test("Gemm");
@@ -691,7 +889,7 @@ void TestGemmEmptyTensor() {
   test.AddOutput<T>("Y", {0, 3},
                     {});
   // TensorRT: doesn't support dynamic shape yet
-  test.ConfigExcludeEps({kTensorrtExecutionProvider, kDnnlExecutionProvider, kQnnExecutionProvider})
+  test.ConfigExcludeEps({kTensorrtExecutionProvider, kDnnlExecutionProvider, kZendnnExecutionProvider, kQnnExecutionProvider})
       .Config(run_with_tunable_op)
       .RunWithConfig();
 }

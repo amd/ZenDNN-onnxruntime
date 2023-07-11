@@ -1,3 +1,8 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+* Notified per clause 4(b) of the license.
+*******************************************************************************/
+
 /* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -209,7 +214,9 @@ class ThreadPool {
     // ThreadPoolParallelSection does not need to be available at this
     // point to avoid a dependence on the Eigen headers.
     ThreadPoolParallelSection* ps_{nullptr};
+#ifndef _OPENMP
     ThreadPool* tp_;
+#endif
     ORT_DISALLOW_COPY_ASSIGNMENT_AND_MOVE(ParallelSection);
   };
 
@@ -259,6 +266,13 @@ class ThreadPool {
 
   inline static void TrySimpleParallelFor(ThreadPool* tp, std::ptrdiff_t total,
                                           const std::function<void(std::ptrdiff_t)>& fn) {
+#ifdef _OPENMP
+    ORT_UNUSED_PARAMETER(tp);
+#pragma omp parallel for
+    for (std::ptrdiff_t i = 0; i < total; ++i) {
+      fn(i);
+    }
+#else
     if (tp != nullptr) {
       tp->SimpleParallelFor(total, fn);
     } else {
@@ -267,6 +281,7 @@ class ThreadPool {
         fn(i);
       }
     }
+#endif
   }
 
   /**
@@ -281,6 +296,14 @@ class ThreadPool {
    **/
   template <typename F>
   inline static void TryBatchParallelFor(ThreadPool* tp, std::ptrdiff_t total, F&& fn, std::ptrdiff_t num_batches) {
+#ifdef _OPENMP
+    ORT_UNUSED_PARAMETER(tp);
+    ORT_UNUSED_PARAMETER(num_batches);
+#pragma omp parallel for
+    for (std::ptrdiff_t i = 0; i < total; ++i) {
+      fn(i);
+    }
+#else
     if (tp == nullptr) {
       for (std::ptrdiff_t i = 0; i < total; ++i) {
         // In many cases, fn can be inlined here.
@@ -313,6 +336,7 @@ class ThreadPool {
         fn(i);
       }
     });
+#endif
   }
 
   struct WorkInfo {

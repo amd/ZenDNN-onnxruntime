@@ -1,8 +1,35 @@
+#*******************************************************************************
+# Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+#******************************************************************************
+
 # ------------------------------------------------------------------------
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
 # ------------------------------------------------------------------------
 # pylint: disable=C0103
+
+#*******************************************************************************
+#
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and associated documentation files (the
+# "Software"), to deal in the Software without restriction, including
+# without limitation the rights to use, copy, modify, merge, publish,
+# distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so, subject to
+# the following conditions:
+#
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+# LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+# WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+#******************************************************************************
 
 import datetime
 import logging
@@ -70,6 +97,8 @@ elif parse_arg_remove_boolean(sys.argv, "--use_openvino"):
     package_name = "onnxruntime-openvino"
 elif parse_arg_remove_boolean(sys.argv, "--use_dnnl"):
     package_name = "onnxruntime-dnnl"
+elif parse_arg_remove_boolean(sys.argv, "--use_zendnn"):
+    package_name = "onnxruntime-zendnn"
 elif parse_arg_remove_boolean(sys.argv, "--use_tvm"):
     package_name = "onnxruntime-tvm"
 elif parse_arg_remove_boolean(sys.argv, "--use_vitisai"):
@@ -341,6 +370,10 @@ if platform.system() == "Linux":
     libs = [
         "onnxruntime_pybind11_state.so",
         "libdnnl.so.2",
+        "libamdZenDNN.so",
+        'libblis-mt.so',
+        'libblis-mt.so.4',
+        'libblis-mt.so.3.0.0',
         "libmklml_intel.so",
         "libmklml_gnu.so",
         "libiomp5.so",
@@ -350,9 +383,11 @@ if platform.system() == "Linux":
     dl_libs.append(providers_cuda_or_rocm)
     dl_libs.append(providers_tensorrt_or_migraphx)
     dl_libs.append(providers_cann)
-    # DNNL, TensorRT & OpenVINO EPs are built as shared libs
+    dl_libs.append('libonnxruntime_providers_zendnn.so')
+    # DNNL, ZENDNN, TensorRT & OpenVINO EPs are built as shared libs
     libs.extend(["libonnxruntime_providers_shared.so"])
     libs.extend(["libonnxruntime_providers_dnnl.so"])
+    libs.extend(['libonnxruntime_providers_zendnn.so'])
     libs.extend(["libonnxruntime_providers_openvino.so"])
     libs.append(providers_cuda_or_rocm)
     libs.append(providers_tensorrt_or_migraphx)
@@ -369,10 +404,11 @@ elif platform.system() == "Darwin":
     if nightly_build:
         libs.extend(["libonnxruntime_pywrapper.dylib"])
 else:
-    libs = ["onnxruntime_pybind11_state.pyd", "dnnl.dll", "mklml.dll", "libiomp5md.dll"]
+    libs = ["onnxruntime_pybind11_state.pyd", "dnnl.dll", "amdZenDNN.dll", "AOCL-LibBlis-Win-MT-dll.dll", "libomp.dll", "mklml.dll", "libiomp5md.dll"]
     # DNNL, TensorRT & OpenVINO EPs are built as shared libs
     libs.extend(["onnxruntime_providers_shared.dll"])
     libs.extend(["onnxruntime_providers_dnnl.dll"])
+    libs.extend(['onnxruntime_providers_zendnn.dll'])
     libs.extend(["onnxruntime_providers_tensorrt.dll"])
     libs.extend(["onnxruntime_providers_openvino.dll"])
     libs.extend(["onnxruntime_providers_cuda.dll"])

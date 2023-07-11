@@ -1,11 +1,39 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+*******************************************************************************/
+
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
+
+/*******************************************************************************
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+* LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+* OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
+*******************************************************************************/
 
 #include <chrono>
 #include <random>
 #include "core/framework/tensor.h"
 #include "core/session/inference_session.h"
 #include "test/common/dnnl_op_test_utils.h"
+#include "test/common/zendnn_op_test_utils.h"
 #include "test/common/tensor_op_test_utils.h"
 #include "test/framework/test_utils.h"
 #include "test/util/include/default_providers.h"
@@ -94,9 +122,9 @@ TEST(LayerNormTest, LayerNorm_Scale_Float16Input) {
   test.AddInput<MLFloat16>("x", dims, ToFloat16({-10.264f, 8.6453f, 43.1561f, -0.641239f, -8.2164f, 0.11412f, 41.3156f, 3.0458f}));
   test.AddInput<float>("gamma", {2}, {-0.6953f, 5.1824f});
   test.AddOutput<float>("output", dims, {0.6953f, 5.1824f, -0.6953f, -5.1824f, 0.6953f, 5.1824f, -0.6953f, -5.1824f});
-  // TRT, DNNL, OpenVINO and NNAPI, CoreML don't support this combination of datatypes
+  // TRT, DNNL, ZENDNN, OpenVINO and NNAPI, CoreML don't support this combination of datatypes
   test.Run(OpTester::ExpectResult::kExpectSuccess, "",
-           {kTensorrtExecutionProvider, kDnnlExecutionProvider, kOpenVINOExecutionProvider,
+           {kTensorrtExecutionProvider, kDnnlExecutionProvider, kZendnnExecutionProvider, kOpenVINOExecutionProvider,
             kNnapiExecutionProvider, kQnnExecutionProvider, kCoreMLExecutionProvider});
 }
 
@@ -108,9 +136,9 @@ TEST(LayerNormTest, LayerNorm_Scale_Float16ScaleOutput) {
   test.AddInput<float>("x", dims, {-10.264f, 8.6453f, 43.1561f, -0.641239f, -8.2164f, 0.11412f, 41.3156f, 3.0458f});
   test.AddInput<MLFloat16>("gamma", {2}, ToFloat16({-0.6953f, 5.1824f}));
   test.AddOutput<MLFloat16>("output", dims, ToFloat16({0.6953f, 5.1824f, -0.6953f, -5.1824f, 0.6953f, 5.1824f, -0.6953f, -5.1824f}));
-  // TRT, DNNL, OpenVINO and NNAPI, CoreML don't support this combination of datatypes
+  // TRT, DNNL, ZENDNN, OpenVINO and NNAPI, CoreML don't support this combination of datatypes
   test.Run(OpTester::ExpectResult::kExpectSuccess, "",
-           {kTensorrtExecutionProvider, kDnnlExecutionProvider, kOpenVINOExecutionProvider,
+           {kTensorrtExecutionProvider, kDnnlExecutionProvider, kZendnnExecutionProvider, kOpenVINOExecutionProvider,
             kNnapiExecutionProvider, kQnnExecutionProvider, kCoreMLExecutionProvider});
 }
 
@@ -122,9 +150,9 @@ TEST(LayerNormTest, LayerNorm_Scale_Float16InputScaleOutput) {
   test.AddInput<MLFloat16>("x", dims, ToFloat16({-10.264f, 8.6453f, 43.1561f, -0.641239f, -8.2164f, 0.11412f, 41.3156f, 3.0458f}));
   test.AddInput<MLFloat16>("gamma", {2}, ToFloat16({-0.6953f, 5.1824f}));
   test.AddOutput<MLFloat16>("output", dims, ToFloat16({0.6953f, 5.1824f, -0.6953f, -5.1824f, 0.6953f, 5.1824f, -0.6953f, -5.1824f}));
-  // TRT, DNNL, OpenVINO and NNAPI, CoreML don't support this combination of datatypes
+  // TRT, DNNL, ZENDNN, OpenVINO and NNAPI, CoreML don't support this combination of datatypes
   test.Run(OpTester::ExpectResult::kExpectSuccess, "",
-           {kTensorrtExecutionProvider, kDnnlExecutionProvider, kOpenVINOExecutionProvider,
+           {kTensorrtExecutionProvider, kDnnlExecutionProvider, kZendnnExecutionProvider, kOpenVINOExecutionProvider,
             kNnapiExecutionProvider, kQnnExecutionProvider, kCoreMLExecutionProvider});
 }
 
@@ -149,9 +177,9 @@ TEST(LayerNormTest, LayerNorm_Scale_Bias_Float16Input) {
   test.AddInput<float>("gamma", {2}, {-0.6953f, 5.1824f});
   test.AddInput<float>("bias", {2}, {0.6435f, -0.3964f});
   test.AddOutput<float>("output", dims, {-0.0516f, -5.5776f, -0.0518f, -5.5788f, -0.0518f, -5.5788f});
-  // TRT, DNNL, OpenVINO and NNAPI, CoreML don't support this combination of datatypes
+  // TRT, DNNL, ZENDNN, OpenVINO and NNAPI, CoreML don't support this combination of datatypes
   test.Run(OpTester::ExpectResult::kExpectSuccess, "",
-           {kTensorrtExecutionProvider, kDnnlExecutionProvider, kQnnExecutionProvider,
+           {kTensorrtExecutionProvider, kDnnlExecutionProvider, kZendnnExecutionProvider, kQnnExecutionProvider,
             kOpenVINOExecutionProvider, kNnapiExecutionProvider, kCoreMLExecutionProvider});
 }
 
@@ -164,9 +192,9 @@ TEST(LayerNormTest, LayerNorm_Scale_Bias_Float16ScaleBiasOutput) {
   test.AddInput<MLFloat16>("gamma", {2}, ToFloat16({-0.6953f, 5.1824f}));
   test.AddInput<MLFloat16>("bias", {2}, ToFloat16({0.6435f, -0.3964f}));
   test.AddOutput<MLFloat16>("output", dims, ToFloat16({-0.0516f, -5.5776f, -0.0518f, -5.5788f, -0.0518f, -5.5788f}));
-  // TRT, DNNL, OpenVINO and NNAPI, CoreML don't support this combination of datatypes
+  // TRT, DNNL, ZENDNN, OpenVINO and NNAPI, CoreML don't support this combination of datatypes
   test.Run(OpTester::ExpectResult::kExpectSuccess, "",
-           {kTensorrtExecutionProvider, kDnnlExecutionProvider, kOpenVINOExecutionProvider,
+           {kTensorrtExecutionProvider, kDnnlExecutionProvider, kZendnnExecutionProvider, kOpenVINOExecutionProvider,
             kNnapiExecutionProvider, kQnnExecutionProvider, kCoreMLExecutionProvider});
 }
 
@@ -179,9 +207,9 @@ TEST(LayerNormTest, LayerNorm_Scale_Bias_Float16InputScaleBiasOutput) {
   test.AddInput<MLFloat16>("gamma", {2}, ToFloat16({-0.6953f, 5.1824f}));
   test.AddInput<MLFloat16>("bias", {2}, ToFloat16({0.6435f, -0.3964f}));
   test.AddOutput<MLFloat16>("output", dims, ToFloat16({-0.0516f, -5.5776f, -0.0518f, -5.5788f, -0.0518f, -5.5788f}));
-  // TRT, DNNL, OpenVINO and NNAPI, CoreML don't support this combination of datatypes
+  // TRT, DNNL, ZENDNN, OpenVINO and NNAPI, CoreML don't support this combination of datatypes
   test.Run(OpTester::ExpectResult::kExpectSuccess, "",
-           {kTensorrtExecutionProvider, kDnnlExecutionProvider, kOpenVINOExecutionProvider,
+           {kTensorrtExecutionProvider, kDnnlExecutionProvider, kZendnnExecutionProvider, kOpenVINOExecutionProvider,
             kNnapiExecutionProvider, kQnnExecutionProvider, kCoreMLExecutionProvider});
 }
 
@@ -205,8 +233,8 @@ TEST(LayerNormTest, LayerNorm17_double) {
   test.AddInput<double>("x", dims, {1.0, 2.0, 3.0, 4.0, 5.0, 6.0});
   test.AddInput<double>("gamma", {3}, {1.0, 1.0, 1.0});
   test.AddOutput<double>("output", dims, {-1.2247, 0.0, 1.2247, -1.2247, 0.0, 1.2247});
-  // DNNL does not support double
-  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kDnnlExecutionProvider});
+  // DNNL, ZENDNN does not support double
+  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kDnnlExecutionProvider, kZendnnExecutionProvider});
 }
 
 TEST(LayerNormTest, LayerNorm_InvalidScaleBias) {
@@ -224,13 +252,19 @@ TEST(LayerNormTest, LayerNorm_InvalidScaleBias) {
   // implementation for which we don't control the check or error message.
   test.Run(OpTester::ExpectResult::kExpectFailure,
            "Size of X.shape()[axis:] == 6. Size of scale and bias (if provided) must match this",
-           {kDnnlExecutionProvider, kDmlExecutionProvider, kTensorrtExecutionProvider});
+           {kDnnlExecutionProvider, kZendnnExecutionProvider, kDmlExecutionProvider, kTensorrtExecutionProvider});
 }
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(use_ZENDNN)
 TEST(LayerNormTest, LayerNorm17_Scale_Bias_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -245,6 +279,6 @@ TEST(LayerNormTest, LayerNorm17_Scale_Bias_bfloat16) {
   test.AddOutput<BFloat16>("output", dims, MakeBFloat16({-0.0516f, -5.5776f, -0.0518f, -5.5788f, -0.0518f, -5.5788f}));
   test.Run();
 }
-#endif  //  USE_DNNL
+#endif  //  USE_DNNL USE_ZENDNN
 }  // namespace test
 }  // namespace onnxruntime

@@ -1,3 +1,7 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+*******************************************************************************/
+
 /*
 <<<<<<< HEAD
  * Copyright (c) 2019, 2023, Oracle and/or its affiliates. All rights reserved.
@@ -6,6 +10,30 @@
 >>>>>>> 98b8e2e31 (More fixes, tests now pass.)
  * Licensed under the MIT License.
  */
+
+/*******************************************************************************
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+* LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+* OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
+*******************************************************************************/
+
 package ai.onnxruntime;
 
 import java.io.File;
@@ -69,6 +97,8 @@ final class OnnxRuntime {
   static final String ONNXRUNTIME_LIBRARY_ROCM_NAME = "onnxruntime_providers_rocm";
   /** The short name of the ONNX runtime DNNL provider library */
   static final String ONNXRUNTIME_LIBRARY_DNNL_NAME = "onnxruntime_providers_dnnl";
+  +  /** The short name of the ONNX runtime ZENDNN provider library */
++  static final String ONNXRUNTIME_LIBRARY_ZENDNN_NAME = "onnxruntime_providers_zendnn";
   /** The short name of the ONNX runtime OpenVINO provider library */
   static final String ONNXRUNTIME_LIBRARY_OPENVINO_NAME = "onnxruntime_providers_openvino";
   /** The short name of the ONNX runtime TensorRT provider library */
@@ -226,6 +256,16 @@ final class OnnxRuntime {
    */
   static boolean extractDNNL() {
     return extractProviderLibrary(ONNXRUNTIME_LIBRARY_DNNL_NAME);
+  }
+
+  /**
+   * Extracts the ZENDNN provider library from the classpath resources if present, or checks to see if
+   * the ZENDNN provider library is in the directory specified by {@link #ONNXRUNTIME_NATIVE_PATH}.
+   *
+   * @return True if the ZENDNN provider library is ready for loading, false otherwise.
+   */
+  static boolean extractZENDNN() {
+    return extractProviderLibrary(ONNXRUNTIME_LIBRARY_ZENDNN_NAME);
   }
 
   /**

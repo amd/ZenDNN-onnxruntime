@@ -1,5 +1,32 @@
+#**************************************************************************************
+# Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+#**************************************************************************************
+
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
+
+#**************************************************************************************
+#
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and associated documentation files (the
+# "Software"), to deal in the Software without restriction, including
+# without limitation the rights to use, copy, modify, merge, publish,
+# distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so, subject to
+# the following conditions:
+#
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+# LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+# WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+#**************************************************************************************
 
 # Reduced ops build helpers
 
@@ -282,7 +309,7 @@ if (onnxruntime_ENABLE_CPU_FP16_OPS)
   set_source_files_properties(${ORTTRAINING_SOURCE_DIR}/training_ops/cuda/collective/adasum_kernels.cc PROPERTIES COMPILE_FLAGS " -fassociative-math -ffast-math -ftree-vectorize -funsafe-math-optimizations -mf16c -mavx -mfma ")
 endif()
 
-target_include_directories(onnxruntime_providers PRIVATE ${ONNXRUNTIME_ROOT} ${eigen_INCLUDE_DIRS})
+target_include_directories(onnxruntime_providers PRIVATE ${ONNXRUNTIME_ROOT} ${eigen_INCLUDE_DIRS} ${ZENDNN_SOURCE} ${ZENDNN_INCLUDE_DIR} $ENV{ZENDNN_BLIS_PATH}/include)
 onnxruntime_add_include_to_target(onnxruntime_providers re2::re2)
 add_dependencies(onnxruntime_providers onnx ${onnxruntime_EXTERNAL_DEPENDENCIES})
 
@@ -626,6 +653,62 @@ if (onnxruntime_USE_DNNL)
   endif()
 
   install(TARGETS onnxruntime_providers_dnnl
+          ARCHIVE  DESTINATION ${CMAKE_INSTALL_LIBDIR}
+          LIBRARY  DESTINATION ${CMAKE_INSTALL_LIBDIR}
+          RUNTIME  DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
+
+if (onnxruntime_USE_ZENDNN)
+  file(GLOB_RECURSE onnxruntime_providers_zendnn_cc_srcs CONFIGURE_DEPENDS
+    "${ONNXRUNTIME_ROOT}/core/providers/zendnn/*.h"
+    "${ONNXRUNTIME_ROOT}/core/providers/zendnn/*.cc"
+    "${ONNXRUNTIME_ROOT}/core/providers/shared_library/*.h"
+    "${ONNXRUNTIME_ROOT}/core/providers/shared_library/*.cc"
+  )
+
+  source_group(TREE ${ONNXRUNTIME_ROOT}/core FILES ${onnxruntime_providers_zendnn_cc_srcs})
+  onnxruntime_add_shared_library_module(onnxruntime_providers_zendnn ${onnxruntime_providers_zendnn_cc_srcs})
+  target_link_directories(onnxruntime_providers_zendnn PRIVATE ${ZENDNN_LIB_DIR})
+  if (MSVC AND onnxruntime_ENABLE_STATIC_ANALYSIS)
+    # zendnn_convgrad.cc(47,0): Warning C6262: Function uses '38816' bytes of stack:  exceeds /analyze:stacksize '16384'.  Consider moving some data to heap.
+    target_compile_options(onnxruntime_providers_zendnn PRIVATE  "/analyze:stacksize 131072")
+  endif()
+
+  add_dependencies(onnxruntime_providers_zendnn onnxruntime_providers_shared project_zendnn ${onnxruntime_EXTERNAL_DEPENDENCIES})
+  target_include_directories(onnxruntime_providers_zendnn PRIVATE ${ONNXRUNTIME_ROOT} ${eigen_INCLUDE_DIRS} ${ZENDNN_INCLUDE_DIR} ${ZENDNN_OCL_INCLUDE_DIR})
+  # ${CMAKE_CURRENT_BINARY_DIR} is so that #include "onnxruntime_config.h" inside tensor_shape.h is found
+  target_link_libraries(onnxruntime_providers_zendnn PRIVATE amdZenDNN ${ZENDNN_BLIS_LIB} ${ONNXRUNTIME_PROVIDERS_SHARED} Boost::mp11 ${ABSEIL_LIBS} ${GSL_TARGET})
+  install(DIRECTORY ${PROJECT_SOURCE_DIR}/../include/onnxruntime/core/providers/zendnn  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/onnxruntime/core/providers)
+  set_target_properties(onnxruntime_providers_zendnn PROPERTIES FOLDER "ONNXRuntime")
+  set_target_properties(onnxruntime_providers_zendnn PROPERTIES LINKER_LANGUAGE CXX)
+
+  # Needed for the provider interface, as it includes training headers when training is enabled
+  if (onnxruntime_ENABLE_TRAINING_OPS)
+    target_include_directories(onnxruntime_providers_zendnn PRIVATE ${ORTTRAINING_ROOT})
+  endif()
+
+  # Needed for threadpool handling
+  if(onnxruntime_BUILD_JAVA)
+    add_compile_definitions(ZENDNN_JAVA)
+  endif()
+
+  if(APPLE)
+    set_property(TARGET onnxruntime_providers_zendnn APPEND_STRING PROPERTY LINK_FLAGS "-Xlinker -exported_symbols_list ${ONNXRUNTIME_ROOT}/core/providers/zendnn/exported_symbols.lst")
+    set_target_properties(onnxruntime_providers_zendnn PROPERTIES
+      INSTALL_RPATH "@loader_path"
+      BUILD_WITH_INSTALL_RPATH TRUE
+      INSTALL_RPATH_USE_LINK_PATH FALSE)
+    target_link_libraries(onnxruntime_providers_zendnn PRIVATE nsync::nsync_cpp)
+  elseif(UNIX)
+    set_property(TARGET onnxruntime_providers_zendnn APPEND_STRING PROPERTY LINK_FLAGS "-Xlinker --version-script=${ONNXRUNTIME_ROOT}/core/providers/zendnn/version_script.lds -Xlinker --gc-sections -Xlinker -rpath=\$ORIGIN")
+    target_link_libraries(onnxruntime_providers_zendnn PRIVATE nsync::nsync_cpp)
+  elseif(WIN32)
+    set_property(TARGET onnxruntime_providers_zendnn APPEND_STRING PROPERTY LINK_FLAGS "-DEF:${ONNXRUNTIME_ROOT}/core/providers/zendnn/symbols.def")
+  else()
+    message(FATAL_ERROR "onnxruntime_providers_zendnn unknown platform, need to specify shared library exports for it")
+  endif()
+
+  install(TARGETS onnxruntime_providers_zendnn
           ARCHIVE  DESTINATION ${CMAKE_INSTALL_LIBDIR}
           LIBRARY  DESTINATION ${CMAKE_INSTALL_LIBDIR}
           RUNTIME  DESTINATION ${CMAKE_INSTALL_BINDIR})

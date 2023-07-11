@@ -1,5 +1,33 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+*******************************************************************************/
+
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
+
+/*******************************************************************************
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+* LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+* OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
+*******************************************************************************/
+
 #include "core/graph/contrib_ops/contrib_defs.h"
 
 #include <cmath>
@@ -2250,6 +2278,249 @@ ONNX_MS_OPERATOR_SET_SCHEMA(CropAndResize, 1,
         a fixed size = [crop_height, crop_width]. The result is a 4-D tensor [num_boxes, crop_height, crop_width, depth].
         The resizing is corner aligned.)DOC"));
 
+
+void RegisterVitisAISchemas() {
+
+  ONNX_CONTRIB_OPERATOR_SCHEMA(VitisAIConv2D)
+      .SetDomain(kOnnxDomain)
+      .SinceVersion(1)
+      .SetDoc("VitisAIConv2D for INT8 Convolutions on AMD Zen Machines")
+      .Attr("kernel_shape", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Attr("dilations", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Attr("strides", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Attr("pads", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Attr("_output_shapes", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Attr("bias_scale", "", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("in_scale", "", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("out_scale", "", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("weight_scale", "", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("is_relu", "", AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("is_sum", "", AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("data_format", "", AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("use_cudnn_on_gpu","",AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("intermediate_float_scale","", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("group", "", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("relu_alpha", "", AttributeProto::FLOAT, OPTIONAL_VALUE)
+      .Attr("Tbias","",AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("Tfilter","",AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("Tinput","",AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("Toutput","",AttributeProto::STRING, OPTIONAL_VALUE)
+      .Input(0, "X", "4D input tensor with shape (batch_size, channel, height, weight)", "T1")
+      .Input(1, "W", "4D input tensor with shape (output, input, kernel_height, kernel_weight)", "T2")
+      .Input(2, "B", "1D input tensor with shape (output)", "T3", OpSchema::Optional)
+      .Output(0, "output", "4D output tensor", "T4")
+      .TypeConstraint("T1", {"tensor(float)", "tensor(uint8)", "tensor(int8)"}, "Constrain input and output types.")
+      .TypeConstraint("T2", {"tensor(float)", "tensor(uint8)", "tensor(int8)"}, "Constrain input and output types.")
+      .TypeConstraint("T3", {"tensor(float)", "tensor(uint8)", "tensor(int8)"}, "Constrain input and output types.")
+      .TypeConstraint("T4", {"tensor(float)", "tensor(uint8)", "tensor(int8)"}, "Constrain input and output types.")
+      .TypeAndShapeInferenceFunction([](ONNX_NAMESPACE::InferenceContext& ctx) {
+        auto output_type = ctx.getOutputType(0);
+        if (output_type->value_case() == TypeProto::kTensorType ||
+           output_type->value_case() == TypeProto::VALUE_NOT_SET) {
+           return;
+        }
+      });
+
+  ONNX_CONTRIB_OPERATOR_SCHEMA(VitisAIConv2DWithoutBias)
+      .SetDomain(kOnnxDomain)
+      .SinceVersion(1)
+      .SetDoc("VitisAIConv2DWithoutBias for INT8 Convolutions on AMD Zen Machines")
+      .Attr("kernel_shape", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Attr("dilations", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Attr("strides", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Attr("pads", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Attr("_output_shapes", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Attr("bias_scale", "", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("in_scale", "", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("out_scale", "", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("weight_scale", "", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("is_relu", "", AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("is_sum", "", AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("data_format", "", AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("use_cudnn_on_gpu","",AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("intermediate_float_scale","", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("group", "", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("relu_alpha", "", AttributeProto::FLOAT, OPTIONAL_VALUE)
+      .Attr("Tbias","",AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("Tfilter","",AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("Tinput","",AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("Toutput","",AttributeProto::STRING, OPTIONAL_VALUE)
+      .Input(0, "X", "4D input tensor with shape (batch_size, channel, height, weight)", "T1")
+      .Input(1, "W", "4D input tensor with shape (output, input, kernel_height, kernel_weight)", "T2")
+      .Input(2, "B", "1D input tensor with shape (output)", "T3", OpSchema::Optional)
+      .Output(0, "output", "4D output tensor", "T4")
+      .TypeConstraint("T1", {"tensor(float)", "tensor(uint8)", "tensor(int8)"}, "Constrain input and output types.")
+      .TypeConstraint("T2", {"tensor(float)", "tensor(uint8)", "tensor(int8)"}, "Constrain input and output types.")
+      .TypeConstraint("T3", {"tensor(float)", "tensor(uint8)", "tensor(int8)"}, "Constrain input and output types.")
+      .TypeConstraint("T4", {"tensor(float)", "tensor(uint8)", "tensor(int8)"}, "Constrain input and output types.")
+      .TypeAndShapeInferenceFunction([](ONNX_NAMESPACE::InferenceContext& ctx) {
+        auto output_type = ctx.getOutputType(0);
+        if (output_type->value_case() == TypeProto::kTensorType ||
+           output_type->value_case() == TypeProto::VALUE_NOT_SET) {
+           return;
+        }
+      });
+
+  ONNX_CONTRIB_OPERATOR_SCHEMA(VitisAIConv2DWithSum)
+      .SetDomain(kOnnxDomain)
+      .SinceVersion(1)
+      .SetDoc("VitisAIConv2DWithSum for INT8 Convolutions on AMD Zen Machines")
+      .Attr("add_out_scale", "", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("bias_scale", "", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("data_format", "", AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("dilations", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Attr("in_scale", "", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("is_relu", "", AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("is_sum", "", AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("kernel_shape", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Attr("out_scale", "", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("strides", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Attr("sum_scale", "", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("Tbias","",AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("Tfilter","",AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("Tinput","",AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("Toutput","",AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("Tsum","",AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("use_cudnn_on_gpu","",AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("intermediate_float_scale","", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("group", "", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("relu_alpha", "", AttributeProto::FLOAT, OPTIONAL_VALUE)
+      .Attr("weight_scale", "", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("_output_shapes", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Attr("pads", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Input(0, "X", "4D input tensor with shape (batch_size, channel, height, weight)", "T1")
+      .Input(1, "W", "4D input tensor with shape (output, input, kernel_height, kernel_weight)", "T2")
+      .Input(2, "B", "1D input tensor with shape (output)", "T3", OpSchema::Optional)
+      .Input(3, "BINARY", "1D input tensor with shape (output)", "T4", OpSchema::Optional)
+      .Output(0, "output", "4D output tensor", "T5")
+      .TypeConstraint("T1", {"tensor(float)", "tensor(uint8)", "tensor(int8)"}, "Constrain input and output types.")
+      .TypeConstraint("T2", {"tensor(float)", "tensor(uint8)", "tensor(int8)"}, "Constrain input and output types.")
+      .TypeConstraint("T3", {"tensor(float)", "tensor(uint8)", "tensor(int8)"}, "Constrain input and output types.")
+      .TypeConstraint("T4", {"tensor(float)", "tensor(uint8)", "tensor(int8)"}, "Constrain input and output types.")
+      .TypeConstraint("T5", {"tensor(float)", "tensor(uint8)", "tensor(int8)"}, "Constrain input and output types.")
+      .TypeAndShapeInferenceFunction([](ONNX_NAMESPACE::InferenceContext& ctx) {
+        auto output_type = ctx.getOutputType(0);
+        if (output_type->value_case() == TypeProto::kTensorType ||
+           output_type->value_case() == TypeProto::VALUE_NOT_SET) {
+           return;
+        }
+      });
+
+  ONNX_CONTRIB_OPERATOR_SCHEMA(VitisAIDepthwiseConv2D)
+      .SetDomain(kOnnxDomain)
+      .SinceVersion(1)
+      .SetDoc("VitisAIDepthwiseConv2D for INT8 Convolutions on AMD Zen Machines")
+      .Attr("kernel_shape", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Attr("dilations", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Attr("strides", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Attr("pads", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Attr("_output_shapes", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Attr("bias_scale", "", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("in_scale", "", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("out_scale", "", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("weight_scale", "", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("is_relu", "", AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("is_sum", "", AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("data_format", "", AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("use_cudnn_on_gpu","",AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("intermediate_float_scale","", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("group", "", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("relu_alpha", "", AttributeProto::FLOAT, OPTIONAL_VALUE)
+      .Attr("Tbias","",AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("Tfilter","",AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("Tinput","",AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("Toutput","",AttributeProto::STRING, OPTIONAL_VALUE)
+      .Input(0, "X", "4D input tensor with shape (batch_size, channel, height, weight)", "T1")
+      .Input(1, "W", "4D input tensor with shape (output, input, kernel_height, kernel_weight)", "T2")
+      .Input(2, "B", "1D input tensor with shape (output)", "T3", OpSchema::Optional)
+      .Output(0, "output", "4D output tensor", "T4")
+      .TypeConstraint("T1", {"tensor(float)", "tensor(uint8)", "tensor(int8)"}, "Constrain input and output types.")
+      .TypeConstraint("T2", {"tensor(float)", "tensor(uint8)", "tensor(int8)"}, "Constrain input and output types.")
+      .TypeConstraint("T3", {"tensor(float)", "tensor(uint8)", "tensor(int8)"}, "Constrain input and output types.")
+      .TypeConstraint("T4", {"tensor(float)", "tensor(uint8)", "tensor(int8)"}, "Constrain input and output types.")
+      .TypeAndShapeInferenceFunction([](ONNX_NAMESPACE::InferenceContext& ctx) {
+        auto output_type = ctx.getOutputType(0);
+        if (output_type->value_case() == TypeProto::kTensorType ||
+           output_type->value_case() == TypeProto::VALUE_NOT_SET) {
+           return;
+        }
+      });
+
+  ONNX_CONTRIB_OPERATOR_SCHEMA(VitisAIMaxPool)
+      .SetDomain(kOnnxDomain)
+      .SinceVersion(1)
+      .SetDoc("VitisAIMaxPool for INT8 Convolutions on AMD Zen Machines")
+      .Attr("data_format", "", AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("kernel_shape", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Attr("pads","",AttributeProto::INTS, OPTIONAL_VALUE)
+      .Attr("strides", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Attr("Tinput","",AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("Toutput","",AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("_output_shapes", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Input(0, "X", "1D input tensor", "T1")
+      .Output(0, "output", "4D output tensor", "T2")
+      .TypeConstraint("T1", {"tensor(float)", "tensor(uint8)", "tensor(int8)"}, "Constrain input and output types.")
+      .TypeConstraint("T2", {"tensor(float)", "tensor(uint8)", "tensor(int8)"}, "Constrain input and output types.")
+      .TypeAndShapeInferenceFunction([](ONNX_NAMESPACE::InferenceContext& ctx) {
+        auto output_type = ctx.getOutputType(0);
+        if (output_type->value_case() == TypeProto::kTensorType ||
+           output_type->value_case() == TypeProto::VALUE_NOT_SET) {
+           return;
+        }
+      });
+
+  ONNX_CONTRIB_OPERATOR_SCHEMA(VitisAIAvgPool)
+      .SetDomain(kOnnxDomain)
+      .SinceVersion(1)
+      .SetDoc("VitisAIAvgPool for INT8 Convolutions on AMD Zen Machines")
+      .Attr("data_format", "", AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("kernel_shape", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Attr("pads","",AttributeProto::INTS, OPTIONAL_VALUE)
+      .Attr("strides", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Attr("Tinput","",AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("Toutput","",AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("_output_shapes", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Input(0, "X", "4D input tensor with shape (batch_size, channel, height, weight)", "T1")
+      .Output(0, "output", "4D output tensor", "T2")
+      .TypeConstraint("T1", {"tensor(float)", "tensor(uint8)", "tensor(int8)"}, "Constrain input and output types.")
+      .TypeConstraint("T2", {"tensor(float)", "tensor(uint8)", "tensor(int8)"}, "Constrain input and output types.")
+      .TypeAndShapeInferenceFunction([](ONNX_NAMESPACE::InferenceContext& ctx) {
+        auto output_type = ctx.getOutputType(0);
+        if (output_type->value_case() == TypeProto::kTensorType ||
+           output_type->value_case() == TypeProto::VALUE_NOT_SET) {
+           return;
+        }
+      });
+
+  ONNX_CONTRIB_OPERATOR_SCHEMA(VitisAIConcatV2)
+      .SetDomain(kOnnxDomain)
+      .SinceVersion(1)
+      .SetDoc("VitisAIConcatV2 for INT8 Concatinations on AMD Zen Machines")
+      .Attr("data_format", "", AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("N", "", AttributeProto::INT, OPTIONAL_VALUE)
+      .Attr("T","",AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("Tidx", "", AttributeProto::STRING, OPTIONAL_VALUE)
+      .Attr("_output_shapes", "", AttributeProto::INTS, OPTIONAL_VALUE)
+      .Attr("axis", "", AttributeProto::INT, OPTIONAL_VALUE)
+      .Input(0, "A", "1D input tensor", "T1")
+      .Input(1, "B", "1D input tensor", "T2")
+      .Input(2, "C", "1D input tensor", "T3", OpSchema::Optional)
+      .Input(3, "D", "1D input tensor", "T4", OpSchema::Optional)
+      .Output(0, "output", "4D output tensor", "T5")
+      .TypeConstraint("T1", {"tensor(float)", "tensor(uint8)", "tensor(int8)", "tensor(int32)"}, "Constrain input and output types.")
+      .TypeConstraint("T2", {"tensor(float)", "tensor(uint8)", "tensor(int8)", "tensor(int32)"}, "Constrain input and output types.")
+      .TypeConstraint("T3", {"tensor(float)", "tensor(uint8)", "tensor(int8)", "tensor(int32)"}, "Constrain input and output types.")
+      .TypeConstraint("T4", {"tensor(float)", "tensor(uint8)", "tensor(int8)", "tensor(int32)"}, "Constrain input and output types.")
+      .TypeConstraint("T5", {"tensor(float)", "tensor(uint8)", "tensor(int8)", "tensor(int32)"}, "Constrain input and output types.")
+      .TypeAndShapeInferenceFunction([](ONNX_NAMESPACE::InferenceContext& ctx) {
+        auto output_type = ctx.getOutputType(0);
+        if (output_type->value_case() == TypeProto::kTensorType ||
+           output_type->value_case() == TypeProto::VALUE_NOT_SET) {
+           return;
+        }
+      });
+}
+
 void RegisterContribSchemas() {
   ONNX_CONTRIB_OPERATOR_SCHEMA_ELSEWHERE(AttnLSTM, RegisterAttnLSTMContribOpSchema);
   ONNX_CONTRIB_OPERATOR_SCHEMA_ELSEWHERE(Range, RegisterRangeOpSchema);
@@ -2868,7 +3139,7 @@ Having this op allows runtime to do operator re-ordering to reduce compute FLOPs
     RegisterNchwcSchemas();
   }
 #endif
-
+RegisterVitisAISchemas();
 #ifdef USE_MPI
   RegisterCollectiveOps();
 #endif
