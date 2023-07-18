@@ -95,6 +95,14 @@ ProviderInfo_Dnnl* TryGetProviderInfo_Dnnl();
 }
 #endif
 
+#ifdef USE_ZENDNN
+#include "core/providers/zendnn/zendnn_provider_factory.h"
+#include "core/providers/zendnn/zendnn_execution_provider_info.h"
+namespace onnxruntime {
+ProviderInfo_Zendnn* TryGetProviderInfo_Zendnn();
+}
+#endif
+
 #ifdef USE_DML
 #include "core/providers/dml/dml_provider_factory.h"
 const OrtDmlApi* GetOrtDmlApi(_In_ uint32_t version) NO_EXCEPTION;
