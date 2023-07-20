@@ -70,6 +70,7 @@ class ZendnnGraphTransformer {
     void ConvRelu(ZendnnSubgraph &subgraph);
     void BatchnormRelu(ZendnnSubgraph &subgraph);
     void ConvClip(ZendnnSubgraph &subgraph);
+    void QConvClip(ZendnnSubgraph &subgraph);
     void ConvElu(ZendnnSubgraph &subgraph);
     void ConvSwish(ZendnnSubgraph &subgraph);
     void MatMulBinaryEltwise(ZendnnSubgraph &subgraph);

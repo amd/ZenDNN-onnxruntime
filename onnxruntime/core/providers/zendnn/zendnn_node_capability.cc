@@ -658,9 +658,23 @@ bool ZendnnBinaryNodeCapability::IsBF16Supported(const Node *node) const {
 bool ZendnnElementwiseCapability::Supported(const Node *node,
         const GraphViewer &graph_viewer) const {
     ORT_UNUSED_PARAMETER(graph_viewer);
-    if (!IsTypeSupported(
-                node)) { //ZendnnElementwiseCapability::IsTypeSupported(). Special checks for unsupported ops.
-        return false;
+    bool enable_qconv_clip_fusion = false;
+    const std::string fusion_qconv_clip_env =
+        onnxruntime::GetEnvironmentVar("ZENDNN_QCONV_CLIP_FUSION_ENABLE");
+    if (!fusion_qconv_clip_env.empty()) {
+        enable_qconv_clip_fusion = (std::stoi(fusion_qconv_clip_env) == 0 ? false : true);
+    }
+
+    if (node->OpType() == "Clip") {
+        if (!enable_qconv_clip_fusion || !Is_QConv_Clip_Fusable(node, graph_viewer)) {
+            if (!IsTypeSupported(node)) {
+                return false;
+            }
+        }
+    } else {
+        if (!IsTypeSupported(node)) {
+            return false;
+	}
     }
     if (!ZendnnDefaultNodeCapability::IsTypeSupported(node)) {
         return false;
@@ -671,7 +685,8 @@ bool ZendnnElementwiseCapability::Supported(const Node *node,
     return true;
 }
 
-/* For disabling cases failing in gtest_filter due to platform capability
+/* ZendnnElementwiseCapability::IsTypeSupported(). Special checks for unsupported ops.
+ * For disabling cases failing in gtest_filter due to platform capability
  * MathOpTest.Abs_int8
  * MathOpTest.Clip_Default_int8
 */
@@ -685,6 +700,40 @@ bool ZendnnElementwiseCapability::IsTypeSupported(const Node *node) const {
         }
     }
     return true;
+}
+
+bool ZendnnElementwiseCapability::Is_QConv_Clip_Fusable(const Node *node, const GraphViewer &graph_viewer) const {
+    if (node == nullptr) {
+        return false;
+    }
+
+    if (node->GetOutputEdgesCount() != 1 && node->OutputDefs().size() != 1) {
+        return false;
+    }
+
+    if (std::find(graph_viewer.GetOutputs().begin(),
+                  graph_viewer.GetOutputs().end(),
+                  node->OutputDefs()[0]) != graph_viewer.GetOutputs().end()) {
+        return false;
+    }
+
+    auto node_inputs = node->InputDefs();
+    size_t max_index = graph_viewer.MaxNodeIndex();
+    for (size_t index = 0; index < max_index; index++) {
+        auto zendnn_node = graph_viewer.GetNode(index);
+
+        if (zendnn_node == nullptr || zendnn_node == 0) {
+            continue;
+        }
+
+        if (zendnn_node->OpType() == "QLinearConv") {
+            auto zendnn_node_outputs = zendnn_node->OutputDefs();
+            if (zendnn_node_outputs[0]->Name() == node_inputs[0]->Name()) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 bool ZendnnElementwiseCapability::IsDimensionSupported(const Node *node) const {

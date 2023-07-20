@@ -211,6 +211,16 @@ void ZendnnGraphTransformer::Apply(ZendnnSubgraph &subgraph,
     if (fusion_conv_swish) {
         ConvSwish(subgraph);
     }
+
+    bool enable_qconv_clip_fusion = false;
+    const std::string fusion_qconv_clip_env =
+        onnxruntime::GetEnvironmentVar("ZENDNN_QCONV_CLIP_FUSION_ENABLE");
+    if (!fusion_qconv_clip_env.empty()) {
+        enable_qconv_clip_fusion = (std::stoi(fusion_qconv_clip_env) == 0 ? false : true);
+    }
+    if (enable_qconv_clip_fusion) {
+        QConvClip(subgraph);
+    }
 }
 
 //apply all inplace optimizations rules in order
@@ -2204,6 +2214,65 @@ void ZendnnGraphTransformer::optimizeForNonFusionCase(ZendnnSubgraph
             patternFound = true;
             break;
         }
+    }
+}
+
+void ZendnnGraphTransformer::QConvClip(ZendnnSubgraph &subgraph) {
+    //global index of qconvclip
+    static int qconv_clip_index = 0;
+
+    //traverse with max index as there will be empty nodes due to fusion
+    size_t max_index = subgraph.GetMaxNodeIndex();
+    for (size_t index = 0; index < max_index; index++) {
+        auto zendnn_node = subgraph.GetZendnnNode(index);
+
+        if (zendnn_node == 0) {
+            continue;
+        }
+
+        if (zendnn_node->OpType() != "QLinearConv") {
+            continue;
+        }
+
+        if (!IsNodeFusable(subgraph, zendnn_node)) {
+            continue;
+        }
+
+        auto next_zendnn_node = zendnn_node->Output(0).GetConsumers()[0].GetNode();
+        if (next_zendnn_node == nullptr) {
+            continue;
+        }
+        if (next_zendnn_node->OpType() != "Clip") {
+            continue;
+        }
+
+        //construct new node
+        auto new_node = std::make_unique<ZendnnNode>();
+        new_node->Name() = zendnn_node->Name() + "_QConvClip_" + std::to_string(
+                               qconv_clip_index++);
+        new_node->OpType() = "QConvClip";
+        for (auto def : zendnn_node->Inputs()) {
+            new_node->Inputs().push_back(def);
+        }
+        for (auto def : next_zendnn_node->Inputs()) {
+            if (def->Exists() && def->GetProducer().Exists() &&
+                    def->GetProducer().GetNode()->OpType() == "QLinearConv") {
+                continue;
+            }
+
+            new_node->Inputs().push_back(def);
+        }
+        for (auto def : next_zendnn_node->Outputs()) {
+            new_node->Outputs().push_back(def);
+        }
+        new_node->Attributes().insert(zendnn_node->Attributes());
+        new_node->Attributes().insert(next_zendnn_node->Attributes());
+
+        //insert new node, remove original nodes, connect new edges
+        LOGS_DEFAULT(INFO) << "fuse [" << zendnn_node->Name() << "] and [" <<
+                           next_zendnn_node->Name() << "] into QConvClip";
+        ResolveFusion(subgraph, {zendnn_node->Index(), next_zendnn_node->Index()},
+                      std::move(new_node));
     }
 }
 

@@ -201,6 +201,38 @@ void ZendnnQConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
         }
     }
 
+    int min = INT_MIN;
+    int max = INT_MAX;
+    auto min_input_index = -1;
+    auto max_input_index = -1;
+
+    if (node.OpType() == "QConvClip") {
+        min_input_index = IN_B + 1;
+        max_input_index = IN_B + 2;
+
+        auto conv_min_mem = sp.GetMemory(node.Input(min_input_index));
+        if (conv_min_mem.get_desc().get_size() != 0) {
+            if (node.Input(min_input_index).Type() == dt::u8){
+                min = (int)*((uint8_t *)conv_min_mem.get_data_handle());
+            } else if (node.Input(min_input_index).Type() == dt::s8) {
+                min = (int)*((int8_t *)conv_min_mem.get_data_handle());
+            } else {
+                LOGS_DEFAULT(ERROR) <<"Non-integer min input for Clip op detected.";
+            }
+        }
+
+        auto conv_max_mem = sp.GetMemory(node.Input(max_input_index));
+        if (conv_max_mem.get_desc().get_size() != 0) {
+            if (node.Input(max_input_index).Type() == dt::u8){
+                max = (int)*((uint8_t *)conv_max_mem.get_data_handle());
+            } else if (node.Input(max_input_index).Type() == dt::s8) {
+                max = (int)*((int8_t *)conv_max_mem.get_data_handle());
+            } else {
+                LOGS_DEFAULT(ERROR) <<"Non-integer max input for Clip op detected.";
+            }
+        }
+    }
+
     auto wScaleSize = sp.GetMemory(node.Input(IN_W_SCALE)).get_desc().dims()[0];
 
     zendnn::primitive_attr conv_attr;
@@ -291,7 +323,8 @@ void ZendnnQConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     if (node.OpType() == "QLinearConv_v1" ||
             node.OpType() == "QConvAdd" ||
             node.OpType() == "QConvAdd_v1" ||
-            node.OpType() == "QConvAddRelu") {
+            node.OpType() == "QConvAddRelu" ||
+            node.OpType() == "QConvClip") {
         dstType = dt::s8;
     }
     else {
@@ -420,6 +453,9 @@ void ZendnnQConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
                                         dst_zp1_mem.get_desc());
         }
         conv_post_ops.append_eltwise(1.0f, zendnn::algorithm::eltwise_relu, 0.0, 0.0f);
+    }
+    else if (node.OpType() == "QConvClip") {
+        conv_post_ops.append_eltwise(ops_scale, zendnn::algorithm::eltwise_clip, min, max);
     }
 
     conv_attr.set_post_ops(conv_post_ops);

@@ -330,6 +330,7 @@ class ZendnnElementwiseCapability : public ZendnnDefaultNodeCapability {
   private:
     bool IsDimensionSupported(const Node *node) const;
     bool IsTypeSupported(const Node *node) const;
+    bool Is_QConv_Clip_Fusable(const Node *node, const GraphViewer &graph_viewer) const;
 };
 
 /**

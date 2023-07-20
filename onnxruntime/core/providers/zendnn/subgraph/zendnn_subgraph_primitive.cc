@@ -295,7 +295,8 @@ void ZendnnSubgraphPrimitive::AddKernels() {
                  node.OpType() == "QConvAdd" ||
                  node.OpType() == "QConvAdd_v1" ||
                  node.OpType() == "QConvRelu" ||
-                 node.OpType() == "QConvAddRelu") {
+                 node.OpType() == "QConvAddRelu" ||
+                 node.OpType() == "QConvClip") {
             ZendnnQConv().CreatePrimitive(*this, node);
         }
         else if (node.OpType() == "Conv" ||
