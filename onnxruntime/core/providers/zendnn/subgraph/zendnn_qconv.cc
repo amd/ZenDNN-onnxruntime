@@ -59,6 +59,22 @@ void ZendnnQConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     using tag = zendnn::memory::format_tag;
     using dt =  zendnn::memory::data_type;
 
+    // Depending on the dimensions of QLinearConv,
+    // LPGEMM path will be taken
+    int use_lpgemm = 0;
+    // If disabled, s32 API of LPGEMM will be used.
+    // s32 API is for Genoa systems.
+    // s16 API works on all systems.
+    bool s16_lpgemm_enabled = 0;
+    // Set environment variable S16_LPGEMM_ENABLED to 1
+    // to use S16 API of LPGEMM (must for Milan / Systems
+    // without AVX512 support)
+    const char* s16_env = std::getenv("S16_LPGEMM_ENABLED");
+    if(s16_env) s16_lpgemm_enabled = atoi(s16_env);
+    if(s16_lpgemm_enabled != 0) {
+            s16_lpgemm_enabled = 1;
+    }
+
     auto zendnn_engine = sp.GetEngine();
 
     auto src_dims = sp.GetMemory(node.Input(IN_X)).get_desc().dims();
@@ -204,6 +220,38 @@ void ZendnnQConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
         conv_attr.set_zero_points(ZENDNN_ARG_DST, 0, dst_zero_points);
     }
 
+    // LPGEMM APIs supported with ONNX RT
+    // u8s8s32os8
+    // s8s8s32os8
+    // u8s8s16os8
+    // s8s8s16os8
+    auto dstType_tmp = node.Input(IN_Y_ZERO_POINT).Type();
+    auto srcType_tmp = node.Input(IN_X).Type();
+    // Conditions checked for LPGEMM path
+    // 1x1 kernel
+    // dst zero point = 0
+    // stride = 1
+    // dst Type = s8
+    // src Type = u8 or s8
+    // Conv op not fused with Add op
+    if(weight_dims[2] == 1 && weight_dims[3] == 1 && dst_zero_points[0] == 0 && strides[0] == 1
+                  && dstType_tmp == dt::s8
+                  && (srcType_tmp == dt::u8 || srcType_tmp == dt::s8)
+                  && node.OpType() == "QLinearConv") {
+        use_lpgemm = 1;
+    }
+
+    // Set environment variable LPGEMM_PATH_ENABLED=1
+    // to take LPGEMM path
+    // By default, Direct path is taken.
+    int lpgemm_check = 0;
+    const char* lpgemm_env = std::getenv("LPGEMM_PATH_ENABLED");
+    if(lpgemm_env) lpgemm_check = atoi(lpgemm_env);
+    if(lpgemm_check == 1 && use_lpgemm == 1)
+      use_lpgemm = 1;
+    else
+      use_lpgemm = 0;
+
     /* Sets scales and zero points appropriately!! */
     std::vector<float> scales(wScaleSize);
     for (long int i=0; i<wScaleSize; i++) {
@@ -220,11 +268,23 @@ void ZendnnQConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
 
     auto srcType = node.Input(IN_X).Type();
     auto conv_src_md = zendnn::memory::desc({src_dims}, srcType, tag::any);
+    if(use_lpgemm > 0) {
+        // With LPGEMM, src tag is set to NHWC
+        conv_src_md = zendnn::memory::desc({src_dims}, srcType, tag::nhwc);
+    }
     auto conv_weights_md = zendnn::memory::desc({weight_dims}, dt::s8, tag::any);
+    if(use_lpgemm > 0) {
+        // With LPGEMM, weights tag is set to HWCN
+        conv_weights_md = zendnn::memory::desc({weight_dims}, dt::s8, tag::hwcn);
+    }
     zendnn::memory::desc conv_bias_md;
     if (bias_exists) {
         auto bias_dims = sp.GetMemory(node.Input(IN_B)).get_desc().dims();
         conv_bias_md = zendnn::memory::desc({bias_dims}, dt::s32, tag::x);
+        // If S16 LPGEMM path is taken, Bias datatype is set to S16
+        if(use_lpgemm > 0 && s16_lpgemm_enabled) {
+              conv_bias_md = zendnn::memory::desc({bias_dims}, dt::s16, tag::x);
+        }
     }
 
     auto dstType = node.Output(OUT_Y).Type();
@@ -239,6 +299,9 @@ void ZendnnQConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     }
 
     auto conv_dst_md = zendnn::memory::desc({dst_mem_dims}, dstType, tag::any);
+    if(use_lpgemm > 0) {
+        conv_dst_md = zendnn::memory::desc({dst_mem_dims}, dstType, tag::nhwc);
+    }
 
     if (node.isInplaceMemoryNode) {
         conv_dst_md = _ldst_md;
@@ -247,6 +310,7 @@ void ZendnnQConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     zendnn::post_ops conv_post_ops;
     float ops_scale = 1.0, qscale=1.0;
 
+    bool reluFused = 0;
     zendnn::memory dst_zp1_mem, add_out_zp1_mem;
     if (node.OpType() == "QLinearConv_v1") {
         if (dst_zero_points[0] != (int)0) {
@@ -342,6 +406,7 @@ void ZendnnQConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
                                      255.0, 0.0f);
     }
     else if (node.OpType() == "QConvRelu") {
+        reluFused = 1;
         if (dst_zero_points[0] != (int)0) {
             auto dst_zp1_md = sp.GetMemory(node.Input(IN_Y_ZERO_POINT)).get_desc();
             Padd(&dst_zp1_md,
@@ -360,7 +425,34 @@ void ZendnnQConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     conv_attr.set_post_ops(conv_post_ops);
 
     zendnn::convolution_forward::primitive_desc conv_pd;
-    if (bias_exists) {
+    if (use_lpgemm > 0) {
+      LOGS_DEFAULT(ERROR) <<"LPGEMM PATH TAKEN = " << node.Name();
+
+      // LPGEMM path is taken
+      // By default, conv descriptor created with u8s8s16os8 API
+      auto conv_desc = zendnn::convolution_forward::desc(prop_kind,
+                      zendnn::algorithm::convolution_gemm_u8s8s16os8, conv_src_md, conv_weights_md,
+                      conv_bias_md, conv_dst_md, strides, padding_left, padding_right, reluFused);
+      // s8s8s32os8 API
+      if(srcType == dt::s8 && !s16_lpgemm_enabled)
+            conv_desc = zendnn::convolution_forward::desc(prop_kind,
+                        zendnn::algorithm::convolution_gemm_s8s8s32os8, conv_src_md, conv_weights_md,
+                        conv_bias_md, conv_dst_md, strides, padding_left, padding_right, reluFused);
+      // s8s8s16os8 API
+      else if(srcType == dt::s8 && s16_lpgemm_enabled)
+            conv_desc = zendnn::convolution_forward::desc(prop_kind,
+                        zendnn::algorithm::convolution_gemm_s8s8s16os8, conv_src_md, conv_weights_md,
+                        conv_bias_md, conv_dst_md, strides, padding_left, padding_right, reluFused);
+      // u8s8s32os8 API
+      else if(srcType == dt::u8 && !s16_lpgemm_enabled)
+            conv_desc = zendnn::convolution_forward::desc(prop_kind,
+                        zendnn::algorithm::convolution_gemm_u8s8s32os8, conv_src_md, conv_weights_md,
+                        conv_bias_md, conv_dst_md, strides, padding_left, padding_right, reluFused);
+
+      conv_pd = zendnn::convolution_forward::primitive_desc(conv_desc, conv_attr, zendnn_engine);
+    }
+    // Direct path
+    else if (bias_exists) {
         auto conv_desc = zendnn::convolution_forward::desc(
                              prop_kind, zendnn::algorithm::convolution_direct,
                              conv_src_md, conv_weights_md, conv_bias_md, conv_dst_md,
@@ -403,9 +495,21 @@ void ZendnnQConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
         conv_weights_mem = sp.GetMemoryAndReshape(node.Input(IN_W),
                            conv_pd.weights_desc(), zendnn_engine);
     }
-    if (bias_exists) {
+    if (bias_exists && (use_lpgemm == 0 || (use_lpgemm == 1 && s16_lpgemm_enabled == 0))) {
         conv_bias_mem = sp.GetMemoryAndReshape(node.Input(IN_B), conv_pd.bias_desc(),
                                                zendnn_engine);
+    }
+    // s32 bias converted to s16 bias if S16 LPGEMM path is taken
+    // TODO: Support s16 datatype in ZenDNN reorder
+    zendnn::memory conv_bias_mem2;
+    if(bias_exists && use_lpgemm == 1 && s16_lpgemm_enabled) {
+      int32_t * bias_array_original = (int32_t *)(conv_bias_mem.get_data_handle());
+      auto bias_dims = sp.GetMemory(node.Input(IN_B)).get_desc().dims();
+      int16_t * bias_array2 = new int16_t[bias_dims[0]];
+      for(int j=0; j<bias_dims[0]; ++j) {
+            bias_array2[j] = static_cast<int16_t>(bias_array_original[j]);
+      }
+      conv_bias_mem2 = zendnn::memory({{bias_dims}, dt::s16, tag::x}, zendnn_engine, bias_array2);
     }
     auto conv_dst_mem = zendnn::memory(conv_pd.dst_desc(), zendnn_engine);
 
@@ -435,8 +539,11 @@ void ZendnnQConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     std::unordered_map<int, zendnn::memory> qconv_args;
     qconv_args.insert({ZENDNN_ARG_SRC, conv_src_mem});
     qconv_args.insert({ZENDNN_ARG_WEIGHTS, conv_weights_mem});
-    if (bias_exists) {
+    if (bias_exists && ((use_lpgemm == 1 && s16_lpgemm_enabled == 0) || use_lpgemm == 0)) {
         qconv_args.insert({ZENDNN_ARG_BIAS, conv_bias_mem});
+    }
+    else if (bias_exists && use_lpgemm == 1 && s16_lpgemm_enabled == 1) {
+        qconv_args.insert({ZENDNN_ARG_BIAS, conv_bias_mem2});
     }
 
     if (node.OpType() == "QLinearConv_v1") {
