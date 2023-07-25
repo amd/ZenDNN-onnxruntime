@@ -69,8 +69,10 @@ void ZendnnQConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     // Set environment variable S16_LPGEMM_ENABLED to 1
     // to use S16 API of LPGEMM (must for Milan / Systems
     // without AVX512 support)
-    const char* s16_env = std::getenv("S16_LPGEMM_ENABLED");
-    if(s16_env) s16_lpgemm_enabled = atoi(s16_env);
+    const std::string s16_env = onnxruntime::GetEnvironmentVar("S16_LPGEMM_ENABLED");
+    if (!s16_env.empty()) {
+        s16_lpgemm_enabled = (std::stoi(s16_env) == 0 ? false : true);
+    }
     if(s16_lpgemm_enabled != 0) {
             s16_lpgemm_enabled = 1;
     }
@@ -277,8 +279,10 @@ void ZendnnQConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     // to take LPGEMM path
     // By default, Direct path is taken.
     int lpgemm_check = 0;
-    const char* lpgemm_env = std::getenv("LPGEMM_PATH_ENABLED");
-    if(lpgemm_env) lpgemm_check = atoi(lpgemm_env);
+    const std::string lpgemm_env = onnxruntime::GetEnvironmentVar("LPGEMM_PATH_ENABLED");
+    if (!lpgemm_env.empty()) {
+        lpgemm_check = std::stoi(lpgemm_env);
+    }
     if(lpgemm_check == 1 && use_lpgemm == 1)
       use_lpgemm = 1;
     else
@@ -455,7 +459,7 @@ void ZendnnQConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
         conv_post_ops.append_eltwise(1.0f, zendnn::algorithm::eltwise_relu, 0.0, 0.0f);
     }
     else if (node.OpType() == "QConvClip") {
-        conv_post_ops.append_eltwise(ops_scale, zendnn::algorithm::eltwise_clip, min, max);
+        conv_post_ops.append_eltwise(ops_scale, zendnn::algorithm::eltwise_clip, (float)min, (float)max);
     }
 
     conv_attr.set_post_ops(conv_post_ops);
