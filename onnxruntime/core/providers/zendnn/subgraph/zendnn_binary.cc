@@ -38,10 +38,38 @@ void ZendnnBinary::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
 
     zendnn::algorithm algo = zendnn_util::OrtOperatorToZendnnAlgorithm(
                                  node.OpType());
+    using dt = zendnn::memory::data_type;
+    bool zendnn_enable_bf16 = false;
+    const std::string enable_bf16_env = onnxruntime::GetEnvironmentVar("ZENDNN_ONNXRT_ENABLE_BF16_SUPPORT");
+    if (!enable_bf16_env.empty())
+        zendnn_enable_bf16 = (std::stoi(enable_bf16_env) == 0 ? false : true);
 
     // GetMemory in OrtFormat. Broadcasting and mix format binary ops can result in computation failure
     auto binary_src0_mem = sp.GetMemoryInOrtFormat(node.Input(IN_A), eng);
     auto binary_src1_mem = sp.GetMemoryInOrtFormat(node.Input(IN_B), eng);
+
+    if(zendnn_enable_bf16)
+    {
+        zendnn::stream strm{eng};
+        //Source 1
+        if(binary_src0_mem.get_desc().data_type() != dt::bf16)
+        {
+            auto src_0_dims = binary_src0_mem.get_desc().dims();
+            auto binary_src0_bf16_md = zendnn::memory::desc(src_0_dims,dt::bf16,sp.GetZendnnFormat(src_0_dims.size()));
+            auto binary_src0_bf16_mem = sp.GetMemoryAndReshape(node.Input(IN_A),binary_src0_bf16_md, eng );
+            binary_src0_mem = binary_src0_bf16_mem;
+        }
+
+        //source 2
+        if(binary_src1_mem.get_desc().data_type() != dt::bf16)
+        {
+            auto src_1_dims = binary_src1_mem.get_desc().dims();
+            auto binary_src1_bf16_md = zendnn::memory::desc(src_1_dims,dt::bf16,sp.GetZendnnFormat(src_1_dims.size()));
+            auto binary_src1_bf16_mem = sp.GetMemoryAndReshape(node.Input(IN_B),binary_src1_bf16_md, eng );
+            binary_src1_mem = binary_src1_bf16_mem;
+        }
+    }
+
     auto src_0_ori_md = binary_src0_mem.get_desc();
     auto src_1_ori_md = binary_src1_mem.get_desc();
 

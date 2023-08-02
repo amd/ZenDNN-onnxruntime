@@ -56,6 +56,13 @@ void ZendnnMatMul::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
 
     auto eng = sp.GetEngine();
 
+    using tag = zendnn::memory::format_tag;
+    using dt =  zendnn::memory::data_type;
+    bool zendnn_enable_bf16 = false;
+    const std::string enable_bf16_env = onnxruntime::GetEnvironmentVar("ZENDNN_ONNXRT_ENABLE_BF16_SUPPORT");
+    if (!enable_bf16_env.empty())
+        zendnn_enable_bf16 = (std::stoi(enable_bf16_env) == 0 ? false : true);
+
     bool has_postop_fusion = false;
     std::vector<std::string> post_ops;
 
@@ -129,8 +136,13 @@ void ZendnnMatMul::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
             zendnn::memory::dims strides = GetStrides(dataA_dims, transA, transBatchA,
                                            transposedA_dims);
 
-            zendnn::memory::desc intermediateA_md = zendnn::memory::desc(dataA_dims,
-                                                    node.Input(IN_A).Type(), strides);
+            zendnn::memory::desc intermediateA_md;
+
+            if(zendnn_enable_bf16)
+                intermediateA_md = zendnn::memory::desc(dataA_dims, dt::bf16, strides);
+            else
+                intermediateA_md = zendnn::memory::desc(dataA_dims, node.Input(IN_A).Type(), strides);
+
             zendnn::memory intermediateA_mem = zendnn::memory(intermediateA_md, eng);
 
             auto traspose_primitive = zendnn::reorder(dataA_mem, intermediateA_mem);
@@ -142,8 +154,11 @@ void ZendnnMatMul::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
 
             // The reorder from above will get the memory in the right order. The next few lines will create a memory and memory descriptor
             // that will have the correct dimentions and correct memory::format
-            transposedA_md = zendnn::memory::desc(transposedA_dims, node.Input(IN_A).Type(),
-                                                  sp.GetZendnnFormat(transposedA_dims.size()));
+            if(zendnn_enable_bf16)
+                transposedA_md = zendnn::memory::desc(transposedA_dims, dt::bf16, sp.GetZendnnFormat(transposedA_dims.size()));
+            else
+                transposedA_md = zendnn::memory::desc(transposedA_dims, node.Input(IN_A).Type(),
+                                                sp.GetZendnnFormat(transposedA_dims.size()));
             transposedA_mem = zendnn::memory(transposedA_md, eng, nullptr);
             void *handle = intermediateA_mem.get_data_handle();
             transposedA_mem.set_data_handle(handle);
@@ -152,9 +167,11 @@ void ZendnnMatMul::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
                 transBatchB) {                // Exact same logic for matrix B as used for matrix A
             zendnn::memory::dims strides = GetStrides(dataB_dims, transB, transBatchB,
                                            transposedB_dims);
-
-            zendnn::memory::desc intermediateB_md = zendnn::memory::desc(dataB_dims,
-                                                    node.Input(IN_B).Type(), strides);
+            zendnn::memory::desc intermediateB_md;
+            if(zendnn_enable_bf16)
+                intermediateB_md = zendnn::memory::desc(dataB_dims, dt::bf16, strides);
+            else
+                intermediateB_md = zendnn::memory::desc(dataB_dims, node.Input(IN_B).Type(), strides);
             zendnn::memory intermediateB_mem = zendnn::memory(intermediateB_md, eng);
 
             auto traspose_primitive = zendnn::reorder(dataB_mem, intermediateB_mem);
@@ -166,8 +183,11 @@ void ZendnnMatMul::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
 
             // The reorder from above will get the memory in the right order. The next few lines will create a memory and memory descriptor
             // that will have the correct dimentions and correct memory::format
-            transposedB_md = zendnn::memory::desc(transposedB_dims, node.Input(IN_B).Type(),
-                                                  sp.GetZendnnFormat(transposedB_dims.size()));
+            if(zendnn_enable_bf16)
+                transposedB_md = zendnn::memory::desc(transposedB_dims, dt::bf16, sp.GetZendnnFormat(transposedB_dims.size()));
+            else
+                transposedB_md = zendnn::memory::desc(transposedB_dims, node.Input(IN_B).Type(),
+                                                    sp.GetZendnnFormat(transposedB_dims.size()));
             transposedB_mem = zendnn::memory(transposedB_md, eng, nullptr);
             void *handle = intermediateB_mem.get_data_handle();
             transposedB_mem.set_data_handle(handle);
@@ -179,8 +199,10 @@ void ZendnnMatMul::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
         src_md = transposedA_md;
     }
     else {
-        src_md = zendnn::memory::desc(src_dims, node.Input(IN_A).Type(),
-                                      zendnn::memory::format_tag::any);
+         if(zendnn_enable_bf16)
+            src_md = zendnn::memory::desc(src_dims, dt::bf16, tag::any);
+        else
+            src_md = zendnn::memory::desc(src_dims, node.Input(IN_A).Type(), tag::any);
     }
 
     zendnn::memory::desc weights_md;
@@ -188,8 +210,10 @@ void ZendnnMatMul::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
         weights_md = transposedB_md;
     }
     else {
-        weights_md = zendnn::memory::desc(weights_dims, node.Input(IN_B).Type(),
-                                          zendnn::memory::format_tag::any);
+        if(zendnn_enable_bf16)
+            weights_md = zendnn::memory::desc(weights_dims, dt::bf16, tag::any);
+        else
+            weights_md = zendnn::memory::desc(weights_dims, node.Input(IN_B).Type(),tag::any);
     }
 
     auto output_shape = src_dims;
@@ -247,6 +271,11 @@ void ZendnnMatMul::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
                 // expand the dims by 1s (should always be possible)
                 // will throw exception if not possible
                 auto binary_md = ori_binary_md.reshape(binary_mem_dims);
+                auto data_type = binary_md.data_type();
+                if(zendnn_enable_bf16 && data_type != dt::bf16){
+                    binary_md = zendnn::memory::desc({binary_md.dims()}, dt::bf16,
+                                                sp.GetZendnnFormat(binary_md.dims().size()));
+                }
                 // Possible improvment: use format any to choose the best layout
                 ops.append_binary(algo, binary_md);
                 binary_count++;
@@ -284,8 +313,8 @@ void ZendnnMatMul::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
         attr.set_output_scales(0, alphaScale);
     }
 
-    auto dst_md = zendnn::memory::desc(output_shape, node.Output(OUT_Y).Type(),
-                                       zendnn::memory::format_tag::any);
+    auto dst_md = zendnn::memory::desc(output_shape,zendnn_enable_bf16 ? dt::bf16 : node.Output(OUT_Y).Type(),
+                                        zendnn::memory::format_tag::any);
 
     auto matmul_d = zendnn::matmul::desc(src_md, weights_md, dst_md);
     auto matmul_pd = zendnn::matmul::primitive_desc(matmul_d, attr, eng);

@@ -34,6 +34,13 @@ ZendnnConcat::ZendnnConcat() {}
 void ZendnnConcat::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
                                    ZendnnNode &node) {
     auto zendnn_engine = sp.GetEngine();
+
+    using dt =  zendnn::memory::data_type;
+    bool zendnn_enable_bf16 = false;
+    const std::string enable_bf16_env = onnxruntime::GetEnvironmentVar("ZENDNN_ONNXRT_ENABLE_BF16_SUPPORT");
+    if (!enable_bf16_env.empty())
+        zendnn_enable_bf16 = (std::stoi(enable_bf16_env) == 0 ? false : true);
+
     std::vector<zendnn::memory> src_mems;
     for (size_t i = IN_DATA_0; i < node.InputCount(); ++i) {
         src_mems.push_back(sp.GetMemoryInOrtFormat(node.Input(static_cast<int>
@@ -42,7 +49,23 @@ void ZendnnConcat::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
 
     std::vector<zendnn::memory::desc> srcs_md;
     for (size_t i = 0; i < src_mems.size(); ++i) {
-        srcs_md.push_back(src_mems[i].get_desc());
+        auto data_type=src_mems[i].get_desc().data_type();
+        if(zendnn_enable_bf16) {
+            if(data_type != dt::bf16) {
+                auto dst_bf16_desc = zendnn::memory::desc(src_mems[i].get_desc().dims(),
+                                        dt::bf16,sp.GetZendnnFormat(src_mems[i].get_desc().dims().size()));
+                auto dst_bf16_mem = zendnn::memory(dst_bf16_desc, zendnn_engine);
+                sp.AddPrimitive(zendnn::reorder(src_mems[i],dst_bf16_mem), {{ZENDNN_ARG_SRC, src_mems[i]},
+                                                                          {ZENDNN_ARG_DST, dst_bf16_mem}});
+                srcs_md.push_back(src_mems[i].get_desc());
+            }
+            else {
+                srcs_md.push_back(src_mems[i].get_desc());
+            }
+        }
+        else {
+            srcs_md.push_back(src_mems[i].get_desc());
+        }       
     }
 
     int64_t axis = GetAxis(node);

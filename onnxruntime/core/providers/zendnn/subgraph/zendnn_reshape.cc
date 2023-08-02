@@ -41,6 +41,12 @@ void ZendnnReshape::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
                                     ZendnnNode &node) {
     auto zendnn_engine = sp.GetEngine();
 
+    using dt = zendnn::memory::data_type;
+    bool zendnn_enable_bf16 = false;
+    const std::string enable_bf16_env = onnxruntime::GetEnvironmentVar("ZENDNN_ONNXRT_ENABLE_BF16_SUPPORT");
+    if (!enable_bf16_env.empty())
+        zendnn_enable_bf16 = (std::stoi(enable_bf16_env) == 0 ? false : true);
+
     // the input shape assumes OrtFormat so we get the memory in OrtFormat.
     auto data_mem = sp.GetMemoryInOrtFormat(node.Input(IN_DATA), zendnn_engine);
     zendnn::memory::dims data_dims = data_mem.get_desc().dims();
@@ -60,7 +66,8 @@ void ZendnnReshape::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     zendnn::memory::dims reshape_shape_dims(reshape_shape.cbegin(),
                                             reshape_shape.cend());
     //the zendnn::memory::desc.reshape(shape) failed on some models so we instead create a new zendnn:memory::desc
-    zendnn::memory::desc reshaped_md(reshape_shape_dims, node.Input(IN_DATA).Type(),
+    zendnn::memory::desc reshaped_md(reshape_shape_dims,
+                                     zendnn_enable_bf16? dt::bf16 : node.Input(IN_DATA).Type(),
                                      sp.GetZendnnFormat(reshape_shape.size()));
 
     zendnn::memory reshaped_mem = zendnn::memory(reshaped_md, zendnn_engine,

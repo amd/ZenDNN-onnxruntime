@@ -90,6 +90,12 @@ void ZendnnLayerNorm::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     // Get engine
     auto zendnn_engine = sp.GetEngine();
 
+    using dt =  zendnn::memory::data_type;
+    bool zendnn_enable_bf16 = false;
+    const std::string enable_bf16_env = onnxruntime::GetEnvironmentVar("ZENDNN_ONNXRT_ENABLE_BF16_SUPPORT");
+    if (!enable_bf16_env.empty())
+        zendnn_enable_bf16 = (std::stoi(enable_bf16_env) == 0 ? false : true);
+
     // Make sure every input's dimension follows the spec
     ValidateDims(sp, node);
 
@@ -101,6 +107,17 @@ void ZendnnLayerNorm::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
 
     // Get src mem
     auto src_mem = sp.GetMemory(node.Input(IN_INPUT));
+    auto data_type = src_mem.get_desc().data_type();
+    if(zendnn_enable_bf16 && data_type != dt::bf16)
+    {
+        auto src_mem_dims = src_mem.get_desc().dims();
+        auto src_bf16_mem = zendnn::memory(
+                zendnn::memory::desc(src_mem_dims,dt::bf16,sp.GetZendnnFormat(src_mem_dims.size())),
+                zendnn_engine);
+        sp.AddPrimitive(zendnn::reorder(src_mem, src_bf16_mem),{{ZENDNN_ARG_SRC, src_mem},
+                                                                {ZENDNN_ARG_DST, src_bf16_mem}});
+        src_mem = src_bf16_mem;
+    }
     auto src_md = src_mem.get_desc();
 
     // This contains the layer norm op and its parameters

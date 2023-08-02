@@ -64,17 +64,32 @@ void ZendnnConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
 
     auto zendnn_engine = sp.GetEngine();
 
+    using tag = zendnn::memory::format_tag;
+    using dt = zendnn::memory::data_type;
+
+    bool zendnn_enable_bf16 = false;
+    const std::string enable_bf16_env = onnxruntime::GetEnvironmentVar("ZENDNN_ONNXRT_ENABLE_BF16_SUPPORT");
+    if (!enable_bf16_env.empty()) {
+       zendnn_enable_bf16 = (std::stoi(enable_bf16_env) == 0 ? false : true);
+    }
+
     auto conv_src_mem = sp.GetMemory(node.Input(IN_X));
-    auto src_md = conv_src_mem.get_desc();
-    src_md.data.format_kind = zendnn_format_kind_t::zendnn_format_kind_any;
     auto src_dims = conv_src_mem.get_desc().dims();
 
     auto conv_weights_mem = sp.GetMemory(node.Input(IN_W));
-    auto weight_md = conv_weights_mem.get_desc();
-    weight_md.data.format_kind = zendnn_format_kind_t::zendnn_format_kind_any;
     auto weight_dims_original = conv_weights_mem.get_desc().dims();
     zendnn::memory::dims weight_dims = weight_dims_original;
 
+    zendnn::memory::desc src_md, weight_md, bias_md;
+    if (zendnn_enable_bf16) {
+        src_md = zendnn::memory::desc(src_dims, dt::bf16, tag::any);
+        weight_md = zendnn::memory::desc(weight_dims, dt::bf16, tag::any);
+    } else {
+        src_md = conv_src_mem.get_desc();
+        src_md.data.format_kind = zendnn_format_kind_t::zendnn_format_kind_any;
+        weight_md = conv_weights_mem.get_desc();
+        weight_md.data.format_kind = zendnn_format_kind_t::zendnn_format_kind_any;
+    }
     bool bias_exists  = false;
     bool min_exists = false;
     bool max_exists  = false;
@@ -122,11 +137,15 @@ void ZendnnConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
         bias_exists = node.InputCount() == 3;
     }
     zendnn::memory conv_bias_mem;
-    zendnn::memory::desc bias_md;
     if (bias_exists) {
-        conv_bias_mem = sp.GetMemory(node.Input(IN_B));
+    conv_bias_mem = sp.GetMemory(node.Input(IN_B));
+    zendnn::memory::dims bias_dims = conv_bias_mem.get_desc().dims();
+    if (zendnn_enable_bf16) {
+        bias_md = zendnn::memory::desc(bias_dims, dt::bf16, tag::x);
+    } else {
         bias_md = conv_bias_mem.get_desc();
     }
+  }
 
     if (min_exists) {
         auto conv_min_mem = sp.GetMemory(node.Input(min_input_index));
@@ -174,8 +193,11 @@ void ZendnnConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
             // use format_tag::any
             break;
         }
-        weight_md = zendnn::memory::desc({weight_dims}, node.Input(IN_W).Type(),
-                                         format);
+        if (zendnn_enable_bf16) {
+            weight_md = zendnn::memory::desc({weight_dims}, dt::bf16, format);
+        } else {
+            weight_md = zendnn::memory::desc({weight_dims}, node.Input(IN_W).Type(), format);
+        }
     }
 
     auto strides = GetStrides(node, shape);
@@ -326,10 +348,15 @@ void ZendnnConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
         Conv_1_Y.mem = ops_scale*(Conv_1_Y.mem + Conv2(X, W, B).mem)
         conv_dst_mem = binary_post_op_mem(viz. Conv_1_Y.mem)
         */
-        zendnn::memory::desc binary_mem_desc;
-        auto binary_post_op_mem = sp.GetMemory(node.Input(bin_input_index).Name());
-        conv_dst_mem = binary_post_op_mem;
-        sp.IncMemoryRefCount(conv_dst_mem);
+        if(zendnn_enable_bf16) {
+            auto binary_post_op_mem = sp.GetMemoryAndReshape(node.Input(bin_input_index),conv_pd.dst_desc(),zendnn_engine);
+            conv_dst_mem = binary_post_op_mem;
+        }
+        else {
+            auto binary_post_op_mem = sp.GetMemory(node.Input(bin_input_index).Name());
+            conv_dst_mem=binary_post_op_mem;
+            sp.IncMemoryRefCount(conv_dst_mem);
+        }
     }
     else {
         if (node.isInplaceMemoryNode) {

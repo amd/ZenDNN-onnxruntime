@@ -50,6 +50,17 @@ void ZendnnPool::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
         dummy_maxpool_node = true;
     }
     auto zendnn_engine = sp.GetEngine();
+
+    using tag = zendnn::memory::format_tag;
+    using dt =  zendnn::memory::data_type;
+
+    zendnn::memory::desc src_md,dst_md;
+    bool zendnn_enable_bf16 = false;
+    const std::string enable_bf16_env = onnxruntime::GetEnvironmentVar("ZENDNN_ONNXRT_ENABLE_BF16_SUPPORT");
+    if (!enable_bf16_env.empty()) {
+        zendnn_enable_bf16 = (std::stoi(enable_bf16_env) == 0 ? false : true);
+    }
+
 #ifdef ENABLE_TRAINING
     // When using training the memory needs to be in a format known to pool_forward and the
     // pool_backward primitives. Since we don't currently have a way to pass the memory format
@@ -60,10 +71,12 @@ void ZendnnPool::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     auto pool_src_mem = sp.GetMemory(node.Input(IN_X));
 #endif  // ENABLE_TRAINING
     auto src_dims = pool_src_mem.get_desc().dims();
-    zendnn::memory::desc src_md;
     if (node.Input(IN_X).Type() == dt::u8 ||
             node.Input(IN_X).Type() == dt::s8) {
         src_md = zendnn::memory::desc({src_dims, node.Input(IN_X).Type(), tag::acdb});
+    }
+    else if(zendnn_enable_bf16) {
+        src_md=zendnn::memory::desc({src_dims}, dt::bf16, sp.GetZendnnFormat(src_dims.size()));
     }
     else {
         src_md = pool_src_mem.get_desc();
@@ -88,9 +101,12 @@ void ZendnnPool::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     auto strides = GetStrides(node, shape);
 
     auto dst_mem_dims = InferOutputDims(node, src_dims, kernel_shape, strides);
-    zendnn::memory::desc dst_md = zendnn::memory::desc(dst_mem_dims,
-                                  node.Input(IN_X).Type(), tag::any);
-
+    if(zendnn_enable_bf16)
+     dst_md = zendnn::memory::desc(dst_mem_dims,
+                                    dt::bf16,sp.GetZendnnFormat(dst_mem_dims.size()));
+    else
+        dst_md = zendnn::memory::desc(dst_mem_dims,
+                                    node.Input(IN_X).Type(), zendnn::memory::format_tag::any);
     auto padding = InferPadding(node, src_dims, kernel_shape, strides);
     auto padding_left = GetPaddingLeft(padding);
     auto padding_right = GetPaddingRight(padding);

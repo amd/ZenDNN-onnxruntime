@@ -58,6 +58,12 @@ void ZendnnTranspose::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
 
     auto zendnn_engine = sp.GetEngine();
 
+    using dt = zendnn::memory::data_type;
+    bool zendnn_enable_bf16 = false;
+    const std::string enable_bf16_env = onnxruntime::GetEnvironmentVar("ZENDNN_ONNXRT_ENABLE_BF16_SUPPORT");
+    if (!enable_bf16_env.empty())
+        zendnn_enable_bf16 = (std::stoi(enable_bf16_env) == 0 ? false : true);
+
     auto data_mem = sp.GetMemory(node.Input(IN_DATA));
     auto data_dims = data_mem.get_desc().dims();
     auto ndata_dims = data_dims.size();
@@ -87,7 +93,7 @@ void ZendnnTranspose::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
 
     // Memory descriptor describes the memory reorder but will not have the correct output dimentions or the correct zendnn::memory::format
     zendnn::memory::desc intermediate_md = zendnn::memory::desc(data_dims,
-                                           node.Input(IN_DATA).Type(), strides);
+                                           zendnn_enable_bf16 ? dt::bf16 : node.Input(IN_DATA).Type(), strides);
     zendnn::memory intermediate_mem = zendnn::memory(intermediate_md,
                                       zendnn_engine);
 
@@ -99,7 +105,8 @@ void ZendnnTranspose::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     // The reorder from above will get the memory in the right order. The next few lines will create a memory and memory descriptor
     // that will have the correct dimentions and correct memory::format
     zendnn::memory::desc transposed_md = zendnn::memory::desc(transposed_dims,
-                                         node.Input(IN_DATA).Type(), sp.GetZendnnFormat(data_dims.size()));
+                                         zendnn_enable_bf16 ? dt::bf16 : node.Input(IN_DATA).Type(),
+                                         sp.GetZendnnFormat(data_dims.size()));
     zendnn::memory transposed_mem = zendnn::memory(transposed_md, zendnn_engine,
                                     nullptr);
     void *handle = intermediate_mem.get_data_handle();
