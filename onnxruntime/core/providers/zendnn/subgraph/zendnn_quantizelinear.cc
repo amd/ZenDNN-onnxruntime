@@ -79,6 +79,12 @@ void ZendnnQuantizeLinear::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
         y_zp_u8_mem.set_data_handle(y_zp_mem.get_data_handle());
 
         binary_ops.append_binary(zendnn::algorithm::binary_add, y_zp_u8_mem.get_desc());
+        if (y_zp_mem.get_desc().data_type() == dt::u8)
+            binary_ops.append_eltwise(1.0, zendnn::algorithm::eltwise_clip, 0, 255);
+        else if (y_zp_mem.get_desc().data_type() == dt::s8)
+            binary_ops.append_eltwise(1.0, zendnn::algorithm::eltwise_clip, -128, 127);
+        else
+            LOGS_DEFAULT(ERROR) <<" Y zero-point is not u8 or s8. Please check!!";
         binary_attr.set_post_ops(binary_ops);
         auto binary_pd = zendnn::binary::primitive_desc(binary_desc, binary_attr,
                          zendnn_engine);
@@ -95,7 +101,15 @@ void ZendnnQuantizeLinear::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
 
     }
     else {
-        auto binary_pd = zendnn::binary::primitive_desc(binary_desc, zendnn_engine);
+        if (y_zp_mem.get_desc().data_type() == dt::u8)
+            binary_ops.append_eltwise(1.0, zendnn::algorithm::eltwise_clip, 0, 255);
+        else if (y_zp_mem.get_desc().data_type() == dt::s8)
+            binary_ops.append_eltwise(1.0, zendnn::algorithm::eltwise_clip, -128, 127);
+        else
+            LOGS_DEFAULT(ERROR) <<" Y zero-point is not u8 or s8. Please check!!";
+
+        binary_attr.set_post_ops(binary_ops);
+        auto binary_pd = zendnn::binary::primitive_desc(binary_desc, binary_attr, zendnn_engine);
 
         auto dst_mem = zendnn::memory(binary_pd.dst_desc(), zendnn_engine);
 

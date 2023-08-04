@@ -370,8 +370,8 @@ echo "scripts/gather_hw_os_kernel_bios_info.sh"
 source scripts/gather_hw_os_kernel_bios_info.sh true > system_hw_os_kernel_bios_info.txt
 
 #-------------------------------------------------------------------------------
-# Go to ZENDNN_GIT_ROOT
-cd $ZENDNN_GIT_ROOT
+# Go to ONNXRUNTIME_GIT_ROOT
+cd $ONNXRUNTIME_GIT_ROOT
 echo -e "\n"
 echo "Please set below environment variables explicitly as per the platform you are using!!"
 echo -e "\tOMP_NUM_THREADS, GOMP_CPU_AFFINITY"
