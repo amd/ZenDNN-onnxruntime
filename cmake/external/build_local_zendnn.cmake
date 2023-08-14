@@ -1,11 +1,11 @@
 #*******************************************************************************
-# Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+# Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
 #*******************************************************************************
 
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
 
-#*******************************************************************************
+# *******************************************************************************
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -35,7 +35,7 @@ set(ZENDNN_URL https://github.com/amd/ZenDNN.git)
 set(ZENDNN_TAG v4.1)
 
 set(BLIS_URL https://github.com/amd/blis.git)
-set(BLIS_TAG $ENV{BLIS_VERSION})
+set(BLIS_TAG 4.1)
 
 if (onnxruntime_USE_ZENDNN)
   if(UNIX)
@@ -45,7 +45,7 @@ if (onnxruntime_USE_ZENDNN)
     set(ZENDNN_LIB_DIR        ${ZENDNN_SOURCE}/_out/lib)
     set(ZENDNN_DLL_PATH       ${ZENDNN_LIB_DIR}/${ZENDNN_SHARED_LIB})
 
-    set(ZENDNN_AOCL_BLIS_LIB  libblis-mt.so.4)
+    set(ZENDNN_AOCL_BLIS_LIB  libblis-mt.so)
     set(ZENDNN_BLIS_LIB       blis-mt)
     set(ZENDNN_BLIS_SOURCE    ${CMAKE_CURRENT_BINARY_DIR}/blis/src/blis/src)
     set(ZENDNN_BLIS_PATH      ${ZENDNN_BLIS_SOURCE}/build/blis_gcc_build/)
@@ -53,7 +53,7 @@ if (onnxruntime_USE_ZENDNN)
     set(ZENDNN_BLIS_DLL_PATH  ${ZENDNN_BLIS_LIB_DIR}/${ZENDNN_AOCL_BLIS_LIB})
 
     include(ProcessorCount)
-    ProcessorCount(N)
+      ProcessorCount(N)
 
     if ($ENV{ZENDNN_ONNXRT_USE_LOCAL_ZENDNN})
       find_program(MAKE_EXE NAMES make REQUIRED)
@@ -86,7 +86,7 @@ if (onnxruntime_USE_ZENDNN)
         PREFIX blis
         DOWNLOAD_COMMAND ""
         SOURCE_DIR ${ZENDNN_BLIS_SOURCE}
-        CONFIGURE_COMMAND cd ${ZENDNN_BLIS_SOURCE} && cp -rf "/$ENV{BLIS_LOCAL_PATH}/./" . && ./configure -a aocl_gemm --prefix=${ZENDNN_BLIS_PATH} --enable-threading=openmp --enable-cblas amdzen
+        CONFIGURE_COMMAND cd ${ZENDNN_BLIS_SOURCE} && cp -rf "/$ENV{BLIS_LOCAL_PATH}/./" . && CFLAGS=-Wno-error && CC=gcc ./configure -a aocl_gemm --prefix=${ZENDNN_BLIS_PATH} --enable-threading=openmp --enable-cblas amdzen
         BUILD_COMMAND cd ${ZENDNN_BLIS_SOURCE} && make -j${N} install
         INSTALL_COMMAND ""
       )
@@ -102,12 +102,13 @@ if (onnxruntime_USE_ZENDNN)
         INSTALL_COMMAND ""
       )
     endif()
-  add_custom_command(
-    TARGET project_blis POST_BUILD
-    COMMAND "${CMAKE_COMMAND}" -E copy ${ZENDNN_BLIS_PATH}/include/blis/* ${ZENDNN_BLIS_PATH}/include
-    COMMAND "${CMAKE_COMMAND}" -E copy ${ZENDNN_BLIS_PATH}/lib/* ${CMAKE_CURRENT_BINARY_DIR}/onnxruntime/capi/
-    COMMENT "Copying to include directory. TODO: Remove direct copy to onnxruntime/capi and fix in build system"
-  )
+
+    add_custom_command(
+      TARGET project_blis POST_BUILD
+      COMMAND "${CMAKE_COMMAND}" -E copy ${ZENDNN_BLIS_PATH}/include/blis/* ${ZENDNN_BLIS_PATH}/include
+      COMMAND "${CMAKE_COMMAND}" -E copy ${ZENDNN_BLIS_PATH}/lib/* ${CMAKE_CURRENT_BINARY_DIR}/onnxruntime/capi/
+      COMMENT "Copying to include directory. TODO: Remove direct copy to onnxruntime/capi and fix in build system"
+    )
   elseif(WIN32)
     set(ZENDNN_SHARED_LIB     amdZenDNN.dll)
     set(ZENDNN_SOURCE         ${CMAKE_CURRENT_BINARY_DIR}/zendnn/src/zendnn/src)
@@ -141,29 +142,16 @@ if (onnxruntime_USE_ZENDNN)
         GIT_REPOSITORY ${ZENDNN_URL}
         GIT_TAG ${ZENDNN_TAG}
         SOURCE_DIR ${ZENDNN_SOURCE}
-        BINARY_DIR ${ZENDNN_SOURCE}/build
-        CMAKE_GENERATOR "Visual Studio 16 2019"
-        CMAKE_GENERATOR_TOOLSET "clangcl"
-        CMAKE_ARGS "-DCMAKE_BUILD_TYPE=Release -- -m"
+        CONFIGURE_COMMAND ""
+        BUILD_COMMAND cd ${ZENDNN_SOURCE} && msbuild WinSln/ZenDNN.sln /p:Configuration=Release -m
         INSTALL_COMMAND ""
       )
     endif()
-
     if ($ENV{ZENDNN_ONNXRT_USE_LOCAL_BLIS})
       set(ZENDNN_BLIS_LIB_DIR   $ENV{ZENDNN_BLIS_PATH}/lib/ILP64)
       set(ZENDNN_BLIS_DLL_PATH  ${ZENDNN_BLIS_LIB_DIR}/${ZENDNN_AOCL_BLIS_LIB})
-      set(BLIS_LIB_FILES
-      "${CMAKE_CURRENT_BINARY_DIR}/onnxruntime/capi/AOCL-LibBlis-Win-MT-dll.dll"
-      "${CMAKE_CURRENT_BINARY_DIR}/onnxruntime/capi/AOCL-LibBlis-Win-MT-dll.lib"
-      )
-      add_custom_command(OUTPUT BLIS_LIB_FILES
-        COMMAND "${CMAKE_COMMAND}" -E copy ${ZENDNN_BLIS_PATH}/lib/ILP64/AOCL-LibBlis-Win-MT-dll.dll ${CMAKE_CURRENT_BINARY_DIR}/Release/onnxruntime/capi/AOCL-LibBlis-Win-MT-dll.dll
-        COMMAND "${CMAKE_COMMAND}" -E copy ${ZENDNN_BLIS_PATH}/lib/ILP64/AOCL-LibBlis-Win-MT-dll.lib ${CMAKE_CURRENT_BINARY_DIR}/Release/onnxruntime/capi/AOCL-LibBlis-Win-MT-dll.lib
-        COMMENT "Copying to include directory. TODO: Remove direct copy to onnxruntime/capi and fix in build system"
-      )
     else()
       add_dependencies(project_zendnn project_blis)
-
       list(APPEND BLIS_CMAKE_ARGS -DCMAKE_BUILD_TYPE:STRING=Release -DAOCL_BLIS_FAMILY:STRING=amdzen -DBUILD_SHARED_LIBS:BOOL=ON)
       list(APPEND BLIS_CMAKE_ARGS -DENABLE_OPENMP:BOOL=ON -DENABLE_MULTITHREADING:BOOL=ON -DENABLE_COMPLEX_RETURN_INTEL:BOOL=ON -DENABLE_AOCL_DYNAMIC:BOOL=ON -- -m)
       ExternalProject_Add(project_blis
@@ -174,14 +162,14 @@ if (onnxruntime_USE_ZENDNN)
         CMAKE_GENERATOR "Visual Studio 16 2019"
         CMAKE_GENERATOR_TOOLSET "clangcl"
         CMAKE_ARGS ""
-        CMAKE_CACHE_ARGS ${BLIS_CMAKE_ARGS};
+        CMAKE_CACHE_ARGS ${BLIS_CMAKE_ARGS}
         INSTALL_COMMAND ""
       )
       add_custom_command(
         TARGET project_blis POST_BUILD
         COMMAND "${CMAKE_COMMAND}" -E copy ${ZENDNN_BLIS_PATH}/include/amdzen/ ${ZENDNN_BLIS_PATH}/include/
-        COMMAND "${CMAKE_COMMAND}" -E copy ${ZENDNN_BLIS_PATH}/bin/Release/AOCL-LibBlis-Win-MT-dll.dll ${CMAKE_CURRENT_BINARY_DIR}/Release/onnxruntime/capi/AOCL-LibBlis-Win-MT-dll.dll
-        COMMAND "${CMAKE_COMMAND}" -E copy ${ZENDNN_BLIS_PATH}/bin/Release/AOCL-LibBlis-Win-MT-dll.lib ${CMAKE_CURRENT_BINARY_DIR}/Release/onnxruntime/capi/AOCL-LibBlis-Win-MT-dll.lib
+        COMMAND "${CMAKE_COMMAND}" -E copy ${ZENDNN_BLIS_PATH}/bin/Release/AOCL-LibBlis-Win-MT-dll.dll ${CMAKE_CURRENT_BINARY_DIR}/onnxruntime/capi/
+        COMMAND "${CMAKE_COMMAND}" -E copy ${ZENDNN_BLIS_PATH}/bin/Release/AOCL-LibBlis-Win-MT-dll.lib ${CMAKE_CURRENT_BINARY_DIR}/onnxruntime/capi/
         COMMENT "Copying to include directory. TODO: Remove direct copy to onnxruntime/capi and fix in build system"
       )
     endif()
