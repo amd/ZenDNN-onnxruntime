@@ -174,7 +174,7 @@ if (onnxruntime_USE_ZENDNN)
         CMAKE_GENERATOR "Visual Studio 16 2019"
         CMAKE_GENERATOR_TOOLSET "clangcl"
         CMAKE_ARGS ""
-        CMAKE_CACHE_ARGS ${BLIS_CMAKE_ARGS};
+        CMAKE_CACHE_ARGS ${BLIS_CMAKE_ARGS}
         INSTALL_COMMAND ""
       )
       add_custom_command(
