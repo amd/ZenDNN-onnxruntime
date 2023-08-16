@@ -337,11 +337,10 @@ void ZendnnConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     else {
         mem_info.mem_desc  = conv_pd.dst_desc();
     }
-
-    zendnn::memory conv_dst_mem;
-
+   
     // Add the convolution layer to the subgraph
     auto conv_op = zendnn::convolution_forward(conv_pd);
+    auto conv_dst_mem = zendnn::memory(conv_pd.dst_desc(), zendnn_engine);
 
     if (node.OpType() == "ConvAdd" || node.OpType() == "ConvAddRelu") {
         /*
