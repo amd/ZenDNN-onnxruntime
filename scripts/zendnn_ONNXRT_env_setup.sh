@@ -184,10 +184,6 @@ echo "ZENDNN_INFERENCE_ONLY=$ZENDNN_INFERENCE_ONLY"
 export ZENDNN_INT8_SUPPORT=0
 echo "ZENDNN_INT8_SUPPORT=$ZENDNN_INT8_SUPPORT"
 
-# Convolution GEMM Algo path
-export ZENDNN_CONV_ALGO=1
-echo "ZENDNN_CONV_ALGO=$ZENDNN_CONV_ALGO"
-
 # INT8 Relu6 fusion support is disabled by default
 export ZENDNN_RELU_UPPERBOUND=0
 echo "ZENDNN_RELU_UPPERBOUND=$ZENDNN_RELU_UPPERBOUND"
@@ -303,7 +299,7 @@ then
     echo "Error: \$ONNXRUNTIME_GIT_ROOT points to root of ZenDNN_ONNXRuntime repo"
     return
 else
-    [ ! -d "ONNXRUNTIME_GIT_ROOT" ] && echo "Directory ZenDNN DOES NOT exists!"
+    [ ! -d "$ONNXRUNTIME_GIT_ROOT" ] && echo "Directory ZenDNN_ONNXRuntime DOES NOT exists!"
     echo "ONNXRUNTIME_GIT_ROOT: $ONNXRUNTIME_GIT_ROOT"
 fi
 
@@ -311,7 +307,7 @@ fi
 #Current assumption, ONNXRuntime is located parallel to ZenDNN
 cd ..
 export ZENDNN_PARENT_FOLDER=$(pwd)
-cd -
+cd ~-
 
 if [ -z "$ZENDNN_PARENT_FOLDER" ];
 then
