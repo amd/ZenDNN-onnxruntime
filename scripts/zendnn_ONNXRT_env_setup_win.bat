@@ -68,7 +68,7 @@ set ZENDNN_RELU_UPPERBOUND=0
 echo ZENDNN_RELU_UPPERBOUND=%ZENDNN_RELU_UPPERBOUND%
 
 ::ZENDNN_GEMM_ALGO is set to 3 by default
-set ZENDNN_GEMM_ALGO=3
+set ZENDNN_GEMM_ALGO=4
 echo ZENDNN_GEMM_ALGO=%ZENDNN_GEMM_ALGO%
 :: Use local copy of ZenDNN library source code when building ONNXRT
 :: Default is build from local source for development and verification.
