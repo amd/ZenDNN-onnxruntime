@@ -175,8 +175,8 @@ fi
 export OMP_DYNAMIC=FALSE
 echo "OMP_DYNAMIC=$OMP_DYNAMIC"
 
-#Disable TF check for training ops and stop execution if any training ops
-#found in TF graph. By default, its enabled
+#Disable ONNXRT check for training ops and stop execution if any training ops
+#found in ONNXRT graph. By default, its enabled
 export ZENDNN_INFERENCE_ONLY=1
 echo "ZENDNN_INFERENCE_ONLY=$ZENDNN_INFERENCE_ONLY"
 
@@ -188,7 +188,7 @@ echo "ZENDNN_INT8_SUPPORT=$ZENDNN_INT8_SUPPORT"
 export ZENDNN_RELU_UPPERBOUND=0
 echo "ZENDNN_RELU_UPPERBOUND=$ZENDNN_RELU_UPPERBOUND"
 
-# ZENDNN_GEMM_ALGO is set to 0 by default
+# ZENDNN_GEMM_ALGO is set to 3 by default
 export ZENDNN_GEMM_ALGO=3
 echo "ZENDNN_GEMM_ALGO=$ZENDNN_GEMM_ALGO"
 
@@ -312,7 +312,7 @@ cd ~-
 if [ -z "$ZENDNN_PARENT_FOLDER" ];
 then
     echo "Error: Environment variable ZENDNN_PARENT_FOLDER needs to be set"
-    echo "Error: \$ZENDNN_PARENT_FOLDER points to parent of TF repo"
+    echo "Error: \$ZENDNN_PARENT_FOLDER points to parent of ONNXRT repo"
 else
     echo "ZENDNN_PARENT_FOLDER: $ZENDNN_PARENT_FOLDER"
 fi
