@@ -155,15 +155,6 @@ void ZendnnPool::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     }, mem_info);
 #endif  //ENABLE_TRAINING
 
-    if(zendnn_enable_bf16)
-    {
-        auto dst_dims = pool_dst_mem.get_desc().dims();
-        auto mem_to_fp32_pd = zendnn::memory::desc(dst_dims,dt::f32,sp.GetZendnnFormat(dst_dims.size()));
-        auto mem_to_fp32 = zendnn::memory(mem_to_fp32_pd, zendnn_engine);
-        zendnn::stream s{zendnn_engine};
-        zendnn::reorder(pool_dst_mem, mem_to_fp32).execute(s, pool_dst_mem, mem_to_fp32);
-        pool_dst_mem = mem_to_fp32;
-    }
     sp.SetMemory(node.Output(OUT_Y), pool_dst_mem);
 #ifdef ENABLE_TRAINING
     if (node.OutputCount() == 2) {

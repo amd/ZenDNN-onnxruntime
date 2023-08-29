@@ -39,6 +39,11 @@ ZendnnFlatten::ZendnnFlatten() {}
 
 void ZendnnFlatten::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
                                     ZendnnNode &node) {
+    using dt = zendnn::memory::data_type;
+    bool zendnn_enable_bf16 = false;
+    const std::string enable_bf16_env = onnxruntime::GetEnvironmentVar("ZENDNN_ONNXRT_ENABLE_BF16_SUPPORT");
+    if (!enable_bf16_env.empty())
+        zendnn_enable_bf16 = (std::stoi(enable_bf16_env) == 0 ? false : true);
     auto zendnn_engine = sp.GetEngine();
 
     auto data_mem = sp.GetMemory(node.Input(IN_DATA));
@@ -70,8 +75,10 @@ void ZendnnFlatten::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     //zendnn::memory::format_tag dst_format = zendnn::memory::format_tag::nc;
     zendnn::memory::dims dst_strides = zendnn::memory::dims{dst_dims[1], zendnn::memory::dim(1)};
 
-    zendnn::memory::desc dst_md({dst_dims[0],dst_dims[1]}, node.Input(
-                                    IN_DATA).Type(), dst_strides);
+    zendnn::memory::desc dst_md({dst_dims[0],dst_dims[1]},
+                                     zendnn_enable_bf16? dt::bf16 : node.Input(IN_DATA).Type(),
+                                     dst_strides);
+    //zendnn::memory::desc dst_md({dst_dims[0],dst_dims[1]}, node.Input(IN_DATA).Type(), dst_strides);
     data_mem = sp.GetMemoryInOrtFormat(node.Input(IN_DATA), zendnn_engine);
 
     auto dst_mem = zendnn::memory(dst_md, zendnn_engine, nullptr);
