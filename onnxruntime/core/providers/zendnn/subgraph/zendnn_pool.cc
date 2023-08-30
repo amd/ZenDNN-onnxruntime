@@ -76,7 +76,7 @@ void ZendnnPool::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
         src_md = zendnn::memory::desc({src_dims, node.Input(IN_X).Type(), tag::acdb});
     }
     else if(zendnn_enable_bf16) {
-        src_md=zendnn::memory::desc({src_dims}, dt::bf16, sp.GetZendnnFormat(src_dims.size()));
+        src_md = zendnn::memory::desc({src_dims}, dt::bf16, sp.GetZendnnFormat(src_dims.size()));
     }
     else {
         src_md = pool_src_mem.get_desc();
@@ -102,7 +102,7 @@ void ZendnnPool::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
 
     auto dst_mem_dims = InferOutputDims(node, src_dims, kernel_shape, strides);
     if(zendnn_enable_bf16)
-     dst_md = zendnn::memory::desc(dst_mem_dims,
+        dst_md = zendnn::memory::desc(dst_mem_dims,
                                     dt::bf16,sp.GetZendnnFormat(dst_mem_dims.size()));
     else
         dst_md = zendnn::memory::desc(dst_mem_dims,
@@ -155,7 +155,15 @@ void ZendnnPool::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     }, mem_info);
 #endif  //ENABLE_TRAINING
 
-
+    if(zendnn_enable_bf16)
+    {
+        auto dst_dims = pool_dst_mem.get_desc().dims();
+        auto mem_to_fp32_pd = zendnn::memory::desc(dst_dims,dt::f32,sp.GetZendnnFormat(dst_dims.size()));
+        auto mem_to_fp32 = zendnn::memory(mem_to_fp32_pd, zendnn_engine);
+        zendnn::stream s{zendnn_engine};
+        zendnn::reorder(pool_dst_mem, mem_to_fp32).execute(s, pool_dst_mem, mem_to_fp32);
+        pool_dst_mem = mem_to_fp32;
+    }
     sp.SetMemory(node.Output(OUT_Y), pool_dst_mem);
 #ifdef ENABLE_TRAINING
     if (node.OutputCount() == 2) {
