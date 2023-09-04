@@ -612,7 +612,6 @@ def main():
 
 
 if __name__ == "__main__":
-    # work around for AnaConda Jupyter. See https://stackoverflow.com/questions/45720153/python-multiprocessing-error-attributeerror-module-main-has-no-attribute
     __spec__ = None
 
     main()
