@@ -18,7 +18,7 @@ jobs:
   Onnxruntime-SCA-training-CUDA:
     runs-on: ["self-hosted", "1ES.Pool=onnxruntime-github-vs2022-mms"]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: false
       - uses: actions/setup-python@v4
@@ -60,7 +60,7 @@ jobs:
   Onnxruntime-SCA-win32-WINML-x64:
     runs-on: ["self-hosted", "1ES.Pool=onnxruntime-github-vs2022-mms"]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: false
       - uses: actions/setup-python@v4
@@ -98,7 +98,7 @@ jobs:
   Onnxruntime-SCA-win32-WINML-x86:
     runs-on: ["self-hosted", "1ES.Pool=onnxruntime-github-vs2022-mms"]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: false
       - uses: actions/setup-python@v4
