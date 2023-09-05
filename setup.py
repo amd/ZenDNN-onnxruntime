@@ -629,7 +629,6 @@ version_number = ""
 with open("VERSION_NUMBER") as f:
     version_number = f.readline().strip()
 if nightly_build:
-    # https://docs.microsoft.com/en-us/azure/devops/pipelines/build/variables
     build_suffix = environ.get("BUILD_BUILDNUMBER")
     if build_suffix is None:
         # The following line is only for local testing

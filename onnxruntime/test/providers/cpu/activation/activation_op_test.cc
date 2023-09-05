@@ -659,7 +659,6 @@ TEST_F(ActivationOpNoInfTest, Softsign) {
         // Softsign uses Eigen inverse(), which on ARM32 results in a different value when x is FLT_MAX or -FLT_MAX
         // 3.40282347e+38 -> 0 with ARM32 inverse() vs something like 2.939e-39#DEN with other platforms.
         //
-        // Possibly explained by https://en.wikipedia.org/wiki/ARM_architecture#Advanced_SIMD_(Neon)
         // 'A quirk of Neon in Armv7 devices is that it flushes all subnormal numbers to zero'
         //
         // c.f.

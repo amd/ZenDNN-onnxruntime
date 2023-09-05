@@ -785,7 +785,6 @@ const Telemetry& WindowsEnv::GetTelemetryProvider() const {
 // \brief returns a value for the queried variable name (var_name)
 std::string WindowsEnv::GetEnvironmentVar(const std::string& var_name) const {
   // Why getenv() should be avoided on Windows:
-  // https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/getenv-wgetenv
   // Instead use the Win32 API: GetEnvironmentVariableA()
 
   // Max limit of an environment variable on Windows including the null-terminating character
