@@ -24,9 +24,9 @@ $ git clone https://github.com/amd/ZenDNN-onnxruntime.git
 $ cd ZenDNN-onnxruntime
 ```
 
-The repo defaults to the main development branch which doesn't have ZenDNN support. You need to check out a release branch to build, e.g. `release/rel-1.15.1_zendnn_rel`.
+The repo defaults to the main development branch which doesn't have ZenDNN support. You need to check out a release branch to build, e.g. `rel-1.15.1_zendnn_rel`.
 ```
-$ git checkout branch_name  # release/rel-1.15.1_zendnn_rel.
+$ git checkout branch_name  # rel-1.15.1_zendnn_rel.
 ```
 
 ### Set environment variables
