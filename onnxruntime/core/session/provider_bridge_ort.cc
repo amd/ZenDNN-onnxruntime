@@ -1,5 +1,32 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+*******************************************************************************/
+
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
+
+/*******************************************************************************
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+* LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+* OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
+*******************************************************************************/
 
 // This is the Onnxruntime side of the bridge to allow providers to be built as a DLL
 // It implements onnxruntime::ProviderHost
@@ -73,6 +100,7 @@ using IndexedSubGraph_MetaDef = IndexedSubGraph::MetaDef;
 #include "core/providers/cann/cann_provider_factory_creator.h"
 #include "core/providers/rocm/rocm_provider_factory_creator.h"
 #include "core/providers/dnnl/dnnl_provider_factory_creator.h"
+#include "core/providers/zendnn/zendnn_provider_factory_creator.h"
 #include "core/providers/migraphx/migraphx_provider_factory_creator.h"
 #include "core/providers/openvino/openvino_provider_factory_creator.h"
 #include "core/providers/tensorrt/tensorrt_provider_factory_creator.h"
@@ -81,6 +109,7 @@ using IndexedSubGraph_MetaDef = IndexedSubGraph::MetaDef;
 #include "core/providers/cann/cann_provider_factory.h"
 #include "core/providers/rocm/rocm_provider_factory.h"
 #include "core/providers/dnnl/dnnl_provider_factory.h"
+#include "core/providers/zendnn/zendnn_provider_factory.h"
 #include "core/providers/migraphx/migraphx_provider_factory.h"
 #include "core/providers/openvino/openvino_provider_factory.h"
 #include "core/providers/tensorrt/tensorrt_provider_factory.h"
@@ -88,6 +117,7 @@ using IndexedSubGraph_MetaDef = IndexedSubGraph::MetaDef;
 #include "core/providers/cuda/cuda_provider_options.h"
 #include "core/providers/cann/cann_provider_options.h"
 #include "core/providers/dnnl/dnnl_provider_options.h"
+#include "core/providers/zendnn/zendnn_provider_options.h"
 
 #if !defined(ORT_MINIMAL_BUILD) && defined(USE_TENSORRT)
 #include "core/session/onnxruntime_session_options_config_keys.h"
@@ -118,7 +148,9 @@ ProviderInfo_TensorRT& GetProviderInfo_TensorRT();
 ProviderInfo_CANN* TryGetProviderInfo_CANN();
 ProviderInfo_CANN& GetProviderInfo_CANN();
 ProviderInfo_Dnnl* TryGetProviderInfo_Dnnl();
+ProviderInfo_Zendnn* TryGetProviderInfo_Zendnn();
 ProviderInfo_Dnnl& GetProviderInfo_Dnnl();
+ProviderInfo_Zendnn& GetProviderInfo_Zendnn();
 ProviderInfo_ROCM* TryGetProviderInfo_ROCM();
 ProviderInfo_ROCM& GetProviderInfo_ROCM();
 ProviderHostCPU& GetProviderHostCPU();
@@ -1278,6 +1310,7 @@ static ProviderLibrary s_library_rocm(LIBRARY_PREFIX ORT_TSTR("onnxruntime_provi
 #endif
 );
 static ProviderLibrary s_library_dnnl(LIBRARY_PREFIX ORT_TSTR("onnxruntime_providers_dnnl") LIBRARY_EXTENSION);
+static ProviderLibrary s_library_zendnn(LIBRARY_PREFIX ORT_TSTR("onnxruntime_providers_zendnn") LIBRARY_EXTENSION);
 static ProviderLibrary s_library_openvino(LIBRARY_PREFIX ORT_TSTR("onnxruntime_providers_openvino") LIBRARY_EXTENSION);
 static ProviderLibrary s_library_tensorrt(LIBRARY_PREFIX ORT_TSTR("onnxruntime_providers_tensorrt") LIBRARY_EXTENSION
 #ifndef _WIN32
@@ -1306,6 +1339,7 @@ static ProviderLibrary s_library_migraphx(LIBRARY_PREFIX ORT_TSTR("onnxruntime_p
 
 void UnloadSharedProviders() {
   s_library_dnnl.Unload();
+  s_library_zendnn.Unload();
   s_library_openvino.Unload();
   s_library_tensorrt.Unload();
   s_library_cuda.Unload();
@@ -1374,6 +1408,10 @@ CannProviderFactoryCreator::Create(const OrtCANNProviderOptions* provider_option
 
 std::shared_ptr<IExecutionProviderFactory> DnnlProviderFactoryCreator::Create(int use_arena) {
   return s_library_dnnl.Get().CreateExecutionProviderFactory(use_arena);
+}
+
+std::shared_ptr<IExecutionProviderFactory> ZendnnProviderFactoryCreator::Create(int use_arena) {
+  return s_library_zendnn.Get().CreateExecutionProviderFactory(use_arena);
 }
 
 std::shared_ptr<IExecutionProviderFactory> MIGraphXProviderFactoryCreator::Create(int device_id) {
@@ -1522,6 +1560,10 @@ std::shared_ptr<IExecutionProviderFactory> DnnlProviderFactoryCreator::Create(co
   return s_library_dnnl.Get().CreateExecutionProviderFactory(dnnl_options);
 }
 
+std::shared_ptr<IExecutionProviderFactory> ZendnnProviderFactoryCreator::Create(const OrtZendnnProviderOptions* zendnn_options) {
+  return s_library_zendnn.Get().CreateExecutionProviderFactory(zendnn_options);
+}
+
 ProviderInfo_OpenVINO* GetProviderInfo_OpenVINO() {
   return reinterpret_cast<ProviderInfo_OpenVINO*>(s_library_openvino.Get().GetInfo());
 }
@@ -1589,11 +1631,25 @@ ProviderInfo_Dnnl* TryGetProviderInfo_Dnnl() try {
   return nullptr;
 }
 
+ProviderInfo_Zendnn* TryGetProviderInfo_Zendnn() try {
+  return reinterpret_cast<ProviderInfo_Zendnn*>(s_library_zendnn.Get().GetInfo());
+} catch (const std::exception& exception) {
+  LOGS_DEFAULT(ERROR) << exception.what();
+  return nullptr;
+}
+
 ProviderInfo_Dnnl& GetProviderInfo_Dnnl() {
   if (auto* info = TryGetProviderInfo_Dnnl())
     return *info;
 
   ORT_THROW("oneDNN Provider not available, can't get interface for it");
+}
+
+ProviderInfo_Zendnn& GetProviderInfo_Zendnn() {
+  if (auto* info = TryGetProviderInfo_Zendnn())
+    return *info;
+
+  ORT_THROW("Zendnn Provider not available, can't get interface for it");
 }
 
 ProviderInfo_ROCM* TryGetProviderInfo_ROCM() try {
@@ -1704,6 +1760,18 @@ ORT_API_STATUS_IMPL(OrtSessionOptionsAppendExecutionProvider_Dnnl, _In_ OrtSessi
   auto factory = onnxruntime::DnnlProviderFactoryCreator::Create(use_arena);
   if (!factory) {
     return OrtApis::CreateStatus(ORT_FAIL, "OrtSessionOptionsAppendExecutionProvider_Dnnl: Failed to load shared library");
+  }
+
+  options->provider_factories.push_back(factory);
+  return nullptr;
+  API_IMPL_END
+}
+
+ORT_API_STATUS_IMPL(OrtSessionOptionsAppendExecutionProvider_Zendnn, _In_ OrtSessionOptions* options, int use_arena) {
+  API_IMPL_BEGIN
+  auto factory = onnxruntime::ZendnnProviderFactoryCreator::Create(use_arena);
+  if (!factory) {
+    return OrtApis::CreateStatus(ORT_FAIL, "OrtSessionOptionsAppendExecutionProvider_Zendnn: Failed to load shared library");
   }
 
   options->provider_factories.push_back(factory);
@@ -1943,7 +2011,7 @@ ORT_API_STATUS_IMPL(OrtApis::UpdateTensorRTProviderOptions,
   API_IMPL_END
 }
 
-#if defined(USE_TENSORRT) || defined(USE_CUDA) || defined(USE_CANN) || defined(USE_DNNL) || defined(USE_ROCM)
+#if defined(USE_TENSORRT) || defined(USE_CUDA) || defined(USE_CANN) || defined(USE_DNNL) || defined(USE_ZENDNN) || defined(USE_ROCM)
 static std::string BuildOptionsString(const onnxruntime::ProviderOptions::iterator& begin,
                                       const onnxruntime::ProviderOptions::iterator& end) {
   std::ostringstream options;
@@ -2264,6 +2332,20 @@ ORT_API_STATUS_IMPL(OrtApis::SessionOptionsAppendExecutionProvider_Dnnl,
   API_IMPL_END
 }
 
+ORT_API_STATUS_IMPL(OrtApis::SessionOptionsAppendExecutionProvider_Zendnn,
+                    _In_ OrtSessionOptions* options, _In_ const OrtZendnnProviderOptions* zendnn_options) {
+  API_IMPL_BEGIN
+  auto factory = onnxruntime::ZendnnProviderFactoryCreator::Create(zendnn_options);
+  if (!factory) {
+    return OrtApis::CreateStatus(ORT_FAIL,
+                                 "SessionOptionsAppendExecutionProvider_Zendnn: Failed to load shared library");
+  }
+
+  options->provider_factories.push_back(factory);
+  return nullptr;
+  API_IMPL_END
+}
+
 ORT_API_STATUS_IMPL(OrtApis::CreateDnnlProviderOptions, _Outptr_ OrtDnnlProviderOptions** out) {
   API_IMPL_BEGIN
 #ifdef USE_DNNL
@@ -2275,6 +2357,21 @@ ORT_API_STATUS_IMPL(OrtApis::CreateDnnlProviderOptions, _Outptr_ OrtDnnlProvider
 #else
   ORT_UNUSED_PARAMETER(out);
   return CreateStatus(ORT_FAIL, "oneDNN execution provider is not enabled in this build.");
+#endif
+  API_IMPL_END
+}
+
+ORT_API_STATUS_IMPL(OrtApis::CreateZendnnProviderOptions, _Outptr_ OrtZendnnProviderOptions** out) {
+  API_IMPL_BEGIN
+#ifdef USE_ZENDNN
+  auto options = std::make_unique<OrtZendnnProviderOptions>();
+  options->use_arena = true;
+  options->threadpool_args = nullptr;
+  *out = options.release();
+  return nullptr;
+#else
+  ORT_UNUSED_PARAMETER(out);
+  return CreateStatus(ORT_FAIL, "ZenDNN execution provider is not enabled in this build.");
 #endif
   API_IMPL_END
 }
@@ -2308,6 +2405,35 @@ ORT_API_STATUS_IMPL(OrtApis::UpdateDnnlProviderOptions,
   API_IMPL_END
 }
 
+ORT_API_STATUS_IMPL(OrtApis::UpdateZendnnProviderOptions,
+                    _Inout_ OrtZendnnProviderOptions* zendnn_options,
+                    _In_reads_(num_keys) const char* const* provider_options_keys,
+                    _In_reads_(num_keys) const char* const* provider_options_values,
+                    size_t num_keys) {
+  API_IMPL_BEGIN
+#ifdef USE_ZENDNN 
+  onnxruntime::ProviderOptions provider_options_map;
+  for (size_t i = 0; i != num_keys; ++i) {
+    if (provider_options_keys[i] == nullptr || provider_options_keys[i][0] == '\0' ||
+        provider_options_values[i] == nullptr || provider_options_values[i][0] == '\0') {
+      return OrtApis::CreateStatus(ORT_INVALID_ARGUMENT, "key/value cannot be empty");
+    }
+
+    provider_options_map[provider_options_keys[i]] = provider_options_values[i];
+  }
+
+  onnxruntime::s_library_zendnn.Get().UpdateProviderOptions(reinterpret_cast<void*>(zendnn_options), provider_options_map);
+  return nullptr;
+#else
+  ORT_UNUSED_PARAMETER(zendnn_options);
+  ORT_UNUSED_PARAMETER(provider_options_keys);
+  ORT_UNUSED_PARAMETER(provider_options_values);
+  ORT_UNUSED_PARAMETER(num_keys);
+  return CreateStatus(ORT_FAIL, "ZenDNN execution provider is not enabled in this build.");
+#endif
+  API_IMPL_END
+}
+
 ORT_API_STATUS_IMPL(OrtApis::GetDnnlProviderOptionsAsString,
                     _In_ const OrtDnnlProviderOptions* dnnl_options, _Inout_ OrtAllocator* allocator,
                     _Outptr_ char** ptr) {
@@ -2327,9 +2453,36 @@ ORT_API_STATUS_IMPL(OrtApis::GetDnnlProviderOptionsAsString,
   API_IMPL_END
 }
 
+ORT_API_STATUS_IMPL(OrtApis::GetZendnnProviderOptionsAsString,
+                    _In_ const OrtZendnnProviderOptions* zendnn_options, _Inout_ OrtAllocator* allocator,
+                    _Outptr_ char** ptr) {
+  API_IMPL_BEGIN
+#ifdef USE_ZENDNN
+  onnxruntime::ProviderOptions options =
+      onnxruntime::s_library_zendnn.Get().GetProviderOptions(reinterpret_cast<const void*>(zendnn_options));
+  std::string options_str = BuildOptionsString(options.begin(), options.end());
+  *ptr = onnxruntime::StrDup(options_str, allocator);
+  return nullptr;
+#else
+  ORT_UNUSED_PARAMETER(zendnn_options);
+  ORT_UNUSED_PARAMETER(allocator);
+  ORT_UNUSED_PARAMETER(ptr);
+  return CreateStatus(ORT_FAIL, "ZenDNN execution provider is not enabled in this build.");
+#endif
+  API_IMPL_END
+}
+
 ORT_API(void, OrtApis::ReleaseDnnlProviderOptions, _Frees_ptr_opt_ OrtDnnlProviderOptions* ptr) {
 #ifdef USE_DNNL
   std::unique_ptr<OrtDnnlProviderOptions> p(ptr);
+#else
+  ORT_UNUSED_PARAMETER(ptr);
+#endif
+}
+
+ORT_API(void, OrtApis::ReleaseZendnnProviderOptions, _Frees_ptr_opt_ OrtZendnnProviderOptions* ptr) {
+#ifdef USE_ZENDNN
+  std::unique_ptr<OrtZendnnProviderOptions> p(ptr);
 #else
   ORT_UNUSED_PARAMETER(ptr);
 #endif

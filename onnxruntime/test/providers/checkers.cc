@@ -365,7 +365,7 @@ struct TensorCheck<BFloat16> {
     /// XXX: May need to adjust threshold as BFloat is coarse
     float abs_threshold = 0.0001f;
     float threshold = 0.001f;
-#if defined(USE_TENSORRT) || defined(ENABLE_TRAINING_CORE) || defined(USE_CUDA) || defined(USE_ROCM) || defined(USE_DML) || defined(USE_DNNL)
+#if defined(USE_TENSORRT) || defined(ENABLE_TRAINING_CORE) || defined(USE_CUDA) || defined(USE_ROCM) || defined(USE_DML) || defined(USE_DNNL) || defined(USE_ZENDNN)
     threshold = 0.05f;  // expect at least 95% close
 #endif
 

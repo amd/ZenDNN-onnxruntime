@@ -1,11 +1,39 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+*******************************************************************************/
+
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
+
+/*******************************************************************************
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+* LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+* OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
+*******************************************************************************/
 
 #include <random>
 #include <cmath>
 #include <type_traits>
 #include "gtest/gtest.h"
 #include "test/common/dnnl_op_test_utils.h"
+#include "test/common/zendnn_op_test_utils.h"
 #include "test/common/tensor_op_test_utils.h"
 #include "test/providers/provider_test_utils.h"
 #include "test/providers/cpu/reduction/reduction_test_cases.h"
@@ -96,10 +124,16 @@ TEST(ReductionOpTest, ReduceL1_default_axes_keepdims) {
   test.Run();
 }
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(ReductionOpTest, ReduceL1_default_axes_keepdims_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -120,9 +154,12 @@ TEST(ReductionOpTest, ReduceL1_default_axes_keepdims_bfloat16) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif  //  USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif  //  USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
 }
-#endif  //  USE_DNNL
+#endif  //  USE_DNNL USE_ZENDNN
 
 TEST(ReductionOpTest, ReduceL1_do_not_keep_dims) {
   OpTester test("ReduceL1");
@@ -141,10 +178,16 @@ TEST(ReductionOpTest, ReduceL1_do_not_keep_dims) {
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kTensorrtExecutionProvider});  // TensorRT: full reduce without keepDimensions is not supported with explicit batch
 }
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(ReductionOpTest, ReduceL1_do_not_keep_dims_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -166,9 +209,12 @@ TEST(ReductionOpTest, ReduceL1_do_not_keep_dims_bfloat16) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif                                                                                                                //  USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif                                                                                                                //  USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kTensorrtExecutionProvider}, nullptr, &execution_providers);  // TensorRT: full reduce without keepDimensions is not supported with explicit batch
 }
-#endif  //  USE_DNNL
+#endif  //  USE_DNNL USE_ZENDNN
 
 TEST(ReductionOpTest, ReduceL1_do_not_keep_dims_2) {
   OpTester test("ReduceL1");
@@ -180,10 +226,16 @@ TEST(ReductionOpTest, ReduceL1_do_not_keep_dims_2) {
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kTensorrtExecutionProvider});  // TensorRT: full reduce without keepDimensions is not supported with explicit batch
 }
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(ReductionOpTest, ReduceL1_do_not_keep_dims_2_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -198,9 +250,12 @@ TEST(ReductionOpTest, ReduceL1_do_not_keep_dims_2_bfloat16) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif                                                                                                                //  USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif                                                                                                                // USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kTensorrtExecutionProvider}, nullptr, &execution_providers);  // TensorRT: full reduce without keepDimensions is not supported with explicit batch
 }
-#endif  //  USE_DNNL
+#endif  //  USE_DNNL USE_ZENDNN
 
 TEST(ReductionOpTest, ReduceL1_keepdims) {
   OpTester test("ReduceL1");
@@ -218,10 +273,16 @@ TEST(ReductionOpTest, ReduceL1_keepdims) {
   test.AddOutput<float>("reduced", {3, 2, 1}, {3.0f, 7.0f, 11.0f, 15.0f, 19.0f, 23.0f});
   test.Run();
 }
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(ReductionOpTest, ReduceL1_keepdims_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -243,9 +304,12 @@ TEST(ReductionOpTest, ReduceL1_keepdims_bfloat16) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif  //  USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif  //  USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
 }
-#endif  //  USE_DNNL
+#endif  //  USE_DNNL USE_ZENDNN
 
 TEST(ReductionOpTest, ReduceL1) {
   OpTester test("ReduceL1");
@@ -295,10 +359,16 @@ TEST(ReductionOpTest, ReduceL1_int64) {
   test.Run();
 }
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(ReductionOpTest, ReduceL1_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -319,9 +389,12 @@ TEST(ReductionOpTest, ReduceL1_bfloat16) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif  //  USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif  //  USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
 }
-#endif  // USE_DNNL
+#endif  // USE_DNNL USE_ZENDNN
 
 TEST(ReductionOpTest, ReduceL10DTensor) {
   OpTester test("ReduceL1");
@@ -423,10 +496,16 @@ TEST(ReductionOpTest, ReduceL2) {
   test.Run();
 }
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(ReductionOpTest, ReduceL2_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -448,9 +527,12 @@ TEST(ReductionOpTest, ReduceL2_bfloat16) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif  //  USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif  //  USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
 }
-#endif  //  USE_DNNL
+#endif  //  USE_DNNL USE_ZENDNN
 
 TEST(ReductionOpTest, ReduceL2_int32) {
   OpTester test("ReduceL2");
@@ -512,10 +594,16 @@ TEST(ReductionOpTest, ReduceLogSum) {
   test.Run();
 }
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(ReductionOpTest, ReduceLogSum_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -539,9 +627,12 @@ TEST(ReductionOpTest, ReduceLogSum_bfloat16) {
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
 #endif  // USE_DNNL
+#if defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif  // USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
 }
-#endif  // USE_DNNL
+#endif  // USE_DNNL USE_ZENDNN
 
 TEST(ReductionOpTest, ReduceLogSum_samesize) {
   OpTester test("ReduceLogSum");
@@ -764,10 +855,16 @@ TEST(ReductionOpTest, ReduceLogSumExp) {
   test.Run();
 }
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(ReductionOpTest, ReduceLogSumExp_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -787,7 +884,7 @@ TEST(ReductionOpTest, ReduceLogSumExp_bfloat16) {
   test.AddOutput<BFloat16>("reduced", {1, 2, 1}, MakeBFloat16({10.33174133f, 12.33174133f}));
   test.Run();
 }
-#endif  //  USE_DNNL
+#endif  //  USE_DNNL USE_ZENDNN
 
 TEST(ReductionOpTest, ReduceLogSumExp_double) {
   OpTester test("ReduceLogSumExp");
@@ -1275,15 +1372,21 @@ TEST(ReductionOpTest, ReduceMaxAxesInitializerOpset18) {
                         11.0f, 12.0f});
   test.AddInput<int64_t>("axes", {2}, {1, 2}, true);
   test.AddOutput<float>("reduced", {3, 1, 1}, {4.0f, 8.0f, 12.0f});
-  // TODO: DNNL, TensorRT, and OpenVINO dont support "axes" input in opset 18
+  // TODO: DNNL, ZENDNN, TensorRT, and OpenVINO dont support "axes" input in opset 18
   test.Run(OpTester::ExpectResult::kExpectSuccess, "",
-           {kDnnlExecutionProvider, kTensorrtExecutionProvider, kOpenVINOExecutionProvider, kDmlExecutionProvider});
+           {kDnnlExecutionProvider, kZendnnExecutionProvider, kTensorrtExecutionProvider, kOpenVINOExecutionProvider, kDmlExecutionProvider});
 }
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(ReductionOpTest, ReduceMax_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -1441,7 +1544,7 @@ TEST(ReductionOpTest, ReduceMean_default_axes_keepdims) {
   test.Run();
 }
 
-#ifdef USE_DNNL
+#if defined (USE_DNNL) || defined(USE_ZENDNN)
 TEST(ReductionOpTest, ReduceMean_default_axes_keepdims_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
@@ -1450,6 +1553,12 @@ TEST(ReductionOpTest, ReduceMean_default_axes_keepdims_bfloat16) {
   }
 #endif
 
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
   OpTester test("ReduceMean", 13);
   test.AddAttribute("keepdims", (int64_t)1);
   test.AddInput<BFloat16>("data", {3, 2, 2},
@@ -1498,10 +1607,16 @@ TEST(ReductionOpTest, ReduceMean_default_axes_do_not_keep_dims) {
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kTensorrtExecutionProvider});  // TensorRT: full reduce without keepDimensions is not supported with explicit batch
 }
 
-#ifdef USE_DNNL
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(ReductionOpTest, ReduceMean_default_axes_do_not_keep_dims_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -1561,10 +1676,16 @@ TEST(ReductionOpTest, ReduceMean_do_not_keepdims) {
   test.Run();
 }
 
-#ifdef USE_DNNL
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(ReductionOpTest, ReduceMean_do_not_keepdims_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -1620,10 +1741,16 @@ TEST(ReductionOpTest, ReduceMean_do_not_keepdims_2) {
   test.AddOutput<float>("reduced", {}, {2.0f});
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kTensorrtExecutionProvider});  // TensorRT: full reduce without keepDimensions is not supported with explicit batch
 }
-#ifdef USE_DNNL
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(ReductionOpTest, ReduceMean_do_not_keepdims_2_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -1636,7 +1763,7 @@ TEST(ReductionOpTest, ReduceMean_do_not_keepdims_2_bfloat16) {
   test.AddOutput<BFloat16>("reduced", {}, MakeBFloat16({2.0f}));
   test.Run();
 }
-#endif  // USE_DNNL
+#endif  // USE_DNNL USE_ZENDNN
 
 TEST(ReductionOpTest, ReduceMean_do_not_keepdims_2_double) {
   OpTester test("ReduceMean");
@@ -1672,10 +1799,16 @@ TEST(ReductionOpTest, ReduceMean_keepdims) {
   test.Run();
 }
 
-#ifdef USE_DNNL
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(ReductionOpTest, ReduceMean_keepdims_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -1695,7 +1828,7 @@ TEST(ReductionOpTest, ReduceMean_keepdims_bfloat16) {
   test.AddOutput<BFloat16>("reduced", {3, 1, 2}, MakeBFloat16({12.5f, 1.5f, 35.0f, 1.5f, 57.5f, 1.5f}));
   test.Run();
 }
-#endif  // USE_DNNL
+#endif  // USE_DNNL USE_ZENDNN
 
 TEST(ReductionOpTest, ReduceMean_keepdims_double) {
   OpTester test("ReduceMean");
@@ -1754,15 +1887,21 @@ TEST(ReductionOpTest, ReduceMeanAxesInitializerOpset18) {
   test.AddInput<int64_t>("axes", {2}, {0, 2}, true);
   test.AddOutput<float>("reduced", {1, 2, 1}, {5.5f, 7.5f});
 
-  // TODO: DNNL, TensorRT, and OpenVINO dont support "axes" input in opset 18, re-enable after
+  // TODO: DNNL, ZENDNN, TensorRT, and OpenVINO dont support "axes" input in opset 18, re-enable after
   test.Run(OpTester::ExpectResult::kExpectSuccess, "",
-           {kDnnlExecutionProvider, kTensorrtExecutionProvider, kOpenVINOExecutionProvider, kDmlExecutionProvider});
+           {kDnnlExecutionProvider, kZendnnExecutionProvider, kTensorrtExecutionProvider, kOpenVINOExecutionProvider, kDmlExecutionProvider});
 }
 
-#ifdef USE_DNNL
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(ReductionOpTest, ReduceMean_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -1783,7 +1922,7 @@ TEST(ReductionOpTest, ReduceMean_bfloat16) {
 
   test.Run();
 }
-#endif  // USE_DNNL
+#endif  // USE_DNNL USE_ZENDNN
 
 TEST(ReductionOpTest, ReduceMean_double) {
   OpTester test("ReduceMean");
@@ -1835,9 +1974,9 @@ TEST(ReductionOpTest, ReduceMean_axes_input) {
   test.AddInput<int64_t>("axes", {2}, std::vector<int64_t>{0, 2}, true);
   test.AddOutput<float>("reduced", {1, 2, 1}, {5.5, 7.5});
 
-  // TODO: DNNL, TensorRT, and OpenVINO dont support "axes" input in opset 18, re-enable after
+  // TODO: DNNL, ZENDNN, TensorRT, and OpenVINO dont support "axes" input in opset 18, re-enable after
   test.Run(OpTester::ExpectResult::kExpectSuccess, "",
-           {kDnnlExecutionProvider, kTensorrtExecutionProvider, kOpenVINOExecutionProvider, kDmlExecutionProvider});
+           {kDnnlExecutionProvider, kZendnnExecutionProvider, kTensorrtExecutionProvider, kOpenVINOExecutionProvider, kDmlExecutionProvider});
 }
 
 TEST(ReductionOpTest, ReduceMean_do_not_keepdims_axes_input_initializer) {
@@ -1851,7 +1990,7 @@ TEST(ReductionOpTest, ReduceMean_do_not_keepdims_axes_input_initializer) {
 
   // TODO: DNNL, TensorRT, and OpenVINO dont support "axes" input in opset 18, re-enable after
   test.Run(OpTester::ExpectResult::kExpectSuccess, "",
-           {kDnnlExecutionProvider, kTensorrtExecutionProvider, kOpenVINOExecutionProvider, kDmlExecutionProvider});
+           {kDnnlExecutionProvider, kZendnnExecutionProvider, kTensorrtExecutionProvider, kOpenVINOExecutionProvider, kDmlExecutionProvider});
 }
 
 TEST(ReductionOpTest, ReduceMean0DTensor) {
@@ -1877,10 +2016,16 @@ TEST(ReductionOpTest, ReduceMean_keepdims_results_in_noop) {
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kTensorrtExecutionProvider});
 }
 
-#ifdef USE_DNNL
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(ReductionOpTest, ReduceMean_keepdims_results_in_noop_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -1903,10 +2048,16 @@ TEST(ReductionOpTest, ReduceMean_keepdims_results_in_shape_change) {
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kTensorrtExecutionProvider});
 }
 
-#ifdef USE_DNNL
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(ReductionOpTest, ReduceMean_keepdims_results_in_shape_change_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -2037,15 +2188,21 @@ TEST(ReductionOpTest, ReduceMinAxesInitializerOpset18) {
                         11.0f, 12.0f});
   test.AddInput<int64_t>("axes", {2}, {0, 2}, true);
   test.AddOutput<float>("reduced", {1, 2, 1}, {1.0f, 3.0f});
-  // TODO: DNNL, TensorRT, and OpenVINO dont support "axes" input in opset 18, re-enable after
+  // TODO: DNNL, ZENDNN, TensorRT, and OpenVINO dont support "axes" input in opset 18, re-enable after
   test.Run(OpTester::ExpectResult::kExpectSuccess, "",
-           {kDnnlExecutionProvider, kTensorrtExecutionProvider, kOpenVINOExecutionProvider, kDmlExecutionProvider});
+           {kDnnlExecutionProvider, kZendnnExecutionProvider, kTensorrtExecutionProvider, kOpenVINOExecutionProvider, kDmlExecutionProvider});
 }
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(ReductionOpTest, ReduceMin_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -2066,10 +2223,12 @@ TEST(ReductionOpTest, ReduceMin_bfloat16) {
   std::vector<std::unique_ptr<IExecutionProvider>> execution_providers;
 #if defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
-#endif  // USE_DNNL
+#elif defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
+#endif  // USE_ZENDNN
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
 }
-#endif  //  USE_DNNL
+#endif  //  USE_DNNL USE_ZENDNN
 
 TEST(ReductionOpTest, ReduceMin_double) {
   OpTester test("ReduceMin");
@@ -2378,10 +2537,16 @@ TEST(ReductionOpTest, ReduceSum_half_bert) {
 // Add more UTs for half as needed
 #endif
 
-#if defined(USE_CUDA) || defined(USE_ROCM) || defined(USE_DNNL)
+#if defined(USE_CUDA) || defined(USE_ROCM) || defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(ReductionOpTest, ReduceSum_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -2399,10 +2564,12 @@ TEST(ReductionOpTest, ReduceSum_bfloat16) {
   execution_providers.push_back(DefaultRocmExecutionProvider());
 #elif USE_DNNL
   execution_providers.push_back(DefaultDnnlExecutionProvider());
+#elif USE_ZENDNN
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
 #endif
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
 }
-#endif  //  USE_CUDA USE_ROCM USE_DNNL
+#endif  //  USE_CUDA USE_ROCM USE_DNNL USE_ZENDNN
 
 // on CUDA - this UT, with axes {0,2}, will go thru cudnn lib only if ATenOp is not initialized
 // on ROCM - miopen call succeeded, but results in data error, thus follow the same logic done in cudnn for now
@@ -2735,10 +2902,16 @@ TEST(ReductionOpTest, ReduceSumSquare) {
   test.Run();
 }
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(ReductionOpTest, ReduceSumSquare_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -2758,11 +2931,13 @@ TEST(ReductionOpTest, ReduceSumSquare_bfloat16) {
   test.AddOutput<BFloat16>("reduced", {1, 2, 1}, MakeBFloat16({247.0f, 403.f}));
   std::vector<std::unique_ptr<IExecutionProvider>> execution_providers;
 #if defined(USE_DNNL)
-  execution_providers.push_back(DefaultDnnlExecutionProvider());
-#endif  // USE_DNNL
+  execution_providers.push_back(DefaultDnnlExecutionProvider()); // USE_DNNL
+#elif defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider()); // USE_ZENDNN
+#endif
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
 }
-#endif  // USE_DNNL
+#endif  // USE_DNNL USE_ZENDNN
 
 TEST(ReductionOpTest, ReduceSumSquare_double) {
   OpTester test("ReduceSumSquare");
@@ -3002,15 +3177,21 @@ TEST(ReductionOpTest, ReduceProdAxesInitializerOpset18) {
                         11.0f, 12.0f});
   test.AddInput<int64_t>("axes", {2}, {0, 2}, true);
   test.AddOutput<float>("reduced", {1, 2, 1}, {5400.f, 88704.f});
-  // TODO: DNNL, TensorRT, and OpenVINO dont support "axes" input in opset 18, re-enable after
+  // TODO: DNNL, ZENDNN, TensorRT, and OpenVINO dont support "axes" input in opset 18, re-enable after
   test.Run(OpTester::ExpectResult::kExpectSuccess, "",
-           {kDnnlExecutionProvider, kTensorrtExecutionProvider, kOpenVINOExecutionProvider, kDmlExecutionProvider});
+           {kDnnlExecutionProvider, kZendnnExecutionProvider, kTensorrtExecutionProvider, kOpenVINOExecutionProvider, kDmlExecutionProvider});
 }
 
-#if defined(USE_DNNL)
+#if defined(USE_DNNL) || defined(USE_ZENDNN)
 TEST(ReductionOpTest, ReduceProd_bfloat16) {
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }
@@ -3029,11 +3210,13 @@ TEST(ReductionOpTest, ReduceProd_bfloat16) {
   test.AddOutput<BFloat16>("reduced", {1, 2, 1}, MakeBFloat16({5400.f, 88704.f}));
   std::vector<std::unique_ptr<IExecutionProvider>> execution_providers;
 #if defined(USE_DNNL)
-  execution_providers.push_back(DefaultDnnlExecutionProvider());
-#endif  // USE_DNNL
+  execution_providers.push_back(DefaultDnnlExecutionProvider()); // USE_DNNL
+#elif defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider()); // USE_ZENDNN
+#endif
   test.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
 }
-#endif  //  USE_DNNL
+#endif  //  USE_DNNL USE_ZENDNN
 
 TEST(ReductionOpTest, ReduceProd_int32) {
   OpTester test("ReduceProd");
@@ -3542,6 +3725,7 @@ TEST(ReductionOpTest, ReduceDimWithZero1) {
                    kCoreMLExecutionProvider,
                    kCudaExecutionProvider,
                    kDnnlExecutionProvider,
+                   kZendnnExecutionProvider,
                    kMIGraphXExecutionProvider,
                    kOpenVINOExecutionProvider,
                    kQnnExecutionProvider,
@@ -3592,6 +3776,7 @@ TEST(ReductionOpTest, ReduceDimWithZero2) {
                    kCoreMLExecutionProvider,
                    kCudaExecutionProvider,
                    kDnnlExecutionProvider,
+                   kZendnnExecutionProvider,
                    kMIGraphXExecutionProvider,
                    kOpenVINOExecutionProvider,
                    kQnnExecutionProvider,
@@ -3667,6 +3852,7 @@ TEST(ReductionOpTest, ReduceL1_noop_axes_input_initializer_opset_18) {
       {kTensorrtExecutionProvider,
        kOpenVINOExecutionProvider,
        kDnnlExecutionProvider,
+       kZendnnExecutionProvider,
        kDmlExecutionProvider});
 }
 
@@ -3697,6 +3883,7 @@ TEST(ReductionOpTest, ReduceL2_noop_axes_input_initializer_opset_18) {
       {kTensorrtExecutionProvider,
        kOpenVINOExecutionProvider,
        kDnnlExecutionProvider,
+       kZendnnExecutionProvider,
        kDmlExecutionProvider});
 }
 
@@ -3727,6 +3914,7 @@ TEST(ReductionOpTest, ReduceMax_noop_axes_input_initializer_opset_18) {
       {kTensorrtExecutionProvider,
        kOpenVINOExecutionProvider,
        kDnnlExecutionProvider,
+       kZendnnExecutionProvider,
        kDmlExecutionProvider});
 }
 
@@ -3757,6 +3945,7 @@ TEST(ReductionOpTest, ReduceMean_noop_axes_input_initializer_opset_18) {
       {kTensorrtExecutionProvider,
        kOpenVINOExecutionProvider,
        kDnnlExecutionProvider,
+       kZendnnExecutionProvider,
        kDmlExecutionProvider});
 }
 
@@ -3787,6 +3976,7 @@ TEST(ReductionOpTest, ReduceMin_noop_axes_input_initializer_opset_18) {
       {kTensorrtExecutionProvider,
        kOpenVINOExecutionProvider,
        kDnnlExecutionProvider,
+       kZendnnExecutionProvider,
        kDmlExecutionProvider});
 }
 
@@ -3817,6 +4007,7 @@ TEST(ReductionOpTest, ReduceProd_noop_axes_input_initializer_opset_18) {
       {kTensorrtExecutionProvider,
        kOpenVINOExecutionProvider,
        kDnnlExecutionProvider,
+       kZendnnExecutionProvider,
        kDmlExecutionProvider});
 }
 
@@ -3871,6 +4062,7 @@ TEST(ReductionOpTest, ReduceSumSquare_noop_axes_input_initializer_opset_18) {
       {kTensorrtExecutionProvider,
        kOpenVINOExecutionProvider,
        kDnnlExecutionProvider,
+       kZendnnExecutionProvider,
        kDmlExecutionProvider});
 }
 
@@ -5781,6 +5973,7 @@ void test_empty_set(const std::string& op, int opset, bool axes_as_input, float 
           kCudaExecutionProvider,
           kDmlExecutionProvider,
           kDnnlExecutionProvider,
+          kZendnnExecutionProvider,
           kMIGraphXExecutionProvider,
           kOpenVINOExecutionProvider,
           kQnnExecutionProvider,

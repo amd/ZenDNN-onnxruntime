@@ -50,6 +50,7 @@ inline bool HasRawData(const ONNX_NAMESPACE::TensorProto& ten_proto) {
       schema_func(ONNX_NAMESPACE::OpSchema(#name, __FILE__, __LINE__))
 
 void RegisterContribSchemas();
+void RegisterVitisAISchemas();
 void RegisterNchwcSchemas();
 void RegisterQuantizationSchemas();
 

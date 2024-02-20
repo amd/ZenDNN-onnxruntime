@@ -1,5 +1,32 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+*******************************************************************************/
+
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
+
+/*******************************************************************************
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+* LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+* OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
+*******************************************************************************/
 
 #include "core/session/onnxruntime_c_api.h"
 #include "core/session/allocator_adapters.h"
@@ -65,6 +92,14 @@ ProviderInfo_CANN* TryGetProviderInfo_CANN();
 #include "core/providers/dnnl/dnnl_execution_provider_info.h"
 namespace onnxruntime {
 ProviderInfo_Dnnl* TryGetProviderInfo_Dnnl();
+}
+#endif
+
+#ifdef USE_ZENDNN
+#include "core/providers/zendnn/zendnn_provider_factory.h"
+#include "core/providers/zendnn/zendnn_execution_provider_info.h"
+namespace onnxruntime {
+ProviderInfo_Zendnn* TryGetProviderInfo_Zendnn();
 }
 #endif
 
@@ -2684,10 +2719,15 @@ static constexpr OrtApi ort_api_1_to_17 = {
     // End of Version 14 - DO NOT MODIFY ABOVE (see above text for more information)
 
     &OrtApis::SessionOptionsAppendExecutionProvider_Dnnl,
+    &OrtApis::SessionOptionsAppendExecutionProvider_Zendnn,
     &OrtApis::CreateDnnlProviderOptions,
+    &OrtApis::CreateZendnnProviderOptions,
     &OrtApis::UpdateDnnlProviderOptions,
+    &OrtApis::UpdateZendnnProviderOptions,
     &OrtApis::GetDnnlProviderOptionsAsString,
+    &OrtApis::GetZendnnProviderOptionsAsString,
     &OrtApis::ReleaseDnnlProviderOptions,
+    &OrtApis::ReleaseZendnnProviderOptions,
     &OrtApis::KernelInfo_GetNodeName,
     &OrtApis::KernelInfo_GetLogger,
     &OrtApis::KernelContext_GetLogger,
@@ -2751,9 +2791,9 @@ static_assert(offsetof(OrtApi, SessionOptionsAppendExecutionProvider_MIGraphX) /
 static_assert(offsetof(OrtApi, ReleaseKernelInfo) / sizeof(void*) == 218, "Size of version 12 API cannot change");
 static_assert(offsetof(OrtApi, ReleaseCANNProviderOptions) / sizeof(void*) == 224, "Size of version 13 API cannot change");
 static_assert(offsetof(OrtApi, GetSessionConfigEntry) / sizeof(void*) == 238, "Size of version 14 API cannot change");
-static_assert(offsetof(OrtApi, GetBuildInfoString) / sizeof(void*) == 254, "Size of version 15 API cannot change");
-static_assert(offsetof(OrtApi, KernelContext_GetResource) / sizeof(void*) == 265, "Size of version 16 API cannot change");
-static_assert(offsetof(OrtApi, SetUserLoggingFunction) / sizeof(void*) == 266, "Size of version 17 API cannot change");
+static_assert(offsetof(OrtApi, GetBuildInfoString) / sizeof(void*) == 259, "Size of version 15 API cannot change");
+static_assert(offsetof(OrtApi, KernelContext_GetResource) / sizeof(void*) == 270, "Size of version 16 API cannot change");
+static_assert(offsetof(OrtApi, SetUserLoggingFunction) / sizeof(void*) == 271, "Size of version 17 API cannot change");
 
 // So that nobody forgets to finish an API version, this check will serve as a reminder:
 static_assert(std::string_view(ORT_VERSION) == "1.17.0",

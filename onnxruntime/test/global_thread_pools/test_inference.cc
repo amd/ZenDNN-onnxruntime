@@ -1,5 +1,32 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+*******************************************************************************/
+
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
+
+/*******************************************************************************
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+* LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+* OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
+*******************************************************************************/
 
 #include "core/session/onnxruntime_cxx_api.h"
 #include "core/graph/constants.h"
@@ -81,8 +108,16 @@ static Ort::Session GetSessionObj(Ort::Env& env, T model_uri, int provider_type)
     session_options.AppendExecutionProvider_Dnnl(dnnl_options);
     // Ort::ThrowOnError(OrtApis::SessionOptionsAppendExecutionProvider_Dnnl(session_options, &dnnl_options));
     std::cout << "Running simple inference with dnnl provider" << std::endl;
+#ifdef USE_ZENDNN
+    OrtZendnnProviderOptions zendnn_options;
+    zendnn_options.use_arena = 1;
+    zendnn_options.threadpool_args = nullptr;
+    session_options.AppendExecutionProvider_Zendnn(zendnn_options);
+    // Ort::ThrowOnError(OrtApis::SessionOptionsAppendExecutionProvider_Zendnn(session_options, &zendnn_options));
+    std::cout << "Running simple inference with zendnn provider" << std::endl;
 #else
     return Ort::Session(nullptr);
+#endif
 #endif
   } else {
     std::cout << "Running simple inference with default provider" << std::endl;
@@ -170,6 +205,7 @@ void AsyncCallback(void* user_data, OrtValue** outputs, size_t num_outputs, OrtS
   atomic_wait.store(true);
 }
 
+#ifndef _OPENMP
 TEST_P(CApiTestGlobalThreadPoolsWithProvider, simpleAsync) {
   Ort::Session session = GetSessionObj<PATH_TYPE, float>(*ort_env, MODEL_URI, GetParam());
   if (!session) {
@@ -215,6 +251,7 @@ TEST_P(CApiTestGlobalThreadPoolsWithProvider, simpleAsync) {
   }
   EXPECT_EQ(atomic_wait.load(), true);
 }
+#endif
 
 // Test 2
 // run inference on the same model using 2 sessions

@@ -1,6 +1,35 @@
 #!/usr/bin/env python3
+
+
+#*******************************************************************************
+# Modifications Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+#******************************************************************************
+
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
+
+#*******************************************************************************
+#
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and associated documentation files (the
+# "Software"), to deal in the Software without restriction, including
+# without limitation the rights to use, copy, modify, merge, publish,
+# distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so, subject to
+# the following conditions:
+#
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+# LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+# WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+#******************************************************************************
 
 import argparse
 import contextlib
@@ -498,6 +527,7 @@ def parse_arguments():
     )
     parser.add_argument("--use_mimalloc", action="store_true", help="Use mimalloc allocator")
     parser.add_argument("--use_dnnl", action="store_true", help="Build with DNNL.")
+    parser.add_argument("--use_zendnn", action="store_true", help="Build with ZENDNN.")
     parser.add_argument(
         "--dnnl_gpu_runtime", action="store", default="", type=str.lower, help="e.g. --dnnl_gpu_runtime ocl"
     )
@@ -538,6 +568,7 @@ def parse_arguments():
     parser.add_argument("--use_rknpu", action="store_true", help="Build with RKNPU.")
     parser.add_argument("--use_preinstalled_eigen", action="store_true", help="Use pre-installed Eigen.")
     parser.add_argument("--eigen_path", help="Path to pre-installed Eigen.")
+    parser.add_argument("--use_openmp", action="store_true", help="Build with OpenMP")
     parser.add_argument("--enable_msinternal", action="store_true", help="Enable for Microsoft internal builds only.")
     parser.add_argument("--llvm_path", help="Path to llvm dir")
     parser.add_argument("--use_vitisai", action="store_true", help="Build with Vitis-AI")
@@ -1005,8 +1036,10 @@ def generate_build_tree(
         "-Donnxruntime_BUILD_SHARED_LIB=" + ("ON" if args.build_shared_lib else "OFF"),
         "-Donnxruntime_BUILD_APPLE_FRAMEWORK=" + ("ON" if args.build_apple_framework else "OFF"),
         "-Donnxruntime_USE_DNNL=" + ("ON" if args.use_dnnl else "OFF"),
+        "-Donnxruntime_USE_ZENDNN=" + ("ON" if args.use_zendnn else "OFF"),
         "-Donnxruntime_USE_NNAPI_BUILTIN=" + ("ON" if args.use_nnapi else "OFF"),
         "-Donnxruntime_USE_RKNPU=" + ("ON" if args.use_rknpu else "OFF"),
+        "-Donnxruntime_USE_OPENMP=" + ("ON" if args.use_openmp and not (args.use_nnapi or args.android or (args.ios and is_macOS()) or args.use_rknpu) else "OFF" ),
         "-Donnxruntime_USE_LLVM=" + ("ON" if args.use_tvm else "OFF"),
         "-Donnxruntime_ENABLE_MICROSOFT_INTERNAL=" + ("ON" if args.enable_msinternal else "OFF"),
         "-Donnxruntime_USE_VITISAI=" + ("ON" if args.use_vitisai else "OFF"),
@@ -2132,6 +2165,7 @@ def build_python_wheel(
     use_rocm,
     rocm_version,
     use_dnnl,
+    use_zendnn,
     use_tensorrt,
     use_openvino,
     use_tvm,
@@ -2185,6 +2219,8 @@ def build_python_wheel(
             args.append("--use_openvino")
         elif use_dnnl:
             args.append("--use_dnnl")
+        elif use_zendnn:
+            args.append("--use_zendnn")
         elif use_tvm:
             args.append("--use_tvm")
         elif use_vitisai:
@@ -2215,6 +2251,7 @@ def build_nuget_package(
     use_openvino,
     use_tensorrt,
     use_dnnl,
+    use_zendnn,
     use_tvm,
     use_winml,
     use_qnn,
@@ -2258,6 +2295,9 @@ def build_nuget_package(
     elif use_dnnl:
         execution_provider = "/p:ExecutionProvider=dnnl"
         package_name = "/p:OrtPackageId=Microsoft.ML.OnnxRuntime.DNNL"
+    elif use_zendnn:
+        execution_provider = "/p:ExecutionProvider=zendnn"
+        package_name = "/p:OrtPackageId=Microsoft.ML.OnnxRuntime.ZENDNN"
     elif use_cuda:
         package_name = "/p:OrtPackageId=Microsoft.ML.OnnxRuntime.Gpu"
     elif use_rocm:
@@ -2361,7 +2401,7 @@ def build_nuget_package(
         log.info(f"nuget package was created in the {config} build output directory.")
 
 
-def run_csharp_tests(source_dir, build_dir, use_cuda, use_openvino, use_tensorrt, use_dnnl, enable_training_apis):
+def run_csharp_tests(source_dir, build_dir, use_cuda, use_openvino, use_tensorrt, use_dnnl, use_zendnn, enable_training_apis):
     # Currently only running tests on windows.
     if not is_windows():
         return
@@ -2375,6 +2415,8 @@ def run_csharp_tests(source_dir, build_dir, use_cuda, use_openvino, use_tensorrt
         macros += "USE_TENSORRT;"
     if use_dnnl:
         macros += "USE_DNNL;"
+    if use_zendnn:
+        macros += "USE_ZENDNN;"
     if use_cuda:
         macros += "USE_CUDA;"
     if enable_training_apis:
@@ -2814,6 +2856,7 @@ def main():
                 args.use_rocm,
                 args.rocm_version,
                 args.use_dnnl,
+                args.use_zendnn,
                 args.use_tensorrt,
                 args.use_openvino,
                 args.use_tvm,
@@ -2844,6 +2887,7 @@ def main():
                 args.use_openvino,
                 args.use_tensorrt,
                 args.use_dnnl,
+                args.use_zendnn,
                 args.use_tvm,
                 args.use_winml,
                 args.use_qnn,
@@ -2859,6 +2903,7 @@ def main():
             args.use_openvino,
             args.use_tensorrt,
             args.use_dnnl,
+            args.use_zendnn,
             args.enable_training_apis,
         )
 

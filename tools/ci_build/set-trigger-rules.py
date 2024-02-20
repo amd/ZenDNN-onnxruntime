@@ -18,6 +18,7 @@ skip_js_changes = [
     "linux-cpu-aten-pipeline.yml",
     "linux-cpu-eager-pipeline.yml",
     "linux-dnnl-ci-pipeline.yml",
+    "linux-zendnn-ci-pipeline.yml",
     "linux-gpu-ci-pipeline.yml",
     "linux-gpu-tensorrt-ci-pipeline.yml",
     "linux-migraphx-ci-pipeline.yml",

@@ -1,5 +1,32 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+*******************************************************************************/
+
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
+
+/*******************************************************************************
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+* LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+* OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
+*******************************************************************************/
 
 #include <set>
 #include <iostream>
@@ -40,7 +67,7 @@ void usage() {
       "\t-r [repeat]: Specifies the number of times to repeat\n"
       "\t-v: verbose\n"
       "\t-n [test_case_name]: Specifies a single test case to run.\n"
-      "\t-e [EXECUTION_PROVIDER]: EXECUTION_PROVIDER could be 'cpu', 'cuda', 'dnnl', 'tensorrt', "
+      "\t-e [EXECUTION_PROVIDER]: EXECUTION_PROVIDER could be 'cpu', 'cuda', 'dnnl', 'zendnn', 'tensorrt', "
       "'openvino', 'rocm', 'migraphx', 'acl', 'armnn', 'xnnpack', 'nnapi', 'qnn', 'snpe' or 'coreml'. "
       "Default: 'cpu'.\n"
       "\t-p: Pause after launch, can attach debugger and continue\n"
@@ -157,6 +184,7 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
   int p_models = GetNumCpuCores();
   bool enable_cuda = false;
   bool enable_dnnl = false;
+  bool enable_zendnn = false;
   bool enable_openvino = false;
   bool enable_tensorrt = false;
   bool enable_mem_pattern = true;
@@ -233,6 +261,8 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
             enable_cuda = true;
           } else if (!CompareCString(optarg, ORT_TSTR("dnnl"))) {
             enable_dnnl = true;
+          } else if (!CompareCString(optarg, ORT_TSTR("zendnn"))) {
+            enable_zendnn = true;
           } else if (!CompareCString(optarg, ORT_TSTR("openvino"))) {
             enable_openvino = true;
           } else if (!CompareCString(optarg, ORT_TSTR("tensorrt"))) {
@@ -448,6 +478,21 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
       sf.AppendExecutionProvider_Dnnl(dnnl_options);
 #else
       fprintf(stderr, "DNNL is not supported in this build");
+      return -1;
+#endif
+    }
+    if (enable_zendnn) {
+#ifdef USE_ZENDNN 
+      // Generate zendnn_options to optimize zendnn performance
+      OrtZendnnProviderOptions zendnn_options;
+      zendnn_options.use_arena = enable_cpu_mem_arena ? 1 : 0;
+      zendnn_options.threadpool_args = nullptr;
+#if defined(ZENDNN_ORT_THREAD)
+      zendnn_options.threadpool_args = static_cast<void*>(TestEnv::GetDefaultThreadPool(Env::Default()));
+#endif  // defined(ZENDNN_ORT_THREAD)
+      sf.AppendExecutionProvider_Zendnn(zendnn_options);
+#else
+      fprintf(stderr, "ZENDNN is not supported in this build");
       return -1;
 #endif
     }
@@ -773,6 +818,10 @@ select from 'TF8', 'TF16', 'UINT8', 'FLOAT', 'ITENSOR'. \n)");
                                                      ORT_TSTR("test_resnet101v2"), ORT_TSTR("test_vgg19"), ORT_TSTR("tf_inception_resnet_v2"), ORT_TSTR("tf_inception_v1"), ORT_TSTR("tf_inception_v3"), ORT_TSTR("tf_inception_v4"), ORT_TSTR("tf_mobilenet_v1_1.0_224"),
                                                      ORT_TSTR("tf_mobilenet_v2_1.0_224"), ORT_TSTR("tf_mobilenet_v2_1.4_224"), ORT_TSTR("tf_nasnet_large"), ORT_TSTR("tf_pnasnet_large"), ORT_TSTR("tf_resnet_v1_50"), ORT_TSTR("tf_resnet_v1_101"), ORT_TSTR("tf_resnet_v1_101"),
                                                      ORT_TSTR("tf_resnet_v2_101"), ORT_TSTR("tf_resnet_v2_152"), ORT_TSTR("batchnorm_example_training_mode"), ORT_TSTR("batchnorm_epsilon_training_mode")};
+    static const ORTCHAR_T* zendnn_disabled_tests[] = {ORT_TSTR("test_densenet121"), ORT_TSTR("test_resnet18v2"), ORT_TSTR("test_resnet34v2"), ORT_TSTR("test_resnet50v2"), ORT_TSTR("test_resnet101v2"),
+                                                     ORT_TSTR("test_resnet101v2"), ORT_TSTR("test_vgg19"), ORT_TSTR("tf_inception_resnet_v2"), ORT_TSTR("tf_inception_v1"), ORT_TSTR("tf_inception_v3"), ORT_TSTR("tf_inception_v4"), ORT_TSTR("tf_mobilenet_v1_1.0_224"),
+                                                     ORT_TSTR("tf_mobilenet_v2_1.0_224"), ORT_TSTR("tf_mobilenet_v2_1.4_224"), ORT_TSTR("tf_nasnet_large"), ORT_TSTR("tf_pnasnet_large"), ORT_TSTR("tf_resnet_v1_50"), ORT_TSTR("tf_resnet_v1_101"), ORT_TSTR("tf_resnet_v1_101"),
+                                                     ORT_TSTR("tf_resnet_v2_101"), ORT_TSTR("tf_resnet_v2_152"), ORT_TSTR("batchnorm_example_training_mode"), ORT_TSTR("batchnorm_epsilon_training_mode")};
     static const ORTCHAR_T* qnn_disabled_tests[] = {
         ORT_TSTR("nllloss_NCd1d2d3_none_no_weight_negative_ii"),
         ORT_TSTR("nllloss_NCd1d2d3_none_no_weight_negative_ii_expanded"),
@@ -811,6 +860,12 @@ select from 'TF8', 'TF16', 'UINT8', 'FLOAT', 'ITENSOR'. \n)");
       // these models run but disabled tests to keep memory utilization low
       // This will be removed after LRU implementation
       all_disabled_tests.insert(std::begin(dnnl_disabled_tests), std::end(dnnl_disabled_tests));
+      all_disabled_tests.insert(std::begin(float8_tests), std::end(float8_tests));
+    }
+      if (enable_zendnn) {
+      // these models run but disabled tests to keep memory utilization low
+      // This will be removed after LRU implementation
+      all_disabled_tests.insert(std::begin(zendnn_disabled_tests), std::end(zendnn_disabled_tests));
       all_disabled_tests.insert(std::begin(float8_tests), std::end(float8_tests));
     }
     if (enable_qnn) {

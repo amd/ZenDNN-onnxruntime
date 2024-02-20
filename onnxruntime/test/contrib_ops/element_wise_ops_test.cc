@@ -1,5 +1,32 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+*******************************************************************************/
+
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
+
+/*******************************************************************************
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+* LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+* OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
+*******************************************************************************/
 
 #include "gtest/gtest.h"
 
@@ -10,6 +37,7 @@
 #include "core/mlas/inc/mlas.h"
 #include "test/common/cuda_op_test_utils.h"
 #include "test/common/dnnl_op_test_utils.h"
+#include "test/common/zendnn_op_test_utils.h"
 #include "test/common/tensor_op_test_utils.h"
 #include "test/providers/provider_test_utils.h"
 
@@ -147,7 +175,7 @@ TEST(BiasGeluTest, MLFloat16) {
 }
 #endif
 
-#if defined(USE_CUDA) || defined(USE_ROCM) || defined(USE_DNNL)
+#if defined(USE_CUDA) || defined(USE_ROCM) || defined(USE_DNNL) || defined(USE_ZENDNN)
 static void RunBiasGeluTestBFloat16(const std::vector<int64_t>& input_dims, const std::vector<int64_t>& bias_dims) {
   RandomValueGenerator random{2333};
   std::vector<float> input_data = random.Uniform<float>(input_dims, 0.5f, 1.5f);
@@ -168,6 +196,8 @@ static void RunBiasGeluTestBFloat16(const std::vector<int64_t>& input_dims, cons
   execution_providers.push_back(DefaultRocmExecutionProvider());
 #elif defined(USE_DNNL)
   execution_providers.push_back(DefaultDnnlExecutionProvider());
+#elif defined(USE_ZENDNN)
+  execution_providers.push_back(DefaultZendnnExecutionProvider());
 #elif defined(USE_DML)
   execution_providers.push_back(DefaultDmlExecutionProvider());
 #endif
@@ -184,6 +214,12 @@ TEST(BiasGeluTest, BFloat16) {
 #endif
 #ifdef USE_DNNL
   if (!DnnlHasBF16Support()) {
+    LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
+    return;
+  }
+#endif
+#ifdef USE_ZENDNN
+  if (!ZendnnHasBF16Support()) {
     LOGS_DEFAULT(WARNING) << "Hardware does NOT support BF16";
     return;
   }

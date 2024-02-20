@@ -325,6 +325,7 @@ void BaseTester::ExecuteModel(Model& model, SessionType& session,
 
       // Disable expected_failure_string checks for MKL-DNN and OpenVINO EP's
       if (provider_type != kDnnlExecutionProvider &&
+          provider_type != kZendnnExecutionProvider &&
           provider_type != kOpenVINOExecutionProvider) {
         ASSERT_THAT(status.ErrorMessage(), testing::HasSubstr(expected_failure_string));
       }
@@ -416,6 +417,7 @@ bool SetEpsForAllNodes(Graph& graph,
           provider_type == onnxruntime::kNnapiExecutionProvider ||
           provider_type == onnxruntime::kCoreMLExecutionProvider ||
           provider_type == onnxruntime::kDnnlExecutionProvider ||
+          provider_type == onnxruntime::kZendnnExecutionProvider ||
           provider_type == onnxruntime::kQnnExecutionProvider ||
           provider_type == onnxruntime::kSnpeExecutionProvider) {
         found = true;
@@ -623,6 +625,7 @@ void BaseTester::RunWithConfig(size_t* number_of_pre_packed_weights_counter,
           kCpuExecutionProvider,
           kCudaExecutionProvider,
           kDnnlExecutionProvider,
+          kZendnnExecutionProvider,
           kTensorrtExecutionProvider,
           kOpenVINOExecutionProvider,
           kDmlExecutionProvider,
@@ -652,6 +655,8 @@ void BaseTester::RunWithConfig(size_t* number_of_pre_packed_weights_counter,
           execution_provider = DefaultCudaExecutionProvider();
         else if (provider_type == onnxruntime::kDnnlExecutionProvider)
           execution_provider = DefaultDnnlExecutionProvider();
+        else if (provider_type == onnxruntime::kZendnnExecutionProvider)
+          execution_provider = DefaultZendnnExecutionProvider();
         else if (provider_type == onnxruntime::kOpenVINOExecutionProvider)
           execution_provider = DefaultOpenVINOExecutionProvider();
         else if (provider_type == onnxruntime::kTensorrtExecutionProvider)

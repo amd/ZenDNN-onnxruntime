@@ -1,5 +1,32 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+*******************************************************************************/
+
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
+
+/*******************************************************************************
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+* LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+* OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
+*******************************************************************************/
 
 #include "orttraining/test/gradient/gradient_op_test_utils.h"
 
@@ -61,6 +88,7 @@ void GradientOpTester::Run(int output_index_to_use_as_loss,
         kCudaExecutionProvider,
         kRocmExecutionProvider,
         kDnnlExecutionProvider,
+        kZendnnExecutionProvider,
         kTensorrtExecutionProvider,
     };
 
@@ -90,6 +118,8 @@ void GradientOpTester::Run(int output_index_to_use_as_loss,
           execution_provider = DefaultCudaExecutionProvider();
         else if (entry->Type() == onnxruntime::kDnnlExecutionProvider)
           execution_provider = DefaultDnnlExecutionProvider();
+        else if (entry->Type() == onnxruntime::kZendnnExecutionProvider)
+          execution_provider = DefaultZendnnExecutionProvider();
         else if (entry->Type() == onnxruntime::kTensorrtExecutionProvider)
           execution_provider = DefaultTensorrtExecutionProvider();
         // skip if execution provider is disabled
@@ -112,6 +142,8 @@ void GradientOpTester::Run(int output_index_to_use_as_loss,
           execution_provider = DefaultCudaExecutionProvider();
         else if (provider_type == onnxruntime::kDnnlExecutionProvider)
           execution_provider = DefaultDnnlExecutionProvider();
+        else if (provider_type == onnxruntime::kZendnnExecutionProvider)
+          execution_provider = DefaultZendnnExecutionProvider();
         else if (provider_type == onnxruntime::kTensorrtExecutionProvider)
           execution_provider = DefaultTensorrtExecutionProvider();
         else if (provider_type == onnxruntime::kRocmExecutionProvider)
@@ -134,6 +166,9 @@ void GradientOpTester::Run(int output_index_to_use_as_loss,
 
           // provider types that don't use the KernelRegistry
           if (provider_type == onnxruntime::kDnnlExecutionProvider) {
+            continue;
+          }
+          if (provider_type == onnxruntime::kZendnnExecutionProvider) {
             continue;
           }
 

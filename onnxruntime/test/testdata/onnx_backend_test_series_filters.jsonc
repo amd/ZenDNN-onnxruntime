@@ -1,3 +1,27 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+* LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+* OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
+*******************************************************************************/
+
 {
     // If possible, add a test to onnx_backend_test_series_overrides.jsonc instead of this file.
     // This file results in skipping tests, that one allows looser tolerance.
@@ -274,6 +298,117 @@
         "^test_negative_log_likelihood.*", // Does not support 5-D or above tensors for SUB op.
         "^test_softmax_cross_entropy.*", // Does not support 5-D or above tensors for SUB op.
         // TODO: need to fix DNNL implementation for updated operators in ONNX 1.13
+        "^test_group_normalization_epsilon_cpu",
+        "^test_group_normalization_epsilon_expanded_cpu",
+        "^test_group_normalization_example_cpu",
+        "^test_group_normalization_example_expanded_cpu",
+        "^test_logsoftmax_large_number_expanded_ver18_cpu",
+        "^test_mvn_expanded_ver18_cpu",
+        "^test_reduce_l1_do_not_keepdims_example_cpu",
+        "^test_reduce_l1_do_not_keepdims_random_cpu",
+        "^test_reduce_l1_keep_dims_example_cpu",
+        "^test_reduce_l1_keep_dims_random_cpu",
+        "^test_reduce_l1_negative_axes_keep_dims_example_cpu",
+        "^test_reduce_l1_negative_axes_keep_dims_random_cpu",
+        "^test_reduce_l2_do_not_keepdims_example_cpu",
+        "^test_reduce_l2_do_not_keepdims_random_cpu",
+        "^test_reduce_l2_keep_dims_example_cpu",
+        "^test_reduce_l2_keep_dims_random_cpu",
+        "^test_reduce_l2_negative_axes_keep_dims_example_cpu",
+        "^test_reduce_l2_negative_axes_keep_dims_random_cpu",
+        "^test_reduce_log_sum_asc_axes_cpu",
+        "^test_reduce_log_sum_desc_axes_cpu",
+        "^test_reduce_log_sum_negative_axes_cpu",
+        "^test_reduce_max_do_not_keepdims_example_cpu",
+        "^test_reduce_max_do_not_keepdims_random_cpu",
+        "^test_reduce_max_keepdims_example_cpu",
+        "^test_reduce_max_keepdims_random_cpu",
+        "^test_reduce_max_negative_axes_keepdims_example_cpu",
+        "^test_reduce_max_negative_axes_keepdims_random_cpu",
+        "^test_reduce_mean_do_not_keepdims_example_cpu",
+        "^test_reduce_mean_do_not_keepdims_random_cpu",
+        "^test_reduce_mean_keepdims_example_cpu",
+        "^test_reduce_mean_keepdims_random_cpu",
+        "^test_reduce_mean_negative_axes_keepdims_example_cpu",
+        "^test_reduce_mean_negative_axes_keepdims_random_cpu",
+        "^test_reduce_min_do_not_keepdims_example_cpu",
+        "^test_reduce_min_do_not_keepdims_random_cpu",
+        "^test_reduce_min_keepdims_example_cpu",
+        "^test_reduce_min_keepdims_random_cpu",
+        "^test_reduce_min_negative_axes_keepdims_example_cpu",
+        "^test_reduce_min_negative_axes_keepdims_random_cpu",
+        "^test_reduce_prod_do_not_keepdims_example_cpu",
+        "^test_reduce_prod_do_not_keepdims_random_cpu",
+        "^test_reduce_prod_keepdims_example_cpu",
+        "^test_reduce_prod_keepdims_random_cpu",
+        "^test_reduce_prod_negative_axes_keepdims_example_cpu",
+        "^test_reduce_prod_negative_axes_keepdims_random_cpu",
+        "^test_reduce_sum_square_do_not_keepdims_example_cpu",
+        "^test_reduce_sum_square_do_not_keepdims_random_cpu",
+        "^test_reduce_sum_square_keepdims_example_cpu",
+        "^test_reduce_sum_square_keepdims_random_cpu",
+        "^test_reduce_sum_square_negative_axes_keepdims_example_cpu",
+        "^test_reduce_sum_square_negative_axes_keepdims_random_cpu",
+        "^test_softmax_large_number_expanded_ver18_cpu",
+        "^test_layer_normalization_2d_axis1_expanded_ver18_cpu",
+        "^test_layer_normalization_2d_axis_negative_1_expanded_ver18_cpu",
+        "^test_layer_normalization_3d_axis1_epsilon_expanded_ver18_cpu",
+        "^test_layer_normalization_3d_axis2_epsilon_expanded_ver18_cpu",
+        "^test_layer_normalization_3d_axis_negative_1_epsilon_expanded_ver18_cpu",
+        "^test_layer_normalization_3d_axis_negative_2_epsilon_expanded_ver18_cpu",
+        "^test_layer_normalization_4d_axis1_expanded_ver18_cpu",
+        "^test_layer_normalization_4d_axis2_expanded_ver18_cpu",
+        "^test_layer_normalization_4d_axis3_expanded_ver18_cpu",
+        "^test_layer_normalization_4d_axis_negative_1_expanded_ver18_cpu",
+        "^test_layer_normalization_4d_axis_negative_2_expanded_ver18_cpu",
+        "^test_layer_normalization_4d_axis_negative_3_expanded_ver18_cpu",
+        "^test_layer_normalization_default_axis_expanded_ver18_cpu",
+        // onnx 1.15 (opset 20) new and updated op tests (test_affine_grid_???_expanded utilizes ConstantOfShape so it needs to be skipped as well)
+        // https://dev.azure.com/onnxruntime/onnxruntime/_build/results?buildId=1139541&view=logs&j=249e9d58-0012-5814-27cf-6a201adbd9cf&t=bb33e81f-0527-50e0-0fd2-e94f509f0a82
+        // only supported with cpu provider
+        "^test_affine_grid_2d",
+        "^test_affine_grid_2d_align_corners",
+        "^test_affine_grid_2d_align_corners_expanded",
+        "^test_affine_grid_2d_expanded",
+        "^test_affine_grid_3d",
+        "^test_affine_grid_3d_align_corners",
+        "^test_affine_grid_3d_align_corners_expanded",
+        "^test_affine_grid_3d_expanded",
+        "^test_constantofshape_float_ones",
+        "^test_constantofshape_int_shape_zero",
+        "^test_constantofshape_int_zeros",
+        // https://dev.azure.com/onnxruntime/onnxruntime/_build/results?buildId=1141563&view=logs&j=a018b46d-e41a-509d-6581-c95fdaa42fcd&t=d61c1d37-f101-5d28-982f-e5931b720302
+        "^test_gelu_tanh_2_cpu",
+        "^test_gelu_tanh_2_expanded_cpu",
+        "^test_reduce_max_bool_inputs",
+        "^test_reduce_min_bool_inputs",
+        "^test_reduce_min_empty_set",
+        "^test_reduce_l1_empty_set",
+        "^test_reduce_l1_empty_set_expanded",
+        "^test_reduce_l2_empty_set",
+        "^test_reduce_l2_empty_set_expanded",
+        "^test_reduce_log_sum_empty_set",
+        "^test_reduce_log_sum_empty_set_expanded",
+        "^test_reduce_log_sum_exp_empty_set",
+        "^test_reduce_log_sum_exp_empty_set_expanded",
+        "^test_reduce_prod_empty_set",
+        "^test_reduce_sum_empty_set",
+        "^test_reduce_sum_empty_set_non_reduced_axis_zero",
+        "^test_reduce_sum_square_empty_set",
+        "^test_reduce_sum_square_empty_set_expanded"
+    ],
+    "current_failing_tests_ZENDNN": [
+        "^test_range_float_type_positive_delta_expanded",
+        "^test_range_int32_type_negative_delta_expanded",
+        "^test_averagepool_2d_ceil",
+        "^test_maxpool_2d_ceil",
+        "^test_maxpool_2d_dilations",
+        "^test_maxpool_2d_uint8",
+        "^test_maxpool_with_argmax_2d_precomputed_pads_cpu", // maxpool test will fail if built with --traning-enabled
+        "^test_maxpool_with_argmax_2d_precomputed_strides_cpu", // maxpool test will fail if built with --traning-enabled
+        "^test_negative_log_likelihood.*", // Does not support 5-D or above tensors for SUB op.
+        "^test_softmax_cross_entropy.*", // Does not support 5-D or above tensors for SUB op.
+        // TODO: need to fix ZENDNN implementation for updated operators in ONNX 1.13
         "^test_group_normalization_epsilon_cpu",
         "^test_group_normalization_epsilon_expanded_cpu",
         "^test_group_normalization_example_cpu",
