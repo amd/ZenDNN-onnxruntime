@@ -29,6 +29,7 @@
 *******************************************************************************/
 
 #include "zendnn_lrn.h"
+#include "zendnn_bf16_ops.h"
 #include "zendnn_subgraph.h"
 #include "zendnn_subgraph_primitive.h"
 
@@ -43,6 +44,10 @@ void ZendnnLrn::CreatePrimitive(ZendnnSubgraphPrimitive &sp, ZendnnNode &node) {
 
     // get the engine, currently only support either single gpu or single cpu device
     auto zendnn_engine = sp.GetEngine();
+    using dt =  zendnn::memory::data_type;
+
+    auto ZenBF16 = ZendnnBF16Ops();
+    bool zendnn_bf16_enabled = ZenBF16.IsNodeBF16enabled(node.OpType());
 
     auto alpha = ReadAlpha(node);
     auto beta = ReadBeta(node);
@@ -50,6 +55,15 @@ void ZendnnLrn::CreatePrimitive(ZendnnSubgraphPrimitive &sp, ZendnnNode &node) {
     auto size = ReadSize(node);
 
     auto lrn_src_mem = sp.GetMemory(node.Input(IN_X));
+
+    if (zendnn_bf16_enabled) {
+        if(lrn_src_mem.get_desc().data_type() != dt::bf16) {
+            auto lrn_src_dims = lrn_src_mem.get_desc().dims();
+            auto lrn_src_bf16_md = zendnn::memory::desc(lrn_src_dims,dt::bf16,sp.GetZendnnFormat(lrn_src_dims.size()));
+            auto lrn_src_bf16_mem = sp.GetMemoryAndReshape(node.Input(IN_X),lrn_src_bf16_md, zendnn_engine);
+            lrn_src_mem = lrn_src_bf16_mem;
+        }
+    }
     auto lrn_src_md = lrn_src_mem.get_desc();
 
     auto lrn_desc = zendnn::lrn_forward::desc(zendnn::prop_kind::forward_scoring,

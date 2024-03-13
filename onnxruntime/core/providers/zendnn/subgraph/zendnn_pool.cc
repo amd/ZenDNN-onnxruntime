@@ -57,7 +57,7 @@ void ZendnnPool::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
 
     zendnn::memory::desc src_md,dst_md;
     auto ZenBF16 = ZendnnBF16Ops();
-    bool zendnn_bf16_enabled = ZenBF16.IsZenDNNBF16enabled();
+    bool zendnn_bf16_enabled = ZenBF16.IsNodeBF16enabled(node.OpType());
     bool otypebf16 = false;
 #ifdef ENABLE_TRAINING
     // When using training the memory needs to be in a format known to pool_forward and the
@@ -73,8 +73,8 @@ void ZendnnPool::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
         //Verifying if output can be in bf16
         auto consumers = node.Output(OUT_Y).GetConsumers();
         otypebf16 = true;
-        for (auto &id:consumers) {
-            if (!ZenBF16.isNodeBF16enabled(id.GetNode()->OpType())) {
+        for(auto& id:consumers) {
+            if(!ZenBF16.IsNodeBF16enabled(id.GetNode()->OpType())) {
                 otypebf16 = false;
                 break;
             }
@@ -97,9 +97,8 @@ void ZendnnPool::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
             node.Input(IN_X).Type() == dt::s8) {
         src_md = zendnn::memory::desc({src_dims, node.Input(IN_X).Type(), tag::acdb});
     }
-    else if (otypebf16) {
-        src_md = zendnn::memory::desc({src_dims}, dt::bf16,
-                                      sp.GetZendnnFormat(src_dims.size()));
+    else if(otypebf16) {
+        src_md = zendnn::memory::desc({src_dims, dt::bf16, tag::acdb});
     }
     else {
         src_md = pool_src_mem.get_desc();

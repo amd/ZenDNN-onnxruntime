@@ -42,6 +42,11 @@ void ZendnnFlatten::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
                                     ZendnnNode &node) {
     auto zendnn_engine = sp.GetEngine();
 
+    using dt =  zendnn::memory::data_type;
+
+    auto ZenBF16 = ZendnnBF16Ops();
+    bool zendnn_bf16_enabled = ZenBF16.IsNodeBF16enabled(node.OpType());
+
     auto data_mem = sp.GetMemory(node.Input(IN_DATA));
     zendnn::memory::dims data_dims = data_mem.get_desc().dims();
 
@@ -73,11 +78,22 @@ void ZendnnFlatten::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     //Input will come either in f32 or bf16,
     //If bf16 is enabled, output is bf16 and input is not in bf16 (if input is bf16, no need to reorder)
     zendnn::memory::desc dst_md({dst_dims[0],dst_dims[1]},
-                                node.Input(IN_DATA).Type(),
-                                dst_strides);
+                                     zendnn_bf16_enabled? dt::bf16 : node.Input(IN_DATA).Type(),
+                                     dst_strides);
     //zendnn::memory::desc dst_md({dst_dims[0],dst_dims[1]}, node.Input(IN_DATA).Type(), dst_strides);
     data_mem = sp.GetMemoryInOrtFormat(node.Input(IN_DATA), zendnn_engine);
 
+    if(zendnn_bf16_enabled) {
+        //Ensuring if inputs are in bf16
+        zendnn::stream strm{zendnn_engine};
+        //Source
+        if(data_mem.get_desc().data_type() != dt::bf16)
+        {
+            auto data_bf16_md = zendnn::memory::desc(data_dims,dt::bf16,sp.GetZendnnFormat(data_dims.size()));
+            auto data_bf16_mem = sp.GetMemoryAndReshape(node.Input(IN_DATA),data_bf16_md, zendnn_engine);
+            data_mem = data_bf16_mem;
+        }
+    }
     auto dst_mem = zendnn::memory(dst_md, zendnn_engine, nullptr);
     sp.AddReshape(data_mem, dst_mem);
     sp.SetMemory(node.Output(OUT_FLATTEN), dst_mem, true);

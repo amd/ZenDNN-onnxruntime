@@ -38,11 +38,11 @@ namespace onnxruntime {
 namespace ort_zendnn {
 
 class ZendnnBF16Ops {
-  public :
-    ZendnnBF16Ops();
-    bool IsZenDNNBF16enabled();
-    bool isNodeBF16enabled(std::string);
-  private :
+    public :
+        ZendnnBF16Ops();
+        bool IsNodeBF16enabled();
+        bool IsNodeBF16enabled(std::string);
+    private :
     std::set <std::string> zendnn_bf16_ops_map;
 };
 

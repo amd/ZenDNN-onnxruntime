@@ -69,7 +69,7 @@ void ZendnnConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     using dt = zendnn::memory::data_type;
 
     auto ZenBF16 = ZendnnBF16Ops();
-    bool zendnn_bf16_enabled = ZenBF16.IsZenDNNBF16enabled();
+    bool zendnn_bf16_enabled = ZenBF16.IsNodeBF16enabled(node.OpType());
 
     auto conv_src_mem = sp.GetMemory(node.Input(IN_X));
     auto src_dims = conv_src_mem.get_desc().dims();
@@ -222,8 +222,8 @@ void ZendnnConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
         //Verifying if output can be in bf16
         bool otypeBF16 = true;
         auto consumers = node.Output(OUT_Y).GetConsumers();
-        for (auto &id:consumers) {
-            if (!ZenBF16.isNodeBF16enabled(id.GetNode()->OpType())) {
+        for(auto& id:consumers) {
+            if(!ZenBF16.IsNodeBF16enabled(id.GetNode()->OpType())) {
                 otypeBF16 = false;
                 break;
             }

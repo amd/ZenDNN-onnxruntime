@@ -36,37 +36,40 @@ namespace onnxruntime {
 namespace ort_zendnn {
 
 ZendnnBF16Ops::ZendnnBF16Ops() {
+
+    std::unordered_set<std::string> binary_ops = {"Add", "Div", "Equal", "Greater", "GreaterOrEqual", "Less", "LessOrEqual", "Mul", "Sub"};
+    std::unordered_set<std::string> elementwise_ops = {"Abs", "Clip", "Elu", "Exp", "LeakyRelu", "Log", "Relu", "Round", "Sigmoid", "Softplus", "Sqrt", "Tanh"};
+    std::unordered_set<std::string> pool_ops = {"MaxPool", "AveragePool", "GlobalAveragePool"};
+    std::unordered_set<std::string> conv_fusion_ops = {"Conv", "ConvRelu", "ConvClip", "ConvElu", "ConvSwish", "ConvAddRelu", "ConvAdd"};
     zendnn_bf16_ops_map.insert("MatMul");
-    zendnn_bf16_ops_map.insert("Binary");
-
-    zendnn_bf16_ops_map.insert("Conv");
-    zendnn_bf16_ops_map.insert("MaxPool");
-    zendnn_bf16_ops_map.insert("AveragePool");
-
-    zendnn_bf16_ops_map.insert("Relu");     //Support op
-    zendnn_bf16_ops_map.insert("ConvRelu"); //Fusion op
+    zendnn_bf16_ops_map.insert("Reshape");
+    zendnn_bf16_ops_map.insert("Concat");
+    zendnn_bf16_ops_map.insert("Flatten");
+    zendnn_bf16_ops_map.insert("LRN");
+    zendnn_bf16_ops_map.insert(binary_ops.begin(), binary_ops.end());
+    zendnn_bf16_ops_map.insert(elementwise_ops.begin(), elementwise_ops.end());
+    zendnn_bf16_ops_map.insert(pool_ops.begin(), pool_ops.end());
+    zendnn_bf16_ops_map.insert(conv_fusion_ops.begin(), conv_fusion_ops.end());
 }
 
-bool ZendnnBF16Ops::IsZenDNNBF16enabled() {
+bool ZendnnBF16Ops::IsNodeBF16enabled() {
     bool zendnn_enable_bf16 = false;
 
     const std::string enable_bf16_env =
         onnxruntime::GetEnvironmentVar("ZENDNN_ONNXRT_ENABLE_BF16_SUPPORT");
-    if (!enable_bf16_env.empty()) {
+    if (!enable_bf16_env.empty())
         zendnn_enable_bf16 = (std::stoi(enable_bf16_env) == 0 ? false : true);
-    }
     return zendnn_enable_bf16;
 }
 
-bool ZendnnBF16Ops::isNodeBF16enabled(std::string nodename) {
+bool ZendnnBF16Ops::IsNodeBF16enabled(std::string nodename) {
 
+    bool zendnn_enable_bf16 = IsNodeBF16enabled();
     auto it = zendnn_bf16_ops_map.find(nodename);
-    if (it != zendnn_bf16_ops_map.end()) {
+    if( it != zendnn_bf16_ops_map.end() && zendnn_enable_bf16)
         return true;
-    }
-    else {
+    else
         return false;
-    }
 }
 
 }  // namespace ort_zendnn

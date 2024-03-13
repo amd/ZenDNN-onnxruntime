@@ -42,7 +42,7 @@ void ZendnnBinary::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     using dt =  zendnn::memory::data_type;
 
     auto ZenBF16 = ZendnnBF16Ops();
-    bool zendnn_bf16_enabled = ZenBF16.IsZenDNNBF16enabled();
+    bool zendnn_bf16_enabled = ZenBF16.IsNodeBF16enabled(node.OpType());
 
     // GetMemory in OrtFormat. Broadcasting and mix format binary ops can result in computation failure
     auto binary_src0_mem = sp.GetMemoryInOrtFormat(node.Input(IN_A), eng);
@@ -104,9 +104,9 @@ void ZendnnBinary::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
         //Verifying if output can be in bf16
         bool otypeBF16 = true;
         auto consumers = node.Output(OUT_Y).GetConsumers();
-        for (auto &id:consumers) {
-            if (!ZenBF16.isNodeBF16enabled(id.GetNode()->OpType())) {
-                otypeBF16 = false;
+        for(auto& id:consumers) {
+            if(!ZenBF16.IsNodeBF16enabled(id.GetNode()->OpType())) {
+              otypeBF16 = false;
             }
         }
         //if bf16 is enabled and output is in bf16

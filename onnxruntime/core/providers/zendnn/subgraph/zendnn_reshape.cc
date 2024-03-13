@@ -30,6 +30,7 @@
 
 #include "zendnn_reshape.h"
 #include "zendnn_subgraph.h"
+#include "zendnn_bf16_ops.h"
 #include "zendnn_subgraph_primitive.h"
 #include "core/providers/cpu/tensor/reshape_helper.h"
 
@@ -39,21 +40,33 @@ ZendnnReshape::ZendnnReshape() { }
 
 void ZendnnReshape::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
                                     ZendnnNode &node) {
-    auto zendnn_engine = sp.GetEngine();
+    auto eng = sp.GetEngine();
 
-    using dt = zendnn::memory::data_type;
-    bool zendnn_enable_bf16 = false;
-    const std::string enable_bf16_env = onnxruntime::GetEnvironmentVar("ZENDNN_ONNXRT_ENABLE_BF16_SUPPORT");
-    if (!enable_bf16_env.empty())
-        zendnn_enable_bf16 = (std::stoi(enable_bf16_env) == 0 ? false : true);
+    using dt =  zendnn::memory::data_type;
 
+    auto ZenBF16 = ZendnnBF16Ops();
+    bool zendnn_bf16_enabled = ZenBF16.IsNodeBF16enabled(node.OpType());
+
+    zendnn::memory::desc reshaped_md;
     // the input shape assumes OrtFormat so we get the memory in OrtFormat.
-    auto data_mem = sp.GetMemoryInOrtFormat(node.Input(IN_DATA), zendnn_engine);
+    auto data_mem = sp.GetMemoryInOrtFormat(node.Input(IN_DATA), eng);
     zendnn::memory::dims data_dims = data_mem.get_desc().dims();
 
     auto shape_mem = sp.GetMemory(node.Input(IN_SHAPE));
     zendnn::memory::dims shape_dims = shape_mem.get_desc().dims();
     int64_t *shape_data = (int64_t *)shape_mem.get_data_handle();
+
+    if(zendnn_bf16_enabled) {
+        //Ensuring if inputs are in bf16
+        zendnn::stream strm{eng};
+        //Source
+        if(data_mem.get_desc().data_type() != dt::bf16)
+        {
+            auto data_bf16_md = zendnn::memory::desc(data_dims,dt::bf16,sp.GetZendnnFormat(data_dims.size()));
+            auto data_bf16_mem = sp.GetMemoryAndReshape(node.Input(IN_DATA),data_bf16_md, eng );
+            data_mem = data_bf16_mem;
+        }
+    }
 
     // Reshape helper will take input data_dims shape and the reshape_shape and replace the -1 and 0s with the calculated
     // Output values. The Reshape helper also does a lot of error checking to make sure the Reshape is possible.
@@ -66,11 +79,11 @@ void ZendnnReshape::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     zendnn::memory::dims reshape_shape_dims(reshape_shape.cbegin(),
                                             reshape_shape.cend());
     //the zendnn::memory::desc.reshape(shape) failed on some models so we instead create a new zendnn:memory::desc
-    zendnn::memory::desc reshaped_md(reshape_shape_dims,
-                                     zendnn_enable_bf16? dt::bf16 : node.Input(IN_DATA).Type(),
+    reshaped_md = zendnn::memory::desc(reshape_shape_dims,
+                                     zendnn_bf16_enabled? dt::bf16 : node.Input(IN_DATA).Type(),
                                      sp.GetZendnnFormat(reshape_shape.size()));
 
-    zendnn::memory reshaped_mem = zendnn::memory(reshaped_md, zendnn_engine,
+    zendnn::memory reshaped_mem = zendnn::memory(reshaped_md, eng,
                                   nullptr);
     sp.AddReshape(data_mem, reshaped_mem);
 
