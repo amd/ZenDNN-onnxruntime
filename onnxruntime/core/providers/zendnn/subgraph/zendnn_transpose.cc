@@ -29,6 +29,7 @@
 *******************************************************************************/
 
 #include "zendnn_transpose.h"
+#include "zendnn_bf16_ops.h"
 #include "zendnn_subgraph.h"
 #include "zendnn_subgraph_primitive.h"
 
@@ -59,14 +60,22 @@ void ZendnnTranspose::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     auto zendnn_engine = sp.GetEngine();
 
     using dt = zendnn::memory::data_type;
-    bool zendnn_enable_bf16 = false;
-    const std::string enable_bf16_env = onnxruntime::GetEnvironmentVar("ZENDNN_ONNXRT_ENABLE_BF16_SUPPORT");
-    if (!enable_bf16_env.empty())
-        zendnn_enable_bf16 = (std::stoi(enable_bf16_env) == 0 ? false : true);
+    auto ZenBF16 = ZendnnBF16Ops();
+    bool zendnn_bf16_enabled = ZenBF16.IsNodeBF16enabled(node.OpType());
 
     auto data_mem = sp.GetMemory(node.Input(IN_DATA));
     auto data_dims = data_mem.get_desc().dims();
     auto ndata_dims = data_dims.size();
+
+    if(zendnn_bf16_enabled) {
+        //If inputs are in bf16, changing data_mem data type to bf16
+        if(data_mem.get_desc().data_type() != dt::bf16)
+        {
+            auto data_bf16_md = zendnn::memory::desc(data_dims,dt::bf16,sp.GetZendnnFormat(data_dims.size()));
+            auto data_bf16_mem = sp.GetMemoryAndReshape(node.Input(IN_DATA),data_bf16_md, zendnn_engine);
+            data_mem = data_bf16_mem;
+        }
+    }
 
     auto perm = GetPerm(node);
     if (perm.size() == 0) {
@@ -91,9 +100,33 @@ void ZendnnTranspose::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
         strides_inverse.push_back(strides[ndata_dims - i - 1]);
     }
 
+    zendnn::memory::desc intermediate_md, transposed_md;
+    intermediate_md = zendnn::memory::desc(data_dims,
+                                           node.Input(IN_DATA).Type(), strides);
+    transposed_md = zendnn::memory::desc(transposed_dims,
+                                         node.Input(IN_DATA).Type(),
+                                         sp.GetZendnnFormat(data_dims.size()));
+
+    if (zendnn_bf16_enabled) {
+        //Verifying if output can be in bf16
+        bool otypeBF16 = true;
+        auto consumers = node.Output(OUT_TRANSPOSED).GetConsumers();
+        for(auto& id:consumers) {
+            if(!ZenBF16.IsNodeBF16enabled(id.GetNode()->OpType())) {
+              otypeBF16 = false;
+            }
+        }
+        //if bf16 is enabled and consumers support bf16, changing output dtype to bf16
+        if (otypeBF16) {
+            intermediate_md = zendnn::memory::desc(data_dims,
+                                           dt::bf16, strides);
+            transposed_md = zendnn::memory::desc(transposed_dims,
+                                         dt::bf16,
+                                         sp.GetZendnnFormat(data_dims.size()));
+        }
+    }
+
     // Memory descriptor describes the memory reorder but will not have the correct output dimentions or the correct zendnn::memory::format
-    zendnn::memory::desc intermediate_md = zendnn::memory::desc(data_dims,
-                                           zendnn_enable_bf16 ? dt::bf16 : node.Input(IN_DATA).Type(), strides);
     zendnn::memory intermediate_mem = zendnn::memory(intermediate_md,
                                       zendnn_engine);
 
@@ -104,9 +137,6 @@ void ZendnnTranspose::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
 
     // The reorder from above will get the memory in the right order. The next few lines will create a memory and memory descriptor
     // that will have the correct dimentions and correct memory::format
-    zendnn::memory::desc transposed_md = zendnn::memory::desc(transposed_dims,
-                                         zendnn_enable_bf16 ? dt::bf16 : node.Input(IN_DATA).Type(),
-                                         sp.GetZendnnFormat(data_dims.size()));
     zendnn::memory transposed_mem = zendnn::memory(transposed_md, zendnn_engine,
                                     nullptr);
     void *handle = intermediate_mem.get_data_handle();
