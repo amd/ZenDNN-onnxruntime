@@ -37,7 +37,7 @@ namespace ort_zendnn {
 
 ZendnnBF16Ops::ZendnnBF16Ops() {
 
-    std::unordered_set<std::string> binary_ops = {"Add", "Div", "Equal", "Greater", "GreaterOrEqual", "Less", "LessOrEqual", "Mul", "Sub"};
+    std::unordered_set<std::string> binary_ops = {"Add", "Div", "Equal", "Greater", "GreaterOrEqual", "Less", "LessOrEqual", "Sub"};
     std::unordered_set<std::string> elementwise_ops = {"Abs", "Clip", "Elu", "Exp", "LeakyRelu", "Log", "Relu", "Round", "Sigmoid", "Softplus", "Sqrt", "Tanh"};
     std::unordered_set<std::string> pool_ops = {"MaxPool", "AveragePool", "GlobalAveragePool"};
     std::unordered_set<std::string> conv_fusion_ops = {"Conv", "ConvRelu", "ConvClip", "ConvElu", "ConvSwish", "ConvAddRelu", "ConvAdd"};
@@ -46,6 +46,7 @@ ZendnnBF16Ops::ZendnnBF16Ops() {
     zendnn_bf16_ops_map.insert("Concat");
     zendnn_bf16_ops_map.insert("Flatten");
     zendnn_bf16_ops_map.insert("LRN");
+    zendnn_bf16_ops_map.insert("Transpose");
     zendnn_bf16_ops_map.insert(binary_ops.begin(), binary_ops.end());
     zendnn_bf16_ops_map.insert(elementwise_ops.begin(), elementwise_ops.end());
     zendnn_bf16_ops_map.insert(pool_ops.begin(), pool_ops.end());
