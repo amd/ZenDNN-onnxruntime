@@ -67,9 +67,9 @@ echo ZENDNN_INT8_SUPPORT=%ZENDNN_INT8_SUPPORT%
 set ZENDNN_RELU_UPPERBOUND=0
 echo ZENDNN_RELU_UPPERBOUND=%ZENDNN_RELU_UPPERBOUND%
 
-::ZENDNN_GEMM_ALGO is set to 3 by default
-set ZENDNN_GEMM_ALGO=4
-echo ZENDNN_GEMM_ALGO=%ZENDNN_GEMM_ALGO%
+::ZENDNN_MATMUL_ALGO is set to FP32:3 and BF16:3 by default
+set ZENDNN_MATMUL_ALGO=FP32:3,BF16:3
+echo ZENDNN_MATMUL_ALGO=%ZENDNN_MATMUL_ALGO%
 :: Use local copy of ZenDNN library source code when building ONNXRT
 :: Default is build from local source for development and verification.
 :: For release, set ZENDNN_ONNXRT_USE_LOCAL_ZENDNN=0
