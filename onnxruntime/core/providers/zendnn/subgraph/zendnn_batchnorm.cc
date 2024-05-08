@@ -109,20 +109,8 @@ void ZendnnBatchNorm::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     // If using GPU this will move the memory from the CPU to the GPU.
     batchnorm_src_mem = sp.GetMemoryAndReshape(node.Input(IN_X),
                         batchnorm_pd.src_desc(), zendnn_engine);
-    int out_links = (int)node.Output(OUT_Y).GetConsumersCount();
-    PrimitiveMemInfo mem_info;
-    mem_info.ref_count = out_links;
-    mem_info.mem_desc  = batchnorm_pd.dst_desc();
-    mem_info.is_dynamic = (out_links > 0 && sp.UseCPUAllocator()) ? true : false;
 
-    zendnn::memory batchnorm_dst_mem;
-    if (mem_info.is_dynamic) {
-        batchnorm_dst_mem = zendnn::memory(batchnorm_pd.dst_desc(), zendnn_engine,
-                                           NULL);
-    }
-    else {
-        batchnorm_dst_mem = zendnn::memory(batchnorm_pd.dst_desc(), zendnn_engine);
-    }
+    auto batchnorm_dst_mem = zendnn::memory(batchnorm_pd.dst_desc(), zendnn_engine);
 
     auto concat_op = zendnn::concat(concat_pd);
     sp.AddPrimitive(concat_op, {{ZENDNN_ARG_MULTIPLE_SRC, batchnorm_scale_mem},
@@ -136,7 +124,7 @@ void ZendnnBatchNorm::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
         {ZENDNN_ARG_VARIANCE, batchnorm_var_mem},
         {ZENDNN_ARG_SCALE_SHIFT, batchnorm_scale_shift_mem},
         {ZENDNN_ARG_DST, batchnorm_dst_mem}
-    }, mem_info);
+    });
 
     sp.SetMemory(node.Output(OUT_Y), batchnorm_dst_mem);
 }

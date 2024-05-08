@@ -53,7 +53,6 @@ void ZendnnGelu::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     }
     auto gelu_src_mem = src_mem;
     zendnn::memory dst_mem;
-    int out_links = (int)node.Output(OUT_Y).GetConsumersCount();
     if (is_biased) {
         auto bias_mem = sp.GetMemoryInOrtFormat(node.Input(IN_BIAS), zendnn_engine);
         auto src0_ori_md = src_mem.get_desc();
@@ -94,23 +93,14 @@ void ZendnnGelu::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
                                              src1_md, dst_md);
         auto binary_pd = zendnn::binary::primitive_desc(binary_d, attr, zendnn_engine);
 
-        PrimitiveMemInfo mem_info;
-        mem_info.ref_count = out_links;
-        mem_info.mem_desc  = binary_pd.dst_desc();
-        mem_info.is_dynamic = (out_links > 0 && sp.UseCPUAllocator()) ? true : false;
-        if (mem_info.is_dynamic) {
-            dst_mem = zendnn::memory(binary_pd.dst_desc(), zendnn_engine, NULL);
-        }
-        else {
-            dst_mem = zendnn::memory(binary_pd.dst_desc(), zendnn_engine);
-        }
+        dst_mem = zendnn::memory(binary_pd.dst_desc(), zendnn_engine);
 
         auto binary_prim = zendnn::binary(binary_pd);
 
         sp.AddPrimitive(binary_prim, {{ZENDNN_ARG_SRC_0, src_mem},
             {ZENDNN_ARG_SRC_1, bias_mem},
             {ZENDNN_ARG_DST, dst_mem}
-        }, mem_info);
+        });
     }
     else {
         zendnn::algorithm algo = zendnn_util::OrtOperatorToZendnnAlgorithm(
@@ -124,21 +114,12 @@ void ZendnnGelu::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
         gelu_src_mem = sp.GetMemoryAndReshape(node.Input(IN_X), gelu_pd.src_desc(),
                                               zendnn_engine);
 
-        PrimitiveMemInfo mem_info;
-        mem_info.ref_count = out_links;
-        mem_info.mem_desc  = gelu_pd.dst_desc();
-        mem_info.is_dynamic = (out_links > 0 && sp.UseCPUAllocator()) ? true : false;
-        if (mem_info.is_dynamic) {
-            dst_mem = zendnn::memory(gelu_pd.dst_desc(), zendnn_engine, NULL);
-        }
-        else {
-            dst_mem = zendnn::memory(gelu_pd.dst_desc(), zendnn_engine);
-        }
+        dst_mem = zendnn::memory(gelu_pd.dst_desc(), zendnn_engine);
 
         auto gelu_op = zendnn::eltwise_forward(gelu_pd);
         sp.AddPrimitive(gelu_op, {{ZENDNN_ARG_SRC, gelu_src_mem},
             {ZENDNN_ARG_DST, dst_mem}
-        }, mem_info);
+        });
     }
 
     if (sp.IsScalar(node.Input(IN_X))) {

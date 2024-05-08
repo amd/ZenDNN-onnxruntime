@@ -167,7 +167,6 @@ void ZendnnLayerNorm::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     gamma_mem = sp.GetMemoryAndReshape(node.Input(scale_pos), gamma_mem.get_desc(),
                                        zendnn_engine);
 
-    sp.IncMemoryRefCount(src_mem);
     // Define primitive arguments
     std::unordered_map<int, zendnn::memory> lnorm_args = {{ZENDNN_ARG_SRC, src_mem},
         {ZENDNN_ARG_SCALE, gamma_mem},

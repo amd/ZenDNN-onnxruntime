@@ -136,19 +136,8 @@ void ZendnnGemm::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
                         matmul_pd.src_desc(), eng, transA);
     auto matmul_b_mem = sp.GetMemoryAndReshape(node.Input(IN_B),
                         matmul_pd.weights_desc(), eng, transB);
-    int out_links = (int)node.Output(OUT_Y).GetConsumersCount();
-    PrimitiveMemInfo mem_info;
-    mem_info.ref_count  = out_links;
-    mem_info.mem_desc   = matmul_pd.dst_desc();
-    mem_info.is_dynamic = (out_links > 0 && sp.UseCPUAllocator()) ? true : false;
-    zendnn::memory gemm_dst_mem;
 
-    if (mem_info.is_dynamic) {
-        gemm_dst_mem = zendnn::memory(matmul_pd.dst_desc(), eng, NULL);
-    }
-    else {
-        gemm_dst_mem = zendnn::memory(matmul_pd.dst_desc(), eng);
-    }
+    auto gemm_dst_mem = zendnn::memory(matmul_pd.dst_desc(), eng);
 
     auto matmul_op = zendnn::matmul(matmul_pd);
 
@@ -157,7 +146,7 @@ void ZendnnGemm::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     args.insert({ZENDNN_ARG_WEIGHTS, matmul_b_mem});
     args.insert({ZENDNN_ARG_DST, gemm_dst_mem});
 
-    sp.AddPrimitive(matmul_op, args, mem_info);
+    sp.AddPrimitive(matmul_op, args);
 
     if (input_c_exists) {
         auto c_original_md = sp.GetMemory(node.Input(IN_C)).get_desc();
@@ -187,8 +176,6 @@ void ZendnnGemm::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
                             binary_pd.src1_desc(), eng);
 
         auto binary_op = zendnn::binary(binary_pd);
-
-        sp.IncMemoryRefCount(gemm_dst_mem);
 
         sp.AddPrimitive(binary_op, {{ZENDNN_ARG_SRC_0, gemm_dst_mem},
             {ZENDNN_ARG_SRC_1, binary_c_mem},

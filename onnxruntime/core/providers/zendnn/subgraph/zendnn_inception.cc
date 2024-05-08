@@ -46,7 +46,6 @@ void ZendnnInception::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     auto axis_dim = 0 /*, tmp_offset = 0*/;
     std::vector<zendnn::memory::dims> ldims, loffset;
     auto concat_axis = GetAxis(node);
-    int out_links = (int)node.Output(OUT_ZEN_INCEPTION).GetConsumersCount();
     for (size_t i = IN_DATA_0; i < node.InputCount(); ++i) {
         auto convNode = node.Input((int)(IN_DATA_0 + i)).GetProducer().GetNode();
         ZendnnConv zen_conv;
@@ -70,19 +69,13 @@ void ZendnnInception::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
         auto dst_md = zendnn::memory::desc({dst_mem_dims,
                                             zendnn::memory::data_type::f32,
                                             zendnn::memory::format_tag::aBcd8b});
-        zendnn::memory dst_mem;
-        if (out_links > 0 && sp.UseCPUAllocator()) {
-            dst_mem = zendnn::memory(dst_md, zendnn_engine, NULL);
-        }
-        else {
-            dst_mem = zendnn::memory(dst_md, zendnn_engine);
-        }
+        zendnn::memory dst_mem = zendnn::memory(dst_md, zendnn_engine);
 
         for (size_t i = IN_DATA_0; i < node.InputCount(); ++i) {
             auto convNode = node.Input((int)(IN_DATA_0 + i)).GetProducer().GetNode();
             ZendnnConv zen_conv;
             zendnn::memory::desc ldst_md = dst_md.submemory_desc(ldims[i], loffset[i]);
-            zen_conv.SetDestinationMemoryInfo(ldst_md, dst_mem, (int)i, out_links,  false);
+            zen_conv.SetDestinationMemoryInfo(ldst_md, dst_mem, false);
             zen_conv.CreatePrimitive(sp, *convNode);
         }
         sp.SetMemory(node.Output(OUT_ZEN_INCEPTION), dst_mem);
@@ -100,7 +93,7 @@ void ZendnnInception::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
             zendnn::memory dst_mem = zendnn::memory(dst_md, zendnn_engine);
             src_mems.push_back(dst_mem);
             srcs_md.push_back(dst_md);
-            zen_conv.SetDestinationMemoryInfo(dst_md, dst_mem,(int)i, out_links, true);
+            zen_conv.SetDestinationMemoryInfo(dst_md, dst_mem, true);
             zen_conv.CreatePrimitive(sp, *convNode);
         }
         if (concat_axis < 0) {

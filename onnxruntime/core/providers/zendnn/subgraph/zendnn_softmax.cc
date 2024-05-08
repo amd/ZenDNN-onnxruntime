@@ -63,23 +63,12 @@ void ZendnnSoftmax::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     // If using GPU this will move the memory from the CPU to the GPU.
     softmax_src_mem = sp.GetMemoryAndReshape(node.Input(IN_X),
                       softmax_pd.src_desc(), zendnn_engine);
-    int out_links = (int)node.Output(OUT_Y).GetConsumersCount();
-    zendnn::memory softmax_dst_mem;
-    PrimitiveMemInfo mem_info;
-    mem_info.ref_count = out_links;
-    mem_info.mem_desc  = softmax_pd.dst_desc();
-    mem_info.is_dynamic = (out_links > 0 && sp.UseCPUAllocator()) ? true : false;
-    if (mem_info.is_dynamic) {
-        softmax_dst_mem = zendnn::memory(softmax_pd.dst_desc(), zendnn_engine, NULL);
-    }
-    else {
-        softmax_dst_mem = zendnn::memory(softmax_pd.dst_desc(), zendnn_engine);
-    }
+    auto softmax_dst_mem = zendnn::memory(softmax_pd.dst_desc(), zendnn_engine);
 
     auto softmax_op = zendnn::softmax_forward(softmax_pd);
     sp.AddPrimitive(softmax_op, {{ZENDNN_ARG_SRC, softmax_src_mem},
         {ZENDNN_ARG_DST, softmax_dst_mem}
-    }, mem_info);
+    });
     if (sp.IsScalar(node.Input(IN_X))) {
         sp.SetMemory(node.Output(OUT_Y), softmax_dst_mem, false, true);
     }

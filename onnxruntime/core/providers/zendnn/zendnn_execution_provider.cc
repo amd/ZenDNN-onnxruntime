@@ -69,7 +69,7 @@ ZendnnExecutionProvider::ZendnnExecutionProvider(const
       info_(info) {
     InitProviderOrtApi();
 
-    mem_allocator = CreatePreferredAllocators()[0];
+    // mem_allocator = CreatePreferredAllocators()[0];
 
     // debug env variable to dump subgraphs
     const std::string dump_subgraphs_env =
@@ -135,13 +135,13 @@ ZendnnExecutionProvider::ZendnnExecutionProvider(const
 ZendnnExecutionProvider::~ZendnnExecutionProvider() {
 }
 
-std::vector<AllocatorPtr> ZendnnExecutionProvider::CreatePreferredAllocators() {
-  AllocatorCreationInfo default_memory_info = {[](int) {
-                                                 return std::make_unique<CPUAllocator>();
-                                               },
-                                               0, false};
-  return std::vector<AllocatorPtr>{CreateAllocator(default_memory_info)};
-}
+// std::vector<AllocatorPtr> ZendnnExecutionProvider::CreatePreferredAllocators() {
+//   AllocatorCreationInfo default_memory_info = {[](int) {
+//                                                  return std::make_unique<CPUAllocator>();
+//                                                },
+//                                                0, false};
+//   return std::vector<AllocatorPtr>{CreateAllocator(default_memory_info)};
+// }
 
 std::vector<std::vector<NodeIndex>> ZendnnExecutionProvider::GetSupportedNodes(
 const GraphViewer &graph_viewer) const {
@@ -382,7 +382,7 @@ Status ZendnnExecutionProvider::Compile(const std::vector<FusedNodeAndGraph>
         // subgraph primitive
         auto zendnn_subgraph_primitive =
             std::make_unique<ort_zendnn::ZendnnSubgraphPrimitive>
-            (*subgraphs_[fused_node.Name()].get(), mem_allocator);
+            (*subgraphs_[fused_node.Name()].get());
         {
             const auto &input_defs = fused_node.InputDefs();
             std::vector<std::string> onnx_input_names(input_defs.size());

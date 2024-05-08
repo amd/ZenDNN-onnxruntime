@@ -153,19 +153,7 @@ void ZendnnPool::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     pool_src_mem = sp.GetMemoryAndReshape(node.Input(IN_X), pool_pd.src_desc(),
                                           zendnn_engine);
 #endif
-    int out_links = (int)node.Output(OUT_Y).GetConsumersCount();
-    zendnn::memory pool_dst_mem;
-    PrimitiveMemInfo mem_info;
-    mem_info.ref_count = out_links;
-    mem_info.mem_desc  = pool_pd.dst_desc();
-    mem_info.is_dynamic = (out_links > 0 && sp.UseCPUAllocator()) ? true : false;
-
-    if (mem_info.is_dynamic) {
-        pool_dst_mem = zendnn::memory(pool_pd.dst_desc(), zendnn_engine, NULL);
-    }
-    else {
-        pool_dst_mem = zendnn::memory(pool_pd.dst_desc(), zendnn_engine);
-    }
+    zendnn::memory pool_dst_mem = zendnn::memory(pool_pd.dst_desc(), zendnn_engine);
 
     auto pool_op = zendnn::pooling_forward(pool_pd);
 #ifdef ENABLE_TRAINING
@@ -179,7 +167,7 @@ void ZendnnPool::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
 #else
     sp.AddPrimitive(pool_op, {{ZENDNN_ARG_SRC, pool_src_mem},
         {ZENDNN_ARG_DST, pool_dst_mem}
-    }, mem_info);
+    });
 #endif  //ENABLE_TRAINING
 
     sp.SetMemory(node.Output(OUT_Y), pool_dst_mem);

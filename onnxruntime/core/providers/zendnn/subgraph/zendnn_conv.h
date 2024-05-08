@@ -62,16 +62,13 @@ class ZendnnConv {
                            zendnn::memory::dims &dst_dims);
     /* Set destination memory (handle+offset). Neccessary for inplace concat. */
     void SetDestinationMemoryInfo(zendnn::memory::desc &ldst_md,
-                                  zendnn::memory &dst_mem, int concat_order, int refCount,
+                                  zendnn::memory &dst_mem,
                                   bool addOutput = false);
 
   private:
     /* These variables are necessary for getting memory info for performing inplace operations */
     zendnn::memory::desc _ldst_md;
     zendnn::memory _dst_mem;
-
-    int concat_order = 0;
-    int ref_count = 0;
 
     bool add_output = true;
     /*

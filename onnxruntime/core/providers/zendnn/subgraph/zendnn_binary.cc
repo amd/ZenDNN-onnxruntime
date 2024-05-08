@@ -125,26 +125,13 @@ void ZendnnBinary::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     auto binary_d = zendnn::binary::desc(algo, src_0_md, src_1_md, dst_md);
     auto binary_pd = zendnn::binary::primitive_desc(binary_d, eng);
 
-    int out_links = (int)node.Output(OUT_Y).GetConsumersCount();
-    PrimitiveMemInfo mem_info;
-    mem_info.ref_count  = out_links;
-    mem_info.mem_desc   = binary_pd.dst_desc();
-    mem_info.is_dynamic = (out_links > 0 && sp.UseCPUAllocator()) ? true : false;
-
-    zendnn::memory binary_dst_mem;
-
-    if (mem_info.is_dynamic) {
-        binary_dst_mem = zendnn::memory(binary_pd.dst_desc(), eng, NULL);
-    }
-    else {
-        binary_dst_mem = zendnn::memory(binary_pd.dst_desc(), eng);
-    }
+    auto binary_dst_mem = zendnn::memory(binary_pd.dst_desc(), eng);
     auto binary_prim = zendnn::binary(binary_pd);
 
     sp.AddPrimitive(binary_prim, {{ZENDNN_ARG_SRC_0, binary_src0_mem},
         {ZENDNN_ARG_SRC_1, binary_src1_mem},
         {ZENDNN_ARG_DST, binary_dst_mem}
-    }, mem_info);
+    });
 
     if (sp.IsScalar(node.Input(IN_A)) && sp.IsScalar(node.Input(IN_B))) {
         sp.SetMemory(node.Output(OUT_Y), binary_dst_mem, false, true);

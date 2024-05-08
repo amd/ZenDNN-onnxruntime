@@ -351,18 +351,7 @@ void ZendnnMatMul::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     auto matmul_pd = zendnn::matmul::primitive_desc(matmul_d, attr, eng);
 
     zendnn::memory matmul_src_mem, matmul_weights_mem;
-    int out_links = (int)node.Output(OUT_Y).GetConsumersCount();
-    zendnn::memory matmul_dst_mem;
-    PrimitiveMemInfo mem_info;
-    mem_info.ref_count = out_links;
-    mem_info.mem_desc  = matmul_pd.dst_desc();
-    mem_info.is_dynamic = (out_links > 0 && sp.UseCPUAllocator()) ? true : false;
-    if (mem_info.is_dynamic) {
-        matmul_dst_mem = zendnn::memory(matmul_pd.dst_desc(), eng, NULL);
-    }
-    else {
-        matmul_dst_mem = zendnn::memory(matmul_pd.dst_desc(), eng);
-    }
+    auto matmul_dst_mem = zendnn::memory(matmul_pd.dst_desc(), eng);
     auto matmul_prim = zendnn::matmul(matmul_pd);
 
     if (transA || transBatchA) {
@@ -404,7 +393,7 @@ void ZendnnMatMul::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
         }
     }
 
-    sp.AddPrimitive(matmul_prim, mem_map, mem_info);
+    sp.AddPrimitive(matmul_prim, mem_map);
     sp.SetMemory(node.Output(OUT_Y), matmul_dst_mem);
 }
 

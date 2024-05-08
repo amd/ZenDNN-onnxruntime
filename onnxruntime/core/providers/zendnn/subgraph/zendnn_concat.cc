@@ -81,21 +81,7 @@ void ZendnnConcat::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
 
     auto concat_pd = zendnn::concat::primitive_desc((int)axis, srcs_md,
                      zendnn_engine);
-    int out_links = (int)node.Output(OUT_CONCAT).GetConsumersCount();
-    PrimitiveMemInfo mem_info;
-    mem_info.variable_inputs = (int)node.InputCount();
-    mem_info.ref_count = out_links;
-    mem_info.mem_desc  = concat_pd.dst_desc();
-    mem_info.is_dynamic = (out_links > 0 && sp.UseCPUAllocator()) ? true : false;
-
-    zendnn::memory concat_dst_mem;
-
-    if (mem_info.is_dynamic) {
-        concat_dst_mem = zendnn::memory(concat_pd.dst_desc(), zendnn_engine, NULL);
-    }
-    else {
-        concat_dst_mem = zendnn::memory(concat_pd.dst_desc(), zendnn_engine);
-    }
+    auto concat_dst_mem = zendnn::memory(concat_pd.dst_desc(), zendnn_engine);
     auto concat_op = zendnn::concat(concat_pd);
 
     std::unordered_map<int, zendnn::memory> concat_args;
@@ -104,7 +90,7 @@ void ZendnnConcat::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
         concat_args.insert({ZENDNN_ARG_MULTIPLE_SRC + i, src_mems[i]});
     }
 
-    sp.AddPrimitive(concat_op, concat_args, mem_info);
+    sp.AddPrimitive(concat_op, concat_args);
 
     sp.SetMemory(node.Output(OUT_CONCAT), concat_dst_mem);
 }

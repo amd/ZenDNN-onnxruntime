@@ -406,7 +406,7 @@ void ZendnnSubgraphPrimitive::AddKernels() {
 }
 
 ZendnnSubgraphPrimitive::ZendnnSubgraphPrimitive(ort_zendnn::ZendnnSubgraph
-        &zendnn_subgraph, AllocatorPtr allocator) {
+        &zendnn_subgraph) {
     subgraph_ = &zendnn_subgraph;
     if (zendnn_engine_get_count(zendnn_engine_kind_t::zendnn_cpu)) {
         cpu_engine_ = zendnn::engine(zendnn::engine::kind::cpu, 0);
@@ -415,12 +415,13 @@ ZendnnSubgraphPrimitive::ZendnnSubgraphPrimitive(ort_zendnn::ZendnnSubgraph
     if (zendnn_engine_get_count(zendnn_engine_kind_t::zendnn_gpu)) {
         gpu_engine_ = zendnn::engine(zendnn::engine::kind::gpu, 0);
     }
-    alloc_ptr = allocator;
-    const std::string cpu_mem_alloc_env =
-        onnxruntime::GetEnvironmentVar("ONNXRT_ZENDNN_CPU_ALLOC");
-    if (!cpu_mem_alloc_env.empty()) {
-        cpu_mem_alloc_ = (std::stoi(cpu_mem_alloc_env) == 0 ? false : true);
-    }
+
+    // alloc_ptr = allocator;
+    // const std::string cpu_mem_alloc_env =
+    //     onnxruntime::GetEnvironmentVar("ONNXRT_ZENDNN_CPU_ALLOC");
+    // if (!cpu_mem_alloc_env.empty()) {
+    //     cpu_mem_alloc_ = (std::stoi(cpu_mem_alloc_env) == 0 ? false : true);
+    // }
 }
 
 bool ZendnnSubgraphPrimitive::UseCPUAllocator() {

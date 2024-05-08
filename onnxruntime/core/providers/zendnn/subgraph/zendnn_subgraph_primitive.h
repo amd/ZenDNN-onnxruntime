@@ -56,8 +56,7 @@ struct PrimitiveMemInfo {
 
 class ZendnnSubgraphPrimitive {
   public:
-    ZendnnSubgraphPrimitive(ort_zendnn::ZendnnSubgraph &zendnn_subgraph,
-                            AllocatorPtr alloc_ptr);
+    ZendnnSubgraphPrimitive(ort_zendnn::ZendnnSubgraph &zendnn_subgraph);
     ~ZendnnSubgraphPrimitive() = default;
 
     //compile subgraph primitive with runtime input information

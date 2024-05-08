@@ -72,13 +72,15 @@ class ZendnnExecutionProvider : public IExecutionProvider {
     bool debug_log_ = false;
     // enable fusion by default
     bool enable_fusion_ = true;
-    AllocatorPtr mem_allocator;
+
+    //AllocatorPtr mem_allocator;
     std::unique_ptr<ModelMetadefIdGenerator> metadef_id_generator_;
+
     /* Enable inplace concat by setting the environment flag expicitely
      * Currently, we support following optimizations..
      */
     bool enable_inplace_optimizations_ = false;
-    std::vector<AllocatorPtr> CreatePreferredAllocators() override;
+//     std::vector<AllocatorPtr> CreatePreferredAllocators() override;
 };
 
 }  // namespace onnxruntime

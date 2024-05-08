@@ -120,25 +120,13 @@ void ZendnnElementwise::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     // If using GPU this will move the memory from the CPU to the GPU.
     elementwise_src_mem = sp.GetMemoryAndReshape(node.Input(IN_X),
                           elementwise_pd.src_desc(), zendnn_engine);
-    int out_links = (int)node.Output(OUT_Y).GetConsumersCount();
-    PrimitiveMemInfo mem_info;
-    mem_info.ref_count  = out_links;
-    mem_info.mem_desc   = elementwise_pd.dst_desc();
-    mem_info.is_dynamic = (out_links > 0 && sp.UseCPUAllocator()) ? true : false;
-    zendnn::memory elementwise_dst_mem;
-    if (mem_info.is_dynamic) {
-        elementwise_dst_mem  = zendnn::memory(elementwise_pd.dst_desc(),
-                                              zendnn_engine, NULL);
-    }
-    else {
-        elementwise_dst_mem  = zendnn::memory(elementwise_pd.dst_desc(),
-                                              zendnn_engine);
-    }
+    auto elementwise_dst_mem = zendnn::memory(elementwise_pd.dst_desc(),
+                               zendnn_engine);
 
     auto elemenwise_primitive = zendnn::eltwise_forward(elementwise_pd);
     sp.AddPrimitive(elemenwise_primitive, {{ZENDNN_ARG_SRC, elementwise_src_mem},
         {ZENDNN_ARG_DST, elementwise_dst_mem}
-    }, mem_info);
+    });
     if (sp.IsScalar(node.Input(IN_X))) {
         sp.SetMemory(node.Output(OUT_Y), elementwise_dst_mem, false, true);
     }

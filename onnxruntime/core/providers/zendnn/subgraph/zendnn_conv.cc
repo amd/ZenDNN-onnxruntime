@@ -340,23 +340,6 @@ void ZendnnConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
         conv_bias_mem = sp.GetMemoryAndReshape(node.Input(IN_B), conv_pd.bias_desc(),
                                                zendnn_engine);
     }
-    int out_links = (int)node.Output(OUT_Y).GetConsumersCount();
-    if ((node.isInplaceMemoryNode && concat_order !=0) ||
-            node.OpType() == "ConvAdd" || node.OpType() == "ConvAddRelu") {
-        out_links = 0;
-    }
-    if (node.isInplaceMemoryNode && concat_order ==0) {
-        out_links = ref_count;
-    }
-    PrimitiveMemInfo mem_info;
-    mem_info.ref_count = out_links;
-    mem_info.is_dynamic = (out_links > 0 && sp.UseCPUAllocator()) ? true : false;
-    if (node.isInplaceMemoryNode && concat_order ==0) {
-        mem_info.mem_desc  = _dst_mem.get_desc();
-    }
-    else {
-        mem_info.mem_desc  = conv_pd.dst_desc();
-    }
 
     // Add the convolution layer to the subgraph
     auto conv_op = zendnn::convolution_forward(conv_pd);
@@ -375,15 +358,11 @@ void ZendnnConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
         else {
             auto binary_post_op_mem = sp.GetMemory(node.Input(bin_input_index).Name());
             conv_dst_mem=binary_post_op_mem;
-            sp.IncMemoryRefCount(conv_dst_mem);
         }
     }
     else {
         if (node.isInplaceMemoryNode) {
             conv_dst_mem = _dst_mem;
-        }
-        else if (mem_info.is_dynamic) {
-            conv_dst_mem = zendnn::memory(conv_pd.dst_desc(), zendnn_engine, NULL);
         }
         else {
             conv_dst_mem = zendnn::memory(conv_pd.dst_desc(), zendnn_engine);
@@ -395,13 +374,13 @@ void ZendnnConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
             {ZENDNN_ARG_WEIGHTS, conv_weights_mem},
             {ZENDNN_ARG_BIAS, conv_bias_mem},
             {ZENDNN_ARG_DST, conv_dst_mem}
-        }, mem_info);
+        });
     }
     else {
         sp.AddPrimitive(conv_op, {{ZENDNN_ARG_SRC, conv_src_mem},
             {ZENDNN_ARG_WEIGHTS, conv_weights_mem},
             {ZENDNN_ARG_DST, conv_dst_mem}
-        }, mem_info);
+        });
     }
 
     if (add_output) {
@@ -410,12 +389,10 @@ void ZendnnConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
 }
 
 void ZendnnConv::SetDestinationMemoryInfo(zendnn::memory::desc &ldst_md,
-        zendnn::memory &dst_mem, int concatOrder, int refCount, bool addOutput) {
+        zendnn::memory &dst_mem, bool addOutput) {
     _ldst_md = ldst_md;
     _dst_mem = dst_mem;
     add_output = addOutput;
-    concat_order= concatOrder;
-    ref_count = refCount;
 }
 
 std::vector<int64_t> ZendnnConv::GetInferedPads(ZendnnNode &node,
