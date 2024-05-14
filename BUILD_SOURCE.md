@@ -39,7 +39,7 @@ $ source scripts/zendnn_ONNXRT_env_setup.sh
 ### Build and install the pip package
 Ensure that you install the ONNX Runtime-ZenDNN package corresponding to the Python version with which you created the conda environment.
 ```
-$ ./build.sh --config Release --build_shared_lib --parallel --use_zendnn --build_wheel --use_openmp --skip_onnx_tests
+$ ./build.sh --config Release --build_shared_lib --parallel --use_zendnn --build_wheel --use_openmp --skip_onnx_tests --allow_running_as_root
 $ pip install --force-reinstall ./build/Linux/Release/dist/<*.whl>
 $ pip install --force protobuf==3.20.2
 ```
