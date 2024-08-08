@@ -332,6 +332,17 @@ void ZendnnConv::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
         s.wait();
         conv_weights_mem = mem_to;
     }
+    else if (group != 1 && shape == onnxruntime::ort_zendnn::ZendnnConv::SHAPE_1D) {
+        weight_md = zendnn::memory::desc({weight_dims}, node.Input(IN_W).Type(),
+                                         zendnn::memory::format_tag::goiw);
+        auto mem_from = zendnn::memory(weight_md, zendnn_engine,
+                                       sp.GetMemory(node.Input(IN_W)).get_data_handle());
+        auto mem_to = zendnn::memory(conv_pd.weights_desc(), zendnn_engine);
+        zendnn::stream s{zendnn_engine};
+        zendnn::reorder(mem_from, mem_to).execute(s, mem_from, mem_to);
+        s.wait();
+        conv_weights_mem = mem_to;
+    }
     else {
         conv_weights_mem = sp.GetMemoryAndReshape(node.Input(IN_W),
                            conv_pd.weights_desc(), zendnn_engine);
