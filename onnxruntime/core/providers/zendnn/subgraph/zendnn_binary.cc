@@ -33,7 +33,7 @@
 #include "zendnn_bf16_ops.h"
 #include "zendnn_subgraph_primitive.h"
 #include "zendnn_util.h"
-
+#include <cfloat>
 namespace onnxruntime {
 namespace ort_zendnn {
 
@@ -53,6 +53,23 @@ void ZendnnBinary::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     // GetMemory in OrtFormat. Broadcasting and mix format binary ops can result in computation failure
     auto binary_src0_mem = sp.GetMemoryInOrtFormat(node.Input(IN_A), eng);
     auto binary_src1_mem = sp.GetMemoryInOrtFormat(node.Input(IN_B), eng);
+
+    // Check if the input tensors is min/max of float
+        if (node.OpType() == "Mul") {
+
+            if (node.Input(IN_A).IsConstant()) {
+                float * inp_tens_1 = (float *)binary_src0_mem.get_data_handle();
+                if (inp_tens_1[0] == FLT_MAX || FLT_MIN) {
+                    zendnn_bf16_enabled = false;
+                }
+            }
+            if (node.Input(IN_B).IsConstant()) {
+                float * inp_tens_2 = (float *)binary_src1_mem.get_data_handle();
+                if (inp_tens_2[0] == FLT_MAX || FLT_MIN) {
+                    zendnn_bf16_enabled = false;
+                }
+            }
+        }
 
     if (zendnn_bf16_enabled) {
         //Ensuring if inputs are in bf16 for binary operations

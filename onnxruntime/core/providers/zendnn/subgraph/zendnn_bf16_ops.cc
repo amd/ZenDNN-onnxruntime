@@ -37,7 +37,7 @@ namespace ort_zendnn {
 
 ZendnnBF16Ops::ZendnnBF16Ops() {
 
-    std::unordered_set<std::string> binary_ops = {"Add", "Div", "Equal", "Greater", "GreaterOrEqual", "Less", "LessOrEqual", "Sub"};
+    std::unordered_set<std::string> binary_ops = {"Mul", "Add", "Div", "Equal", "Greater", "GreaterOrEqual", "Less", "LessOrEqual", "Sub"};
     std::unordered_set<std::string> elementwise_ops = {"Abs", "Clip", "Elu", "Exp", "LeakyRelu", "Log", "Relu", "Round", "Sigmoid", "Softplus", "Sqrt", "Tanh"};
     std::unordered_set<std::string> pool_ops = {"MaxPool", "AveragePool", "GlobalAveragePool"};
     std::unordered_set<std::string> conv_fusion_ops = {"Conv", "ConvRelu", "ConvClip", "ConvElu", "ConvSwish", "ConvAddRelu", "ConvAdd"};
