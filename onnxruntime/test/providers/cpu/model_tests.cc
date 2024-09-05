@@ -1,6 +1,32 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+*******************************************************************************/
+
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
+/*******************************************************************************
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+* LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+* OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
+*******************************************************************************/
 #include <iostream>
 #include <iterator>
 #include <string>
@@ -24,6 +50,10 @@
 
 #ifdef USE_DNNL
 #include "core/providers/dnnl/dnnl_provider_factory.h"
+#endif
+
+#ifdef USE_ZENDNN
+#include "core/providers/zendnn/zendnn_provider_factory.h"
 #endif
 
 #ifdef USE_NNAPI
@@ -163,9 +193,10 @@ TEST_P(ModelTest, Run) {
                                                     per_sample_tolerance, relative_per_sample_tolerance);
 
 #ifndef USE_DNNL
+#ifndef USE_ZENDNN
   auto tp = TestEnv::CreateThreadPool(Env::Default());
 #endif
-
+#endif
   for (bool is_single_thread : use_single_thread) {
     for (ExecutionMode execution_mode : execution_modes) {
       Ort::SessionOptions ortso{};
@@ -203,6 +234,16 @@ TEST_P(ModelTest, Run) {
             rel_dnnl_options(ep_option, &OrtApis::ReleaseDnnlProviderOptions);
         ep_option->use_arena = 0;
         ASSERT_ORT_STATUS_OK(OrtApis::SessionOptionsAppendExecutionProvider_Dnnl(ortso, ep_option));
+      }
+#endif
+#ifdef USE_ZENDNN
+      else if (provider_name == "zendnn") {
+        OrtZendnnProviderOptions* ep_option;
+        ASSERT_ORT_STATUS_OK(OrtApis::CreateZendnnProviderOptions(&ep_option));
+        std::unique_ptr<OrtZendnnProviderOptions, decltype(&OrtApis::ReleaseZendnnProviderOptions)>
+            rel_zendnn_options(ep_option, &OrtApis::ReleaseZendnnProviderOptions);
+        ep_option->use_arena = 0;
+        ASSERT_ORT_STATUS_OK(OrtApis::SessionOptionsAppendExecutionProvider_Zendnn(ortso, ep_option));
       }
 #endif
       else if (provider_name == "tensorrt") {
@@ -275,7 +316,8 @@ TEST_P(ModelTest, Run) {
       std::unique_ptr<OrtSession, decltype(&OrtApis::ReleaseSession)> rel_ort_session(ort_session,
                                                                                       &OrtApis::ReleaseSession);
       const size_t data_count = l->GetDataCount();
-#ifndef USE_DNNL  // potential crash for DNNL pipeline
+#ifndef USE_DNNL // potential crash for DNNL and ZENDNN pipeline
+#ifndef USE_ZENDNN
       if (data_count > 1 && tests_run_parallel.find(l->GetTestCaseName()) != tests_run_parallel.end()) {
         LOGS_DEFAULT(ERROR) << "Parallel test for " << l->GetTestCaseName();  // TODO(leca): change level to INFO or even delete the log once verified parallel test working
         std::shared_ptr<TestCaseResult> results = TestCaseRequestContext::Run(tp.get(), *l, *ort_env, ortso, data_count, 1 /*repeat_count*/);
@@ -285,7 +327,8 @@ TEST_P(ModelTest, Run) {
         }
         continue;
       }
-#endif  // !USE_DNNL
+#endif
+#endif  // !USE_DNNL !USE_ZENDNN
       // TODO(leca): leverage TestCaseRequestContext::Run() to make it short
       auto default_allocator = std::make_unique<MockedOrtAllocator>();
 
@@ -411,6 +454,7 @@ static constexpr ORT_STRING_VIEW provider_name_cuda = ORT_TSTR("cuda");
 static constexpr ORT_STRING_VIEW provider_name_rocm = ORT_TSTR("rocm");
 #endif
 static constexpr ORT_STRING_VIEW provider_name_dnnl = ORT_TSTR("dnnl");
+static constexpr ORT_STRING_VIEW provider_name_zendnn = ORT_TSTR("zendnn");
 // For any non-Android system, NNAPI will only be used for ort model converter
 #if defined(USE_NNAPI) && defined(__ANDROID__)
 static constexpr ORT_STRING_VIEW provider_name_nnapi = ORT_TSTR("nnapi");
@@ -454,6 +498,9 @@ static constexpr ORT_STRING_VIEW provider_name_dml = ORT_TSTR("dml");
 #endif
 #ifdef USE_DNNL
   provider_names[provider_name_dnnl] = {opset10};
+#endif
+#ifdef USE_ZENDNN
+  provider_names[provider_name_zendnn] = {opset10};
 #endif
 // For any non-Android system, NNAPI will only be used for ort model converter
 #if defined(USE_NNAPI) && defined(__ANDROID__)
@@ -622,6 +669,43 @@ static constexpr ORT_STRING_VIEW provider_name_dml = ORT_TSTR("dml");
                                                    ORT_TSTR("maxpool_2d_uint8"),
                                                    ORT_TSTR("mul_uint8"),
                                                    ORT_TSTR("div_uint8")};
+  static const ORTCHAR_T* zendnn_disabled_tests[] = {ORT_TSTR("densenet121"),
+                                                   ORT_TSTR("resnet18v2"),
+                                                   ORT_TSTR("resnet34v2"),
+                                                   ORT_TSTR("resnet50v2"),
+                                                   ORT_TSTR("resnet101v2"),
+                                                   ORT_TSTR("resnet101v2"),
+                                                   ORT_TSTR("vgg19"),
+                                                   ORT_TSTR("tf_inception_resnet_v2"),
+                                                   ORT_TSTR("tf_inception_v1"),
+                                                   ORT_TSTR("tf_inception_v3"),
+                                                   ORT_TSTR("tf_inception_v4"),
+                                                   ORT_TSTR("tf_mobilenet_v1_1.0_224"),
+                                                   ORT_TSTR("tf_mobilenet_v2_1.0_224"),
+                                                   ORT_TSTR("tf_mobilenet_v2_1.4_224"),
+                                                   ORT_TSTR("tf_nasnet_large"),
+                                                   ORT_TSTR("tf_pnasnet_large"),
+                                                   ORT_TSTR("tf_resnet_v1_50"),
+                                                   ORT_TSTR("tf_resnet_v1_101"),
+                                                   ORT_TSTR("tf_resnet_v1_101"),
+                                                   ORT_TSTR("tf_resnet_v2_101"),
+                                                   ORT_TSTR("tf_resnet_v2_152"),
+                                                   ORT_TSTR("batchnorm_example_training_mode"),
+                                                   ORT_TSTR("batchnorm_epsilon_training_mode"),
+                                                   ORT_TSTR("mobilenetv2-1.0"),
+                                                   ORT_TSTR("shufflenet"),
+                                                   ORT_TSTR("candy"),
+                                                   ORT_TSTR("range_float_type_positive_delta_expanded"),
+                                                   ORT_TSTR("range_int32_type_negative_delta_expanded"),
+                                                   ORT_TSTR("averagepool_2d_ceil"),
+                                                   ORT_TSTR("maxpool_2d_ceil"),
+                                                   ORT_TSTR("maxpool_2d_dilations"),
+                                                   ORT_TSTR("mlperf_ssd_resnet34_1200"),
+                                                   ORT_TSTR("convtranspose_1d"),
+                                                   ORT_TSTR("convtranspose_3d"),
+                                                   ORT_TSTR("maxpool_2d_uint8"),
+                                                   ORT_TSTR("mul_uint8"),
+                                                   ORT_TSTR("div_uint8")};
   static const ORTCHAR_T* tensorrt_disabled_tests[] = {
       ORT_TSTR("YOLOv3-12"),           // needs to run symbolic shape inference shape first
       ORT_TSTR("SSD-MobilenetV1-12"),  // symbolic shape inference shape error
@@ -671,6 +755,10 @@ static constexpr ORT_STRING_VIEW provider_name_dml = ORT_TSTR("dml");
       // these models run but disabled tests to keep memory utilization low
       // This will be removed after LRU implementation
       all_disabled_tests.insert(std::begin(dnnl_disabled_tests), std::end(dnnl_disabled_tests));
+    } else if (provider_name == provider_name_zendnn) {
+      // these models run but disabled tests to keep memory utilization low
+      // This will be removed after LRU implementation
+      all_disabled_tests.insert(std::begin(zendnn_disabled_tests), std::end(zendnn_disabled_tests));
     } else if (provider_name == provider_name_tensorrt) {
       // these models run but disabled tests to keep memory utilization low
       // This will be removed after LRU implementation

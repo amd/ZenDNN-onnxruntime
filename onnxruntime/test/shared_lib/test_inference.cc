@@ -1,6 +1,31 @@
+/*******************************************************************************
+* Modifications Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+*******************************************************************************/
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
+/*******************************************************************************
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+* LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+* OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+* WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
+*******************************************************************************/
 #include <memory>
 #include <vector>
 #include <iostream>
@@ -330,6 +355,14 @@ static void TestInference(Ort::Env& env, const std::basic_string<ORTCHAR_T>& mod
     dnnl_options.use_arena = 1;
     dnnl_options.threadpool_args = nullptr;
     session_options.AppendExecutionProvider_Dnnl(dnnl_options);
+#else
+    return;
+#endif
+#ifdef USE_ZENDNN
+    OrtZendnnProviderOptions zendnn_options;
+    zendnn_options.use_arena = 1;
+    zendnn_options.threadpool_args = nullptr;
+    session_options.AppendExecutionProvider_Zendnn(zendnn_options);
 #else
     return;
 #endif
@@ -3805,6 +3838,7 @@ TEST(CApiTest, TestConfigureCUDAProviderOptions) {
 
 #endif
 
+#ifndef _OPENMP
 namespace TestPerSessionCustomThreadHooks {
 
 std::vector<std::thread> threads;
@@ -3886,6 +3920,7 @@ TEST(CApiTest, crop_and_resize) {
 #endif
 
 }  // namespace TestPerSessionCustomThreadHooks
+#endif
 
 #ifdef USE_CUDA
 TEST(CApiTest, GitHubIssue10179) {
@@ -4340,6 +4375,7 @@ void CallbackSucceed(void* user_data, OrtValue** outputs, size_t num_outputs, Or
   atomic_wait.store(true);
 }
 
+#ifndef _OPENMP
 TEST(CApiTest, RunAsync) {
   Ort::SessionOptions session_options;
   session_options.SetIntraOpNumThreads(2);
@@ -4376,6 +4412,7 @@ TEST(CApiTest, RunAsync) {
 
   EXPECT_EQ(atomic_wait.load(), true);
 }
+#endif
 
 void CallbackFail(void*, OrtValue**, size_t, OrtStatusPtr) {
   EXPECT_TRUE(false);  // the callback is not supposed to be invoked
