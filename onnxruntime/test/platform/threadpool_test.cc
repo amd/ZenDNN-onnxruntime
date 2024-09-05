@@ -590,6 +590,7 @@ TEST(ThreadPoolTest, TestAffinityStringMisshaped) {
 }
 #endif
 
+#ifndef _OPENMP
 TEST(ThreadPoolTest, TestAffinityStringWellShaped) {
   OrtThreadPoolParams tp_params;
   auto default_tp = concurrency::CreateThreadPool(&onnxruntime::Env::Default(),
@@ -612,6 +613,7 @@ TEST(ThreadPoolTest, TestAffinityStringWellShaped) {
     ASSERT_TRUE(DOP >= 3 && DOP % 3 == 0);  // for hybrid cpu, dop is a multiple of 3
   }
 }
+#endif
 
 #ifdef _WIN32
 TEST(ThreadPoolTest, TestDefaultAffinity) {

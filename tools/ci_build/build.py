@@ -597,6 +597,7 @@ def parse_arguments():
     parser.add_argument("--use_preinstalled_eigen", action="store_true", help="Use pre-installed Eigen.")
     parser.add_argument("--eigen_path", help="Path to pre-installed Eigen.")
     parser.add_argument("--enable_msinternal", action="store_true", help="Enable for Microsoft internal builds only.")
+    parser.add_argument("--use_openmp", action="store_true", help="Build with OpenMP")
     parser.add_argument("--llvm_path", help="Path to llvm dir")
     parser.add_argument("--use_vitisai", action="store_true", help="Build with Vitis-AI")
     parser.add_argument("--use_tvm", action="store_true", help="Build with TVM")
@@ -1040,6 +1041,7 @@ def generate_build_tree(
         "-Donnxruntime_USE_NNAPI_BUILTIN=" + ("ON" if args.use_nnapi else "OFF"),
         "-Donnxruntime_USE_VSINPU=" + ("ON" if args.use_vsinpu else "OFF"),
         "-Donnxruntime_USE_RKNPU=" + ("ON" if args.use_rknpu else "OFF"),
+        "-Donnxruntime_USE_OPENMP=" + ("ON" if args.use_openmp and not (args.use_nnapi or args.android or (args.ios and is_macOS()) or args.use_rknpu) else "OFF" ),
         "-Donnxruntime_USE_LLVM=" + ("ON" if args.use_tvm else "OFF"),
         "-Donnxruntime_ENABLE_MICROSOFT_INTERNAL=" + ("ON" if args.enable_msinternal else "OFF"),
         "-Donnxruntime_USE_VITISAI=" + ("ON" if args.use_vitisai else "OFF"),

@@ -212,6 +212,7 @@ void AsyncCallback(void* user_data, OrtValue** outputs, size_t num_outputs, OrtS
   atomic_wait.store(true);
 }
 
+#ifndef _OPENMP
 TEST_P(CApiTestGlobalThreadPoolsWithProvider, simpleAsync) {
   Ort::Session session = GetSessionObj<PATH_TYPE, float>(*ort_env, MODEL_URI, GetParam());
   if (!session) {
@@ -257,6 +258,7 @@ TEST_P(CApiTestGlobalThreadPoolsWithProvider, simpleAsync) {
   }
   EXPECT_EQ(atomic_wait.load(), true);
 }
+#endif
 
 // Test 2
 // run inference on the same model using 2 sessions

@@ -96,6 +96,7 @@ if("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_
 endif()
 
 # Options
+option(onnxruntime_USE_OPENMP "Build with OpenMP support" OFF)
 option(onnxruntime_RUN_ONNX_TESTS "Enable ONNX Compatibility Testing" OFF)
 option(onnxruntime_GENERATE_TEST_REPORTS "Enable test report generation" OFF)
 option(onnxruntime_ENABLE_STATIC_ANALYSIS "Enable static analysis" OFF)
@@ -527,6 +528,18 @@ if (NOT WIN32)
   endif()
 endif()
 
+if (onnxruntime_USE_OPENMP)
+  find_package(OpenMP)
+  if (OPENMP_FOUND)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+    include_directories(${OpenMP_CXX_INCLUDE_DIR})
+  else()
+    message(WARNING "Flag --use_openmp is specified, but OpenMP is not found in current build environment. Setting it to OFF.")
+    set(onnxruntime_USE_OPENMP OFF)
+  endif()
+endif()
+
 # 'extended' implies minimal.
 if (onnxruntime_EXTENDED_MINIMAL_BUILD AND NOT onnxruntime_MINIMAL_BUILD)
   set(onnxruntime_MINIMAL_BUILD ON)
@@ -636,6 +649,9 @@ if (WIN32)
     # warning C4800: Implicit conversion from 'X' to bool. Possible information loss
     if (onnxruntime_USE_OPENVINO)
        list(APPEND ORT_WARNING_FLAGS "/wd4800")
+    endif()
+    if (onnxruntime_USE_OPENMP)
+       list(APPEND ORT_WARNING_FLAGS "/wd6993") # Code analysis ignores OpenMP constructs
     endif()
     # operator 'operator-name': deprecated between enumerations of different types
     list(APPEND ORT_WARNING_FLAGS "/wd5054")
@@ -1321,7 +1337,7 @@ endif()
 
 if (onnxruntime_USE_ZENDNN)
   include(zendnn)
-  add_compile_definitions(ZENDNN_OPENMP)
+  #add_compile_definitions(ZENDNN_OPENMP)
 endif()
 
 if (onnxruntime_USE_NEURAL_SPEED AND NOT onnxruntime_MINIMAL_BUILD AND NOT onnxruntime_USE_TVM)
@@ -1694,6 +1710,11 @@ if(VERSION_MAJOR_PART STREQUAL "0" AND VERSION_MINOR_PART STREQUAL "0" AND VERSI
     list(GET ORT_VERSION_STRING_LIST 1 VERSION_MINOR_PART)
     list(GET ORT_VERSION_STRING_LIST 2 VERSION_BUILD_PART)
     set(VERSION_STRING ORT_VERSION)
+endif()
+
+
+if (onnxruntime_USE_OPENMP)
+  list(APPEND onnxruntime_EXTERNAL_LIBRARIES OpenMP::OpenMP_CXX)
 endif()
 
 
