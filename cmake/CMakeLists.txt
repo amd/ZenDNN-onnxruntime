@@ -1,5 +1,32 @@
+#**************************************************************************************
+# Modifications Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+#**************************************************************************************
+
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
+
+#**************************************************************************************
+#
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and associated documentation files (the
+# "Software"), to deal in the Software without restriction, including
+# without limitation the rights to use, copy, modify, merge, publish,
+# distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so, subject to
+# the following conditions:
+#
+# The above copyright notice and this permission notice shall be
+# included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+# LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+# WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+#**************************************************************************************
 
 # Minimum CMake required
 cmake_minimum_required(VERSION 3.26)
@@ -93,6 +120,7 @@ option(onnxruntime_USE_QNN "Build with QNN support" OFF)
 option(onnxruntime_USE_SNPE "Build with SNPE support" OFF)
 option(onnxruntime_USE_RKNPU "Build with RKNPU support" OFF)
 option(onnxruntime_USE_DNNL "Build with DNNL support" OFF)
+option(onnxruntime_USE_ZENDNN "Build with ZENDNN support" OFF)
 option(onnxruntime_USE_NEURAL_SPEED "Build with Neural Speed support" OFF)
 option(onnxruntime_USE_JSEP "Build with JavaScript implemented kernels support" OFF)
 option(onnxruntime_BUILD_UNIT_TESTS "Build ONNXRuntime unit tests" ON)
@@ -782,6 +810,11 @@ if (onnxruntime_USE_DNNL)
     list(APPEND ONNXRUNTIME_PROVIDER_NAMES dnnl)
     list(APPEND ORT_PROVIDER_CMAKE_FLAGS -Donnxruntime_USE_DNNL=1)
 endif()
+if (onnxruntime_USE_ZENDNN)
+    list(APPEND ORT_PROVIDER_FLAGS -DUSE_ZENDNN=1)
+    list(APPEND ONNXRUNTIME_PROVIDER_NAMES zendnn)
+    list(APPEND ORT_PROVIDER_CMAKE_FLAGS -Donnxruntime_USE_ZENDNN=1)
+endif()
 if (onnxruntime_USE_OPENVINO)
     list(APPEND ORT_PROVIDER_FLAGS -DUSE_OPENVINO=1)
     list(APPEND ONNXRUNTIME_PROVIDER_NAMES openvino)
@@ -1284,6 +1317,11 @@ endif()
 if (onnxruntime_USE_DNNL)
   include(dnnl)
   add_compile_definitions(DNNL_OPENMP)
+endif()
+
+if (onnxruntime_USE_ZENDNN)
+  include(zendnn)
+  add_compile_definitions(ZENDNN_OPENMP)
 endif()
 
 if (onnxruntime_USE_NEURAL_SPEED AND NOT onnxruntime_MINIMAL_BUILD AND NOT onnxruntime_USE_TVM)
