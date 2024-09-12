@@ -155,11 +155,8 @@ if (onnxruntime_USE_ZENDNN)
       "${CMAKE_CURRENT_BINARY_DIR}/onnxruntime/capi/AOCL-LibBlis-Win-MT-dll.dll"
       "${CMAKE_CURRENT_BINARY_DIR}/onnxruntime/capi/AOCL-LibBlis-Win-MT-dll.lib"
       )
-      add_custom_command(OUTPUT BLIS_LIB_FILES
-        COMMAND "${CMAKE_COMMAND}" -E copy ${ZENDNN_BLIS_PATH}/lib/ILP64/AOCL-LibBlis-Win-MT-dll.dll ${CMAKE_CURRENT_BINARY_DIR}/Release/onnxruntime/capi/AOCL-LibBlis-Win-MT-dll.dll
-        COMMAND "${CMAKE_COMMAND}" -E copy ${ZENDNN_BLIS_PATH}/lib/ILP64/AOCL-LibBlis-Win-MT-dll.lib ${CMAKE_CURRENT_BINARY_DIR}/Release/onnxruntime/capi/AOCL-LibBlis-Win-MT-dll.lib
-        COMMENT "Copying to include directory. TODO: Remove direct copy to onnxruntime/capi and fix in build system"
-      )
+      configure_file($ENV{ZENDNN_BLIS_PATH}/lib/ILP64/AOCL-LibBlis-Win-MT-dll.dll ${CMAKE_CURRENT_BINARY_DIR}/Release/onnxruntime/capi/AOCL-LibBlis-Win-MT-dll.dll COPYONLY)
+      configure_file($ENV{ZENDNN_BLIS_PATH}/lib/ILP64/AOCL-LibBlis-Win-MT-dll.lib ${CMAKE_CURRENT_BINARY_DIR}/Release/onnxruntime/capi/AOCL-LibBlis-Win-MT-dll.lib COPYONLY)
     else()
 
       add_dependencies(project_zendnn project_blis)
