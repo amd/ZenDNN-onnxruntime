@@ -2543,18 +2543,24 @@ void ZendnnGraphTransformer::FuseLN(ZendnnSubgraph &subgraph) {
             }
             new_node->Inputs().push_back(def);
         }
+
+        for (auto def : epsAdd_node->Inputs()) {
+            if (def->GetProducer().Exists() &&
+                    def->GetProducer().GetNode()->OpType() == "ReduceMean") {
+                continue;
+            }
+            new_node->Inputs().push_back(def);
+        }
         /* Push shift Outputs to LayerNormalization node. */
         for (auto def : add_shift_node->Outputs()) {
             new_node->Outputs().push_back(def);
         }
 
         remove_indices.push_back(add_shift_node->Index());
-        /*
-            for (auto e : remove_indices) {
-              LOGS_DEFAULT(INFO) <<"Removing : | " <<e;
-            }
-        */
-        //LOGS_DEFAULT(ERROR) <<"Fusing block to LayerNormalization node ";
+
+        if (debug_log_) {
+            LOGS_DEFAULT(ERROR) <<"Fusing block to LayerNormalization node ";
+        }
         ResolveFusion(subgraph, remove_indices, std::move(new_node));
     }
 }
