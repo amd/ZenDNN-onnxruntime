@@ -102,6 +102,7 @@ void ZendnnLayerNorm::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     // Get src mem
     auto src_mem = sp.GetMemory(node.Input(IN_INPUT));
     auto src_md = src_mem.get_desc();
+    auto out_md = zendnn::memory::desc(src_md.dims(), node.Input(IN_INPUT).Type(), zendnn::memory::format_tag::any);
 
     // This contains the layer norm op and its parameters
     ln_components op_comps;
@@ -152,15 +153,16 @@ void ZendnnLayerNorm::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     }
 
     // Get epsilon to avoid zero division
-    float epsilon = GetEpsilon(node);
+    float epsilon = GetEpsilon(sp, node);
     // Operation desciptor
-    auto lnorm_desc = zendnn::layer_normalization_forward::desc(prop_kind, src_md,
+    auto lnorm_desc = zendnn::layer_normalization_forward::desc(prop_kind, src_md, out_md,
                       epsilon, op_flags);
     // Primitive desciptor
     auto lnorm_pd = zendnn::layer_normalization_forward::primitive_desc(lnorm_desc,
                     zendnn_engine);
     // Primitive
     auto lnorm_prim = zendnn::layer_normalization_forward(lnorm_pd);
+    auto out_mem = zendnn::memory(lnorm_pd.dst_desc(), zendnn_engine);
 
     // Get gamma
     auto gamma_mem = sp.GetMemory(node.Input(scale_pos));
@@ -170,7 +172,7 @@ void ZendnnLayerNorm::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
     // Define primitive arguments
     std::unordered_map<int, zendnn::memory> lnorm_args = {{ZENDNN_ARG_SRC, src_mem},
         {ZENDNN_ARG_SCALE, gamma_mem},
-        {ZENDNN_ARG_DST, src_mem}
+        {ZENDNN_ARG_DST, out_mem}
     };
 
     // Get Beta and add shift if available
@@ -201,7 +203,7 @@ void ZendnnLayerNorm::CreatePrimitive(ZendnnSubgraphPrimitive &sp,
 
     sp.AddPrimitive(lnorm_prim, lnorm_args);
 
-    sp.SetMemory(node.Output(OUT_OUTPUT), src_mem, true);
+    sp.SetMemory(node.Output(OUT_OUTPUT), out_mem, true);
 }
 
 zendnn::memory ZendnnLayerNorm::BuildSLN(ZendnnSubgraphPrimitive &sp,
@@ -350,13 +352,18 @@ void ZendnnLayerNorm::ValidateDims(ZendnnSubgraphPrimitive &sp,
     }
 }
 
-float ZendnnLayerNorm::GetEpsilon(ZendnnNode &node) {
+float ZendnnLayerNorm::GetEpsilon(ZendnnSubgraphPrimitive &sp, ZendnnNode &node ) {
     auto attr = node.Attributes().find("epsilon");
     float epsilon = 1e-05f;  // Default value according to ONNX spec
     if (attr != node.Attributes().end() &&
             attr->second().type() ==
             ::ONNX_NAMESPACE::AttributeProto_AttributeType::AttributeProto_AttributeType_FLOAT) {
         epsilon = attr->second().f();
+    } else if (node.OpType() == "LayerNormalization" && node.Input(IN_LN_EPSILON).Exists()) {
+        auto eps_mem = sp.GetMemory(node.Input(IN_LN_EPSILON));
+        eps_mem = sp.GetMemoryAndReshape(node.Input(IN_LN_EPSILON), eps_mem.get_desc(),
+                                         sp.GetEngine());
+        epsilon = *((float *)eps_mem.get_data_handle());
     }
     return epsilon;
 }

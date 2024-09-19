@@ -52,7 +52,8 @@ class ZendnnLayerNorm {
     enum InputTensorsLN : int {
         // IN_INPUT = 0,
         IN_LN_GAMMA = 1,
-        IN_LN_BIAS = 2      // Optional
+        IN_LN_BIAS = 2,      // Optional
+        IN_LN_EPSILON = 3
     };
 
     enum OutputTensors : int {
@@ -68,7 +69,7 @@ class ZendnnLayerNorm {
     zendnn::memory BuildSLN(ZendnnSubgraphPrimitive &sp, ZendnnNode &node,
                             zendnn::engine zendnn_engine);
     void ValidateDims(ZendnnSubgraphPrimitive &sp, ZendnnNode &node);
-    float GetEpsilon(ZendnnNode &node);
+    float GetEpsilon(ZendnnSubgraphPrimitive &sp, ZendnnNode &node);
 };
 
 }  // namespace ort_zendnn
