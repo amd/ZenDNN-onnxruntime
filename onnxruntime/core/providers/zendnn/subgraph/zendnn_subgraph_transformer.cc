@@ -412,9 +412,10 @@ void ZendnnGraphTransformer::QConvAdd(ZendnnSubgraph &subgraph) {
         fused_node->Outputs() = {fused_node_output};
         fused_node->Attributes().insert(qconv_node->Attributes());
 
-        LOGS_DEFAULT(INFO) <<
-                           "#########################  ##################### fuse ["<< qconv_node->Name()
-                           << "] and [" << qadd_node->Name() << "] into " <<fused_node_type;
+        if (debug_log_) {
+            LOGS_DEFAULT(ERROR) <<"#########################  ##################### fuse ["<< qconv_node->Name()
+                            << "] and [" << qadd_node->Name() << "] into " <<fused_node_type;
+        }
         ResolveFusion(subgraph, fusableNodes, std::move(fused_node));
     }
 }
@@ -1539,8 +1540,11 @@ void ZendnnGraphTransformer::ConvSwish(ZendnnSubgraph &subgraph) {
         //insert new node, remove original nodes, connect new edges
         ResolveFusion(subgraph, {zendnn_node->Index(), zendnn_node->Output(0).GetConsumers()[0].GetNode()->Index(), zendnn_node->Output(0).GetConsumers()[1].GetNode()->Index()},
                       std::move(new_node));
-        LOGS_DEFAULT(INFO) << "fuse [" << zendnn_node << "] and [" << next_zendnn_node
-                           << "] into ConvSwish";
+        if (debug_log_) {
+            LOGS_DEFAULT(ERROR) << "fuse [" << zendnn_node << "] and [" << next_zendnn_node
+                    << "] into ConvSwish";
+        }
+
     }
 }
 
@@ -1599,8 +1603,11 @@ void ZendnnGraphTransformer::ConvElu(ZendnnSubgraph &subgraph) {
         //insert new node, remove original nodes, connect new edges
         ResolveFusion(subgraph, {zendnn_node->Index(), next_zendnn_node->Index()},
                       std::move(new_node));
-        LOGS_DEFAULT(INFO) << "fuse [" << zendnn_node << "] and [" << next_zendnn_node
-                           << "] into ConvElu";
+        if (debug_log_) {
+            LOGS_DEFAULT(ERROR) << "fuse [" << zendnn_node << "] and [" << next_zendnn_node
+                    << "] into ConvElu";
+        }
+
     }
 }
 
@@ -1754,8 +1761,10 @@ void ZendnnGraphTransformer::processConvAddRelu(ZendnnSubgraph &subgraph,
     bool isNextRelu = isNextNodeRelu(subgraph, *fused_node);
 
     if (!isNextRelu) {
-        LOGS_DEFAULT(INFO) << "fuse [" << conv_node->Name() << "] and [" <<
-                           add_node->Name() << "] into ConvAdd";
+        if (debug_log_) {
+            LOGS_DEFAULT(ERROR) << "fuse [" << conv_node->Name() << "] and [" <<
+                            add_node->Name() << "] into ConvAdd";
+        }
         ResolveFusion(subgraph, {conv_node->Index(), add_node->Index()}, std::move(
                           fused_node));
     }
@@ -1772,8 +1781,11 @@ void ZendnnGraphTransformer::processConvAddRelu(ZendnnSubgraph &subgraph,
             new_node->Outputs().push_back(def);
         }
         new_node->Attributes().insert(fused_node->Attributes());
-        LOGS_DEFAULT(INFO) << "fuse [" << conv_node->Name() << "] , [" <<
-                           add_node->Name() << "] and [" << relu_node->Name() << "] into ConvAddRelu";
+        if (debug_log_) {
+            LOGS_DEFAULT(ERROR) << "fuse [" << conv_node->Name() << "] , [" <<
+                            add_node->Name() << "] and [" << relu_node->Name() << "] into ConvAddRelu";
+        }
+
         ResolveFusion(subgraph, {conv_node->Index(), add_node->Index(), relu_node->Index()},
                       std::move(new_node));
     }
@@ -2274,8 +2286,10 @@ void ZendnnGraphTransformer::QConvClip(ZendnnSubgraph &subgraph) {
         new_node->Attributes().insert(next_zendnn_node->Attributes());
 
         //insert new node, remove original nodes, connect new edges
-        LOGS_DEFAULT(INFO) << "fuse [" << zendnn_node->Name() << "] and [" <<
-                           next_zendnn_node->Name() << "] into QConvClip";
+        if (debug_log_) {
+            LOGS_DEFAULT(ERROR) << "fuse [" << zendnn_node->Name() << "] and [" <<
+                            next_zendnn_node->Name() << "] into QConvClip";
+        }
         ResolveFusion(subgraph, {zendnn_node->Index(), next_zendnn_node->Index()},
                       std::move(new_node));
     }
@@ -2348,8 +2362,10 @@ void ZendnnGraphTransformer::ConvClip(ZendnnSubgraph &subgraph) {
         new_node->Attributes().insert(next_zendnn_node->Attributes());
 
         //insert new node, remove original nodes, connect new edges
-        LOGS_DEFAULT(INFO) << "fuse [" << zendnn_node->Name() << "] and [" <<
-                           next_zendnn_node->Name() << "] into ConvClip";
+        if (debug_log_) {
+            LOGS_DEFAULT(ERROR) << "fuse [" << zendnn_node->Name() << "] and [" <<
+                            next_zendnn_node->Name() << "] into ConvClip";
+        }
         ResolveFusion(subgraph, {zendnn_node->Index(), next_zendnn_node->Index()},
                       std::move(new_node));
     }
@@ -2412,8 +2428,10 @@ void ZendnnGraphTransformer::BatchnormRelu(ZendnnSubgraph &subgraph) {
         new_node->Attributes().insert(zendnn_node->Attributes());
 
         //insert new node, remove original nodes, connect new edges
-        LOGS_DEFAULT(INFO) << "fuse [" << zendnn_node->Name() << "] and [" <<
-                           next_zendnn_node->Name() << "] into BatchnormRelu";
+        if (debug_log_) {
+            LOGS_DEFAULT(ERROR) << "fuse [" << zendnn_node->Name() << "] and [" <<
+                            next_zendnn_node->Name() << "] into BatchnormRelu";
+        }
         ResolveFusion(subgraph, {zendnn_node->Index(), next_zendnn_node->Index()},
                       std::move(new_node));
     }
