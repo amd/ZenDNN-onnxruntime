@@ -1046,10 +1046,15 @@ following pattern and some code were directly referenced from code\optimizer\gel
 */
 bool ZendnnErfNodeCapability::IsErfPartOfGelu(const Node *node,
         const GraphViewer &graph_viewer) const {
-    // if ZENDNN fusion is not enabled then Erf is not supported.
+    // if ORT_ZENDNN_ENABLE_FUSION or ZENDNN_ENABLE_GELU is set to 0, then Erf is not supported in ZenDNN
     const std::string fusion_env =
         onnxruntime::GetEnvironmentVar("ORT_ZENDNN_ENABLE_FUSION");
     if (!fusion_env.empty() && std::stoi(fusion_env) == 0) {
+        return false;
+    }
+    const std::string gelu_fusion_env =
+        onnxruntime::GetEnvironmentVar("ZENDNN_ENABLE_GELU");
+    if (!gelu_fusion_env.empty() && std::stoi(gelu_fusion_env) == 0) {
         return false;
     }
     if (node->InputDefs().size() != 1) {
