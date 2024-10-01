@@ -454,13 +454,14 @@ bool ZendnnMatMulIntegerNodeCapability::Supported(const Node *node,
     if (!IsTypeSupported(node)) {
         return false;
     }
-    if (!IsDimensionSupported(node, graph_viewer)) {
-        return false;
-    }
 
     // if weight is u8, zendnn doesn't support
     auto node_inputs = node->InputDefs();
     if (node_inputs[1]->Type()->find("uint8") != std::string::npos) {
+        return false;
+    }
+
+    if (!IsDimensionSupported(node, graph_viewer)) {
         return false;
     }
 
