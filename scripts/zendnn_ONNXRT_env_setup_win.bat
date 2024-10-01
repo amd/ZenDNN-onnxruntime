@@ -67,7 +67,7 @@ echo ZENDNN_INT8_SUPPORT=%ZENDNN_INT8_SUPPORT%
 set ZENDNN_RELU_UPPERBOUND=0
 echo ZENDNN_RELU_UPPERBOUND=%ZENDNN_RELU_UPPERBOUND%
 
-::ZENDNN_MATMUL_ALGO is set to FP32:3 and BF16:3 by default
+::ZENDNN_MATMUL_ALGO is set to FP32:3 and BF16:0 by default
 set ZENDNN_MATMUL_ALGO=FP32:3,BF16:0
 echo ZENDNN_MATMUL_ALGO=%ZENDNN_MATMUL_ALGO%
 
@@ -81,7 +81,7 @@ echo ZENDNN_ONNXRT_USE_LOCAL_ZENDNN=%ZENDNN_ONNXRT_USE_LOCAL_ZENDNN%
 
 :: Use local copy of BLIS library source code when building ONNXRT
 :: Default is download and build from external git for development and verification
-:: For verification with early drop pf BLIS, export ZENDNN_ONNXRT_USE_LOCAL_BLIS=1
+:: For verification with early drop of BLIS, export ZENDNN_ONNXRT_USE_LOCAL_BLIS=1
 if not defined ZENDNN_ONNXRT_USE_LOCAL_BLIS (
     set ZENDNN_ONNXRT_USE_LOCAL_BLIS=1
 )
