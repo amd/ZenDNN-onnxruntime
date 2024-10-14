@@ -35,7 +35,7 @@ set(ZENDNN_URL https://github.com/amd/ZenDNN.git)
 set(ZENDNN_TAG v4.2)
 
 set(BLIS_URL https://github.com/amd/blis.git)
-set(BLIS_TAG 4.2)
+set(BLIS_TAG 5.0)
 
 if (onnxruntime_USE_ZENDNN)
   if(UNIX)
