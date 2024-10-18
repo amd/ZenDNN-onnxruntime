@@ -188,9 +188,12 @@ echo "ZENDNN_INT8_SUPPORT=$ZENDNN_INT8_SUPPORT"
 export ZENDNN_RELU_UPPERBOUND=0
 echo "ZENDNN_RELU_UPPERBOUND=$ZENDNN_RELU_UPPERBOUND"
 
-# ZENDNN_MATMUL_ALGO is set to FP32:3 and BF16:0 by default
-export ZENDNN_MATMUL_ALGO=FP32:3,BF16:0
-echo "ZENDNN_MATMUL_ALGO=$ZENDNN_MATMUL_ALGO"
+# Matmul Algorithms Settings. By default, it is ZENDNN_MATMUL_ALGO=FP32:4,BF16:3.
+# We recommend to override the default settings for NLPs & LLMs models by
+# uncommenting the following 'export' and 'echo' commands. Note: Do not
+# uncomment for AMP (Auto-Mixed Precision) mode runs of any models.
+# export ZENDNN_MATMUL_ALGO=FP32:3,BF16:0
+# echo "ZENDNN_MATMUL_ALGO=$ZENDNN_MATMUL_ALGO"
 
 #Use local copy of ZenDNN library source code when building ONNXRT
 #Default is build from local source for development and verification.
@@ -295,9 +298,6 @@ echo "ZENDNN_QUANTIZE_CONV_ADD_FUSION_ENABLE: $ZENDNN_QUANTIZE_CONV_ADD_FUSION_E
 
 export ZENDNN_QCONV_CLIP_FUSION_ENABLE=0
 echo "ZENDNN_QCONV_CLIP_FUSION_ENABLE: $ZENDNN_QCONV_CLIP_FUSION_ENABLE"
-
-export ZENDNN_WEIGHT_CACHING=1
-echo "ZENDNN_WEIGHT_CACHING: $ZENDNN_WEIGHT_CACHING"
 
 # By default build Open sourced ONNXRuntime and ZenDNN
 export ZENDNN_ONNXRUNTIME_USE_OPENSOURCE=1
