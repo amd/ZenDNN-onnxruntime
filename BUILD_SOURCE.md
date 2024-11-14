@@ -9,14 +9,11 @@ Create and activate a conda environment
 ```
 $ conda create -n onnxrt-v1.19.2-zendnn-5.0-rel-env python=3.8 -y
 $ conda activate onnxrt-v1.19.2-zendnn-5.0-rel-env
-> Note: Here we use python 3.8 environment as an example
 ```
 Install necessary dependencies
 ```
 $ pip install -U cmake onnx==1.16.1 pytest
 $ pip install psutil coloredlogs torch==2.1.2 torchvision transformers==4.39.3 sympy
-$ pip install numpy==1.24.4
-> Note: If you are building with Python version 3.9/3.10/3.11, use pip install numpy==1.26.3
 ```
 
 ### Download the AMD ZenDNN ONNXRUNTIME source code
