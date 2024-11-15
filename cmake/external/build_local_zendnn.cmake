@@ -32,7 +32,7 @@ include (ExternalProject)
 
 set(ZENDNN_URL https://github.com/amd/ZenDNN.git)
 #  Mention ZENDNN_TAG version to dowload.
-set(ZENDNN_TAG v4.2)
+set(ZENDNN_TAG v5.0)
 
 set(BLIS_URL https://github.com/amd/blis.git)
 set(BLIS_TAG 5.0)
